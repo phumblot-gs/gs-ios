@@ -193,7 +193,7 @@ public final class LiveBarcodeScannerController: UIViewController {
 // MARK: - AVCaptureMetadataOutputObjectsDelegate
 
 extension LiveBarcodeScannerController: AVCaptureMetadataOutputObjectsDelegate {
-    nonisolated func metadataOutput(
+    public nonisolated func metadataOutput(
         _ output: AVCaptureMetadataOutput,
         didOutput metadataObjects: [AVMetadataObject],
         from connection: AVCaptureConnection
