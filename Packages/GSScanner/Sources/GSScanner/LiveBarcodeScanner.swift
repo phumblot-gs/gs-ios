@@ -1,6 +1,6 @@
 #if os(iOS)
 import UIKit
-import AVFoundation
+@preconcurrency import AVFoundation
 import GSCore
 
 /// Detected barcode passed back to SwiftUI.
