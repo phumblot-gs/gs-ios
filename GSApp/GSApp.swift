@@ -43,5 +43,9 @@ struct RootView: View {
             HistoryTab(authState: authState)
                 .tabItem { Label("History", systemImage: "clock") }
         }
+        .overlay(alignment: .top) {
+            BackendStatusBanner(environment: .staging, environmentName: "staging")
+                .padding(.top, 4)
+        }
     }
 }

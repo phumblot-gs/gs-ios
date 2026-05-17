@@ -109,19 +109,46 @@ public struct GSLogger: Sendable {
 
 // MARK: - Configuration
 
-/// Backend configuration — sharded per account (e.g. `api-34.grand-shooting.com`).
+/// Backend configuration. Two moving parts:
+///
+///  - `apiBaseURL`: the Grand Shooting public API, sharded per tenant
+///    (e.g. `api-19.grand-shooting.com`). Used for /reference, /picture, etc.
+///  - `mobileBackendBaseURL`: our AWS Lambda backend that brokers OAuth
+///    (because the GS plugin flow requires `client_secret`) and runs the
+///    packshot pipeline. Different URL per environment (staging vs prod).
 public struct GSEnvironment: Sendable, Hashable, Codable {
     public let apiBaseURL: URL
-    public let oauthEntryURL: URL
+    public let mobileBackendBaseURL: URL
 
-    public init(apiBaseURL: URL, oauthEntryURL: URL) {
+    public init(apiBaseURL: URL, mobileBackendBaseURL: URL) {
         self.apiBaseURL = apiBaseURL
-        self.oauthEntryURL = oauthEntryURL
+        self.mobileBackendBaseURL = mobileBackendBaseURL
     }
 
-    /// Default placeholder shard. Replace at runtime once user selects/enters their account.
-    public static let placeholder = GSEnvironment(
-        apiBaseURL: URL(string: "https://api-34.grand-shooting.com/v3")!,
-        oauthEntryURL: URL(string: "https://api.mobile.grand-shooting.com/auth/start")!
+    /// Convenience: the OAuth entry endpoint on our backend.
+    public var oauthEntryURL: URL {
+        mobileBackendBaseURL.appendingPathComponent("auth/start")
+    }
+
+    /// Convenience: `/health` for connectivity checks.
+    public var healthURL: URL {
+        mobileBackendBaseURL.appendingPathComponent("health")
+    }
+
+    /// Targets our staging Lambda backend + the `api-19` shard.
+    /// Change `api-19` to your actual tenant shard if different.
+    public static let staging = GSEnvironment(
+        apiBaseURL: URL(string: "https://api-19.grand-shooting.com/v3")!,
+        mobileBackendBaseURL: URL(string: "https://api-staging.mobile.grand-shooting.com")!
     )
+
+    /// Targets the prod Lambda backend. To enable, deploy via the
+    /// `Deploy Production` workflow + create DNS for the prod custom domain.
+    public static let production = GSEnvironment(
+        apiBaseURL: URL(string: "https://api-19.grand-shooting.com/v3")!,
+        mobileBackendBaseURL: URL(string: "https://api.mobile.grand-shooting.com")!
+    )
+
+    /// What the app uses by default in DEBUG / on TestFlight beta.
+    public static let placeholder = staging
 }
