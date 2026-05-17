@@ -1,7 +1,8 @@
 #if os(iOS)
 import Foundation
 import UIKit
-import AudioToolbox
+import AVFoundation
+import AudioToolbox.AudioServices
 
 /// Centralised haptic + system-audio cues for the scanner flow.
 ///
