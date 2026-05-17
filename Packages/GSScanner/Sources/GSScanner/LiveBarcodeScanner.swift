@@ -198,11 +198,23 @@ extension LiveBarcodeScannerController: AVCaptureMetadataOutputObjectsDelegate {
         didOutput metadataObjects: [AVMetadataObject],
         from connection: AVCaptureConnection
     ) {
-        // Hop to MainActor for everything that touches UIKit / our state.
+        // AVMetadataObject isn't Sendable, but the array we receive here is
+        // owned by us once the delegate returns — AVFoundation doesn't reuse
+        // it afterwards. Wrap in @unchecked Sendable so the strict checker
+        // lets us hop to MainActor for UIKit / preview-layer work.
+        let snapshot = UncheckedSendable(metadataObjects)
         Task { @MainActor [weak self] in
-            self?.handle(metadataObjects)
+            self?.handle(snapshot.value)
         }
     }
+}
+
+/// `@unchecked Sendable` shim — used only inside this file to ferry
+/// AVFoundation values across actor boundaries when we've reasoned about
+/// the data-race risk locally.
+private struct UncheckedSendable<Value>: @unchecked Sendable {
+    let value: Value
+    init(_ value: Value) { self.value = value }
 }
 
 private extension LiveBarcodeScannerController {
