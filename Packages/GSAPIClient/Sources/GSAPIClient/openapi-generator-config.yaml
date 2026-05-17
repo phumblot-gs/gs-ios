@@ -1,0 +1,21 @@
+# Config for swift-openapi-generator (build plugin).
+#
+# The generator runs at build time and emits Swift types + a Client into
+# the build directory. They become accessible via the `GSAPIClient`
+# target as `Components.Schemas.*` and `Client`.
+
+generate:
+  - types
+  - client
+accessModifier: public
+namingStrategy: defensive
+filter:
+  # Generation across 70+ endpoints is expensive on every build.
+  # Trim down to the resources the mobile app actually uses today.
+  # Remove this block to generate everything.
+  tags:
+    - reference
+    - picture
+    - production
+    - stock
+    - broadcast

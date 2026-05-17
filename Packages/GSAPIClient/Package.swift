@@ -15,20 +15,29 @@ let package = Package(
     ],
     dependencies: [
         .package(path: "../GSCore"),
-        // TODO: enable swift-openapi-generator once swagger.json → openapi.yaml pipeline is wired up.
-        // .package(url: "https://github.com/apple/swift-openapi-generator", from: "1.0.0"),
-        // .package(url: "https://github.com/apple/swift-openapi-runtime", from: "1.0.0"),
-        // .package(url: "https://github.com/apple/swift-openapi-urlsession", from: "1.0.0"),
+        .package(url: "https://github.com/apple/swift-openapi-generator", from: "1.5.0"),
+        .package(url: "https://github.com/apple/swift-openapi-runtime", from: "1.7.0"),
+        .package(url: "https://github.com/apple/swift-openapi-urlsession", from: "1.0.2")
     ],
     targets: [
         .target(
             name: "GSAPIClient",
             dependencies: [
-                "GSCore"
-                // TODO: add OpenAPIRuntime + OpenAPIURLSession once generator is enabled.
+                "GSCore",
+                .product(name: "OpenAPIRuntime", package: "swift-openapi-runtime"),
+                .product(name: "OpenAPIURLSession", package: "swift-openapi-urlsession")
+            ],
+            // openapi.yaml + openapi-generator-config.yaml in Sources/ are picked
+            // up automatically by the OpenAPIGenerator build plugin. The raw
+            // swagger.json is kept alongside as a reference but not consumed.
+            exclude: [
+                "swagger.json"
             ],
             swiftSettings: [
                 .swiftLanguageMode(.v6)
+            ],
+            plugins: [
+                .plugin(name: "OpenAPIGenerator", package: "swift-openapi-generator")
             ]
         ),
         .testTarget(

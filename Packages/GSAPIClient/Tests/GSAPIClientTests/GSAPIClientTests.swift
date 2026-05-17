@@ -25,6 +25,17 @@ struct GSAPIClientTests {
         let live = LiveGSAPI(environment: .placeholder)
         #expect(live.environment.apiBaseURL.absoluteString.contains("api-34"))
     }
+
+    @Test("Generated client instantiates with a token provider")
+    func generatedClientInstantiates() async {
+        let client = GSGeneratedClient.make(
+            environment: .placeholder,
+            tokenProvider: { GSAccessToken(token: "fake-token") }
+        )
+        // The instance itself is enough — we don't hit the network here.
+        // The compile-time test is that the generated `Client` type exists.
+        _ = client
+    }
 }
 
 // Test-only helper. Actor isolation requires an async setter.
