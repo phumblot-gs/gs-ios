@@ -1,9 +1,12 @@
 name: iOS Beta (TestFlight)
 
+# Manual-only until code signing is wired up (see the TODO below).
+# Once `fastlane match` and the cert repository are in place, re-enable
+# the push trigger so every commit to `main` ships a TestFlight build.
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
+  # push:
+  #   branches: [main]
 
 jobs:
   beta:
@@ -13,8 +16,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Select Xcode 17
-        run: sudo xcode-select -s /Applications/Xcode_17.0.app/Contents/Developer
+      - name: Select latest stable Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
 
       - name: Install tooling
         run: |
