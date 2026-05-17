@@ -54,7 +54,7 @@ struct AccessTokenMiddleware: ClientMiddleware {
     ) async throws -> (HTTPResponse, HTTPBody?) {
         var request = request
         if let token = await tokenProvider() {
-            request.headerFields[.authorization] = "access_token \(token.token)"
+            request.headerFields[.authorization] = token.authorizationHeaderValue
         }
         return try await next(request, body, baseURL)
     }

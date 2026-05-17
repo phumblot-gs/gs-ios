@@ -3,13 +3,26 @@ import GSCore
 
 // MARK: - Auth Token
 
-/// An access token returned by the backend after the OAuth dance.
+/// An access token used to authenticate API calls.
+///
+/// Two schemes are supported because the Grand Shooting API accepts both:
+/// - `.bearer` → `Authorization: Bearer <token>` (standard, used by the
+///   dev mock and by personal API keys).
+/// - `.accessToken` → `Authorization: access_token <token>` (GS legacy
+///   scheme, used after the OAuth dance).
 public struct GSAccessToken: Sendable, Hashable, Codable {
+    public enum Scheme: String, Sendable, Hashable, Codable {
+        case bearer
+        case accessToken
+    }
+
     public let token: String
+    public let scheme: Scheme
     public let expiresAt: Date?
 
-    public init(token: String, expiresAt: Date? = nil) {
+    public init(token: String, scheme: Scheme = .accessToken, expiresAt: Date? = nil) {
         self.token = token
+        self.scheme = scheme
         self.expiresAt = expiresAt
     }
 }
@@ -106,8 +119,7 @@ public actor LiveGSAPI: GSAPIProtocol {
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.setValue("application/json", forHTTPHeaderField: "Accept")
         if let token = accessToken {
-            // Grand Shooting custom auth scheme — not Bearer.
-            req.setValue("access_token \(token.token)", forHTTPHeaderField: "Authorization")
+            req.setValue(token.authorizationHeaderValue, forHTTPHeaderField: "Authorization")
         }
         req.httpBody = body
         return req

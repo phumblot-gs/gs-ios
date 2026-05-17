@@ -1,8 +1,10 @@
 import SwiftUI
+import GSAPIClient
 import GSCore
 
 @main
 struct GSApp: App {
+    @State private var authState = AuthState()
     private let logger = GSLogger(category: "App")
 
     init() {
@@ -11,17 +13,25 @@ struct GSApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootView()
-                .onOpenURL { url in
-                    // Deep-link callback from `ASWebAuthenticationSession` /
-                    // backend OAuth flow: `gsmobile://auth/done?session_id=...`
-                    AuthDeepLinkHandler.handle(url)
+            Group {
+                if authState.isAuthenticated {
+                    RootView(authState: authState)
+                } else {
+                    LoginView(authState: authState)
                 }
+            }
+            .onOpenURL { url in
+                // Deep-link callback from `ASWebAuthenticationSession` /
+                // backend OAuth flow: `gsmobile://auth/done?session_id=...`
+                AuthDeepLinkHandler.handle(url)
+            }
         }
     }
 }
 
 struct RootView: View {
+    let authState: AuthState
+
     var body: some View {
         TabView {
             ScanTab()
@@ -30,7 +40,7 @@ struct RootView: View {
                 .tabItem { Label("Photo", systemImage: "camera") }
             LiDARTab()
                 .tabItem { Label("LiDAR", systemImage: "cube.transparent") }
-            HistoryTab()
+            HistoryTab(authState: authState)
                 .tabItem { Label("History", systemImage: "clock") }
         }
     }
