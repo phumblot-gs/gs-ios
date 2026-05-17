@@ -19,15 +19,28 @@ public struct ScannedCode: Sendable, Hashable {
 /// UIKit controller that owns the AVCaptureSession, picks the best back
 /// camera, attaches a metadata output, and renders detected barcodes via
 /// a `ScannerOverlayView` sitting on top of the preview layer.
+///
+/// Public only because `LiveBarcodeScannerView` (a public
+/// `UIViewControllerRepresentable`) has to surface it via its
+/// `UIViewControllerType`. App code should drive it through the SwiftUI
+/// view, not by instantiating the controller directly.
 @MainActor
-final class LiveBarcodeScannerController: UIViewController {
+public final class LiveBarcodeScannerController: UIViewController {
 
     // MARK: - Public hooks (set by the SwiftUI representable)
 
-    var onScan: (@MainActor (ScannedCode) -> Void)?
+    public var onScan: (@MainActor (ScannedCode) -> Void)?
 
     /// Re-fire `onScan` on the same payload only after this many seconds.
-    var cooldownSeconds: TimeInterval = 2.0
+    public var cooldownSeconds: TimeInterval = 2.0
+
+    public override init(nibName: String?, bundle: Bundle?) {
+        super.init(nibName: nibName, bundle: bundle)
+    }
+
+    public required init?(coder: NSCoder) {
+        super.init(coder: coder)
+    }
 
     // MARK: - Private state
 
@@ -43,7 +56,7 @@ final class LiveBarcodeScannerController: UIViewController {
 
     // MARK: - Lifecycle
 
-    override func viewDidLoad() {
+    public override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .black
         configureSession()
@@ -58,7 +71,7 @@ final class LiveBarcodeScannerController: UIViewController {
         ])
     }
 
-    override func viewWillAppear(_ animated: Bool) {
+    public override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         Task.detached { [session] in
             if !session.isRunning {
@@ -67,7 +80,7 @@ final class LiveBarcodeScannerController: UIViewController {
         }
     }
 
-    override func viewDidDisappear(_ animated: Bool) {
+    public override func viewDidDisappear(_ animated: Bool) {
         super.viewDidDisappear(animated)
         Task.detached { [session] in
             if session.isRunning {
@@ -76,7 +89,7 @@ final class LiveBarcodeScannerController: UIViewController {
         }
     }
 
-    override func viewDidLayoutSubviews() {
+    public override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         previewLayer?.frame = view.bounds
     }
