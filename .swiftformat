@@ -1,0 +1,21 @@
+# SwiftFormat configuration for gs-ios.
+# Run with: swiftformat .
+
+--swiftversion 6.0
+--indent 4
+--maxwidth 120
+--linebreaks lf
+--trimwhitespace always
+--commas inline
+--semicolons never
+--wraparguments before-first
+--wrapparameters before-first
+--wrapcollections before-first
+--closingparen balanced
+--self remove
+--importgrouping testable-bottom
+--stripunusedargs closure-only
+--decimalgrouping 3,6
+--binarygrouping 4,8
+--hexgrouping 4,8
+--exclude .build,.swiftpm,DerivedData,build

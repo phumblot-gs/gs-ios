@@ -1,0 +1,43 @@
+name: iOS Beta (TestFlight)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  beta:
+    name: Upload to TestFlight
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode 17
+        run: sudo xcode-select -s /Applications/Xcode_17.0.app/Contents/Developer
+
+      - name: Install tooling
+        run: |
+          brew install xcodegen
+          gem install fastlane --no-document
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      # TODO: wire up `fastlane match` once a code-signing certificate
+      #       repository exists. Until then this lane relies on automatic
+      #       signing, which will FAIL in CI because the runner has no
+      #       certificates installed. The block below is the placeholder.
+      #
+      # - name: Sync code signing
+      #   env:
+      #     MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+      #   run: fastlane match appstore --readonly
+
+      - name: Fastlane beta
+        env:
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_API_KEY_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY_KEY }}
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+        run: fastlane beta

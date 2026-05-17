@@ -1,0 +1,63 @@
+name: iOS CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test-packages:
+    name: Test ${{ matrix.package }}
+    runs-on: macos-15
+    strategy:
+      fail-fast: false
+      matrix:
+        package:
+          - GSCore
+          - GSAPIClient
+          - GSScanner
+          - GSCamera
+          - GSLiDAR
+          - GSPackshot
+          - GSLogistics
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode 17
+        run: sudo xcode-select -s /Applications/Xcode_17.0.app/Contents/Developer
+
+      - name: Show Swift version
+        run: swift --version
+
+      - name: swift test
+        working-directory: Packages/${{ matrix.package }}
+        run: swift test
+
+  build-app:
+    name: Build GSApp
+    runs-on: macos-15
+    needs: test-packages
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode 17
+        run: sudo xcode-select -s /Applications/Xcode_17.0.app/Contents/Developer
+
+      - name: Install xcodegen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: xcodebuild build
+        run: |
+          xcodebuild \
+            -project GSApp.xcodeproj \
+            -scheme GSApp \
+            -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            -skipPackagePluginValidation \
+            CODE_SIGNING_ALLOWED=NO \
+            build

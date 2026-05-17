@@ -1,0 +1,62 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+
+# Xcode
+build/
+DerivedData/
+*.xcuserstate
+*.xcuserdatad/
+xcuserdata/
+*.xcscmblueprint
+*.xccheckout
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Generated Xcode project (xcodegen output)
+GSApp.xcodeproj/
+*.xcworkspace/
+
+# Swift Package Manager
+.build/
+.swiftpm/
+Packages/*/.build/
+Packages/*/.swiftpm/
+Packages/*/Package.resolved
+Package.resolved
+
+# Fastlane
+fastlane/.env
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots
+fastlane/test_output
+fastlane/README.md
+
+# Provisioning / signing
+*.mobileprovision
+*.cer
+*.p12
+*.p8
+
+# Code coverage
+*.profraw
+*.profdata
+coverage/
+
+# Editor caches
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Environment
+.env
+.env.local
