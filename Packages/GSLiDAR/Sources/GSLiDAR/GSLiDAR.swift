@@ -1,22 +1,26 @@
-import SwiftUI
-import ARKit
-import RealityKit
+import Foundation
 import GSCore
 
 /// Result of a LiDAR scan session.
 public struct LiDARScanResult: Sendable {
-    public let measurement: Measurement
+    public let measurement: GSMeasurement
     public let meshAnchors: Int
 
-    public init(measurement: Measurement, meshAnchors: Int) {
+    public init(measurement: GSMeasurement, meshAnchors: Int) {
         self.measurement = measurement
         self.meshAnchors = meshAnchors
     }
 }
 
+#if os(iOS)
+import SwiftUI
+import ARKit
+import RealityKit
+
 /// SwiftUI view that hosts an `ARView` configured for LiDAR scene
 /// reconstruction with classification. Hardware-gated: caller should verify
 /// `ARWorldTrackingConfiguration.supportsSceneReconstruction(.meshWithClassification)`.
+@MainActor
 public struct LiDARScanView: UIViewRepresentable {
     private let onComplete: @MainActor (LiDARScanResult) -> Void
 
@@ -40,6 +44,7 @@ public struct LiDARScanView: UIViewRepresentable {
         // no-op
     }
 }
+#endif
 
 // MARK: - Object Capture (PhotogrammetrySession)
 

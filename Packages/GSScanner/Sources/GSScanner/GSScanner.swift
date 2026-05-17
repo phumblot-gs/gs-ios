@@ -1,3 +1,4 @@
+#if os(iOS)
 import SwiftUI
 import VisionKit
 import GSCore
@@ -95,3 +96,9 @@ public struct BarcodeScannerView: UIViewControllerRepresentable {
         }
     }
 }
+#else
+// Non-iOS platforms (macOS host build for `swift test`): no UI surface.
+// The iOS-only types above are unavailable; the xcodebuild step in CI
+// validates the real iOS build separately.
+public enum GSScannerUnavailableOnThisPlatform {}
+#endif

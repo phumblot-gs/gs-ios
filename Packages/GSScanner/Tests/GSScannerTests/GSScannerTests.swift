@@ -1,3 +1,4 @@
+#if os(iOS)
 import Testing
 @testable import GSScanner
 
@@ -11,3 +12,10 @@ struct GSScannerTests {
         #expect(all.contains(.qr))
     }
 }
+#else
+// Stub on non-iOS hosts so `swift test` succeeds with zero tests.
+import Testing
+
+@Suite("GSScanner (skipped on macOS host)")
+struct GSScannerHostTests {}
+#endif

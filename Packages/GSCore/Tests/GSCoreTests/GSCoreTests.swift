@@ -20,9 +20,9 @@ struct GSCoreTests {
         #expect(decoded.trackingNumber == "ABC")
     }
 
-    @Test("Measurement holds millimetre values")
+    @Test("GSMeasurement holds millimetre values")
     func measurement() {
-        let m = Measurement(widthMM: 100, heightMM: 200, depthMM: 50)
+        let m = GSMeasurement(widthMM: 100, heightMM: 200, depthMM: 50)
         #expect(m.widthMM == 100)
         #expect(m.heightMM == 200)
         #expect(m.depthMM == 50)

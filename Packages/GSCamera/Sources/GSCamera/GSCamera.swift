@@ -1,4 +1,3 @@
-import SwiftUI
 import AVFoundation
 import GSCore
 
@@ -29,7 +28,11 @@ public struct CapturedPhoto: Sendable {
     }
 }
 
-// MARK: - SwiftUI view
+// MARK: - SwiftUI view (iOS only)
+
+#if os(iOS)
+import SwiftUI
+import UIKit
 
 /// SwiftUI placeholder camera surface. The real capture session wiring lives
 /// inside `CameraSessionController` and will be filled out incrementally —
@@ -100,3 +103,4 @@ public final class CameraSessionController: UIViewController {
         logger.info("CameraSessionController configured (stub)")
     }
 }
+#endif

@@ -70,7 +70,11 @@ public struct Shipment: Sendable, Hashable, Identifiable, Codable {
 }
 
 /// A LiDAR-derived physical measurement (millimetres).
-public struct Measurement: Sendable, Hashable, Codable {
+///
+/// Named `GSMeasurement` (not `Measurement`) to avoid clashing with
+/// `Foundation.Measurement<UnitType>` whenever a downstream module
+/// imports Foundation, ARKit, or RealityKit.
+public struct GSMeasurement: Sendable, Hashable, Codable {
     public let widthMM: Double
     public let heightMM: Double
     public let depthMM: Double
