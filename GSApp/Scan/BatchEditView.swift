@@ -117,52 +117,73 @@ struct BatchEditView: View {
     }
 }
 
-/// Picker that lists known batch types from `DevSettings.batchTypes` plus
-/// an inline "Other…" entry that captures a free-form new type.
+/// Picker for the batch `type` attribute. Lists the known types from
+/// `DevSettings.batchTypes` plus a "—" no-type option and an inline
+/// "Other…" entry that switches to a free-text field.
+///
+/// Caveats handled here:
+/// - The current `selection` is always visible in the picker even when
+///   it isn't (yet) in the known list — otherwise the user picks the
+///   value, dismisses the editor, and the picker silently appears to
+///   reset.
+/// - "Other…" uses a sentinel tag distinct from the empty string so
+///   choosing "—" doesn't accidentally open the editor.
+/// - "Use type" appends the new value to `settings.batchTypes` right
+///   away so the next selection sees it as a known option.
 struct BatchTypePicker: View {
     @Binding var selection: String
-    let settings: DevSettings
+    @Bindable var settings: DevSettings
 
     @State private var showOther = false
     @State private var otherDraft = ""
 
+    private let otherSentinel = "__BATCH_TYPE_OTHER__"
+
     private var knownTypes: [String] { settings.batchTypes }
 
     var body: some View {
-        Group {
-            Picker("Type", selection: Binding(
-                get: { knownTypes.contains(selection) || selection.isEmpty ? selection : "" },
-                set: { newValue in
-                    if newValue.isEmpty {
-                        // Sentinel for "Other…" — opens the inline editor.
-                        showOther = true
-                    } else {
-                        selection = newValue
-                        showOther = false
-                    }
+        Picker("Type", selection: Binding<String>(
+            get: { showOther ? otherSentinel : selection },
+            set: { newValue in
+                if newValue == otherSentinel {
+                    showOther = true
+                    otherDraft = selection
+                } else {
+                    showOther = false
+                    selection = newValue
                 }
-            )) {
-                Text("—").tag("")
-                ForEach(knownTypes, id: \.self) { type in
-                    Text(type).tag(type)
-                }
-                Text("Other…").tag("__OTHER__")
             }
-            if showOther {
+        )) {
+            Text("—").tag("")
+            // Surface the current selection even if it's not (yet) in
+            // the known list — covers existing batches whose `type`
+            // value isn't registered locally.
+            if !selection.isEmpty && !knownTypes.contains(selection) {
+                Text(selection).tag(selection)
+            }
+            ForEach(knownTypes, id: \.self) { type in
+                Text(type).tag(type)
+            }
+            Text("Other…").tag(otherSentinel)
+        }
+
+        if showOther {
+            HStack {
                 TextField("New type", text: $otherDraft)
                     .autocorrectionDisabled()
-                Button("Use type") {
-                    selection = otherDraft.trimmingCharacters(in: .whitespaces)
+                    .textInputAutocapitalization(.never)
+                Button("Use") {
+                    let trimmed = otherDraft.trimmingCharacters(in: .whitespaces)
+                    if !trimmed.isEmpty {
+                        selection = trimmed
+                        if !settings.batchTypes.contains(trimmed) {
+                            settings.batchTypes.append(trimmed)
+                        }
+                    }
                     showOther = false
                     otherDraft = ""
                 }
                 .disabled(otherDraft.trimmingCharacters(in: .whitespaces).isEmpty)
-            }
-        }
-        .onAppear {
-            if !selection.isEmpty && !knownTypes.contains(selection) {
-                showOther = true
-                otherDraft = selection
             }
         }
     }

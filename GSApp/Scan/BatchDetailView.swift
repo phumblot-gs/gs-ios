@@ -29,7 +29,7 @@ struct BatchDetailView: View {
             metadataSection
             contentsSection
         }
-        .navigationTitle(currentBatch.displayName)
+        .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -56,6 +56,7 @@ struct BatchDetailView: View {
     @ViewBuilder
     private var metadataSection: some View {
         Section {
+            LabeledContent("Name", value: currentBatch.smalltext ?? "—")
             LabeledContent("Code", value: currentBatch.code ?? "—")
                 .font(.subheadline.monospaced())
             if let type = currentBatch.type, !type.isEmpty {
