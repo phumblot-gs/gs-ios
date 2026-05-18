@@ -9,9 +9,13 @@ public struct PictureService: Sendable {
         self.http = GSHTTPClient(environment: environment)
     }
 
-    /// All pictures for a given `ref`. Caller is expected to collapse the
-    /// result via `[Picture].latestByFilePath()` before display.
+    /// All pictures linked to the catalog reference `ref`. Per the GS
+    /// spec, `reference_ref` is the param that matches against
+    /// `Reference.ref`; the `ref` param filters on the value extracted
+    /// *from* the picture itself, which is a different thing.
+    /// Caller is expected to collapse the result via
+    /// `[Picture].latestByFilePath()` before display.
     public func list(forRef ref: String) async throws -> [Picture] {
-        try await http.get("/picture", query: ["ref": ref], as: [Picture].self)
+        try await http.get("/picture", query: ["reference_ref": ref], as: [Picture].self)
     }
 }

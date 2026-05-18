@@ -72,6 +72,42 @@ public struct Picture: Sendable, Hashable, Identifiable, Codable {
         case validationDate = "validation_date"
     }
 
+    /// Custom decoder so `reference_id` survives the schema's
+    /// `x-alternatives: [string, number]` — GS returns it as a number on
+    /// some endpoints and a string on others. Same flex applied to
+    /// `picture_id` defensively (the spec says `number` but reality varies).
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        // picture_id is required — try Int then String.
+        if let intID = try? c.decode(Int.self, forKey: .id) {
+            self.id = intID
+        } else if let stringID = try? c.decode(String.self, forKey: .id), let n = Int(stringID) {
+            self.id = n
+        } else {
+            throw DecodingError.dataCorruptedError(forKey: .id, in: c, debugDescription: "picture_id missing or not coercible to Int")
+        }
+        self.ref = try c.decodeIfPresent(String.self, forKey: .ref)
+        if let stringRefID = try? c.decodeIfPresent(String.self, forKey: .referenceID) {
+            self.referenceID = stringRefID
+        } else if let intRefID = try? c.decodeIfPresent(Int.self, forKey: .referenceID) {
+            self.referenceID = intRefID.map(String.init)
+        } else {
+            self.referenceID = nil
+        }
+        self.path = try c.decodeIfPresent(String.self, forKey: .path)
+        self.filePath = try c.decodeIfPresent(String.self, forKey: .filePath)
+        self.thumbnail = try c.decodeIfPresent(String.self, forKey: .thumbnail)
+        self.smalltext = try c.decodeIfPresent(String.self, forKey: .smalltext)
+        self.pictureStatus = try c.decodeIfPresent(Int.self, forKey: .pictureStatus)
+        self.viewTypeCode = try c.decodeIfPresent(String.self, forKey: .viewTypeCode)
+        self.width = try c.decodeIfPresent(Int.self, forKey: .width)
+        self.height = try c.decodeIfPresent(Int.self, forKey: .height)
+        self.fileSize = try c.decodeIfPresent(Int.self, forKey: .fileSize)
+        self.dateCre = try c.decodeIfPresent(String.self, forKey: .dateCre)
+        self.dateMod = try c.decodeIfPresent(String.self, forKey: .dateMod)
+        self.validationDate = try c.decodeIfPresent(String.self, forKey: .validationDate)
+    }
+
     public var thumbnailURL: URL? {
         thumbnail.flatMap { URL(string: $0) }
     }
