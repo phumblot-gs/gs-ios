@@ -6,6 +6,7 @@ import GSCore
 struct GSApp: App {
     @State private var authState = AuthState()
     @State private var settings = DevSettings.shared
+    @State private var catalog = CatalogCache.shared
     private let logger = GSLogger(category: "App")
 
     init() {
@@ -16,9 +17,18 @@ struct GSApp: App {
         WindowGroup {
             Group {
                 if authState.isSignedIn {
-                    RootView(authState: authState, settings: settings)
+                    RootView(authState: authState, settings: settings, catalog: catalog)
                 } else {
                     LoginView(authState: authState, settings: settings)
+                }
+            }
+            // Refresh the catalog (zones, categories, batch types) any time
+            // we become signed in (cold launch with a persisted session, or
+            // a fresh login). The view stays interactive while the refresh
+            // runs in the background.
+            .task(id: authState.isSignedIn) {
+                if authState.isSignedIn {
+                    await catalog.refresh(environment: settings.currentEnvironment)
                 }
             }
             .onOpenURL { url in
@@ -33,6 +43,7 @@ struct GSApp: App {
 struct RootView: View {
     let authState: AuthState
     @Bindable var settings: DevSettings
+    @Bindable var catalog: CatalogCache
 
     var body: some View {
         TabView {
@@ -44,7 +55,7 @@ struct RootView: View {
                 .tabItem { Label("LiDAR", systemImage: "cube.transparent") }
             HistoryTab()
                 .tabItem { Label("History", systemImage: "clock") }
-            SettingsTab(authState: authState, settings: settings)
+            SettingsTab(authState: authState, settings: settings, catalog: catalog)
                 .tabItem { Label("Settings", systemImage: "gearshape") }
         }
         .overlay(alignment: .top) {

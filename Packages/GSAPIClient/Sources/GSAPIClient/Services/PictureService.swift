@@ -1,0 +1,17 @@
+import Foundation
+import GSCore
+
+/// GS API surface for pictures (`/picture`).
+public struct PictureService: Sendable {
+    private let http: GSHTTPClient
+
+    public init(environment: GSEnvironment) {
+        self.http = GSHTTPClient(environment: environment)
+    }
+
+    /// All pictures for a given `ref`. Caller is expected to collapse the
+    /// result via `[Picture].latestByFilePath()` before display.
+    public func list(forRef ref: String) async throws -> [Picture] {
+        try await http.get("/picture", query: ["ref": ref], as: [Picture].self)
+    }
+}

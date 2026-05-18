@@ -5,14 +5,22 @@ import GSCore
 struct SettingsTab: View {
     @Bindable var authState: AuthState
     @Bindable var settings: DevSettings
+    @Bindable var catalog: CatalogCache
 
     @State private var apiKeyDraft: String = ""
     @State private var apiKeyDirty = false
     @State private var savedToastVisible = false
+    @State private var isRefreshing = false
 
     var body: some View {
         NavigationStack {
             Form {
+                workflowSection
+                zoneSection
+                statusesSection
+                batchTypesSection
+                searchAttributeSection
+                languageSection
                 backendSection
                 developmentSection
                 accountSection
@@ -34,15 +42,149 @@ struct SettingsTab: View {
         }
     }
 
-    // MARK: - Sections
+    // MARK: - Workflow (default status on register, refresh)
 
-    private var accountSection: some View {
-        Section("Account") {
-            Button("Sign out", role: .destructive) {
-                Task { await authState.signOut() }
+    private var workflowSection: some View {
+        Section {
+            Picker("Default status on register", selection: $settings.defaultStockItemStatusOnRegister) {
+                ForEach(StockItemStatus.orderedCases, id: \.rawValue) { status in
+                    Text(status.displayName).tag(status.rawValue)
+                }
+            }
+            Button {
+                Task { await refreshCatalog() }
+            } label: {
+                HStack {
+                    Label("Refresh catalog", systemImage: "arrow.clockwise")
+                    Spacer()
+                    if isRefreshing { ProgressView().controlSize(.small) }
+                }
+            }
+            .disabled(isRefreshing)
+            if let date = catalog.lastRefreshAt {
+                LabeledContent("Last refresh", value: date.formatted(date: .abbreviated, time: .shortened))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        } header: {
+            Text("Workflow")
+        } footer: {
+            Text("Default status applied to newly-registered stock items. Refresh pulls fresh zones, categories, and batch types from Grand Shooting.")
+        }
+    }
+
+    // MARK: - Zone
+
+    @ViewBuilder
+    private var zoneSection: some View {
+        if catalog.hasZones {
+            Section {
+                Picker("Active zone", selection: Binding(
+                    get: { settings.activeZoneID ?? catalog.zones.first?.id ?? -1 },
+                    set: { newValue in settings.activeZoneID = newValue >= 0 ? newValue : nil }
+                )) {
+                    ForEach(catalog.zones) { zone in
+                        Text(zone.smalltext ?? "Zone #\(zone.id)").tag(zone.id)
+                    }
+                }
+            } header: {
+                Text("Zone")
+            } footer: {
+                Text("Studio area you are currently working in. Newly-created batches default to this zone.")
             }
         }
     }
+
+    // MARK: - Enabled statuses
+
+    private var statusesSection: some View {
+        Section {
+            ForEach(StockItemStatus.orderedCases, id: \.rawValue) { status in
+                Toggle(isOn: Binding(
+                    get: { settings.enabledStockItemStatuses.contains(status.rawValue) },
+                    set: { isOn in
+                        var set = settings.enabledStockItemStatuses
+                        if isOn { set.insert(status.rawValue) } else { set.remove(status.rawValue) }
+                        // Default-on-register can't be disabled.
+                        set.insert(settings.defaultStockItemStatusOnRegister)
+                        settings.enabledStockItemStatuses = set
+                    }
+                )) {
+                    HStack {
+                        Text(status.displayName)
+                        Spacer()
+                        Text("\(status.rawValue)")
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .disabled(status.rawValue == settings.defaultStockItemStatusOnRegister)
+            }
+        } header: {
+            Text("Enabled statuses")
+        } footer: {
+            Text("Only enabled statuses appear in the change-status picker. The default-on-register status is always enabled.")
+        }
+    }
+
+    // MARK: - Batch types
+
+    private var batchTypesSection: some View {
+        Section {
+            if settings.batchTypes.isEmpty {
+                Text("No batch types known yet. They populate from your account's batches on the next refresh.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(settings.batchTypes, id: \.self) { type in
+                    Text(type)
+                }
+                .onDelete { indexSet in
+                    var types = settings.batchTypes
+                    types.remove(atOffsets: indexSet)
+                    settings.batchTypes = types
+                }
+            }
+        } header: {
+            Text("Batch types")
+        } footer: {
+            Text("Values offered when creating or editing a batch. Seeded from your existing batches; you can remove unwanted entries here.")
+        }
+    }
+
+    // MARK: - Search attribute
+
+    private var searchAttributeSection: some View {
+        Section {
+            Picker("Barcode maps to", selection: $settings.searchAttribute) {
+                ForEach(StockService.SearchAttribute.allCases, id: \.rawValue) { attribute in
+                    Text(attribute.displayName).tag(attribute)
+                }
+            }
+        } header: {
+            Text("Scan lookup")
+        } footer: {
+            Text("Which catalog attribute the scanned value is looked up against. Use `ean` unless your products are barcoded by their `ref` instead.")
+        }
+    }
+
+    // MARK: - Language
+
+    private var languageSection: some View {
+        Section {
+            Picker("Language", selection: $settings.languagePreference) {
+                ForEach(DevSettings.LanguagePreference.allCases, id: \.rawValue) { lang in
+                    Text(lang.displayName).tag(lang)
+                }
+            }
+        } header: {
+            Text("Language")
+        } footer: {
+            Text("Restart the app for a language change to take full effect.")
+        }
+    }
+
+    // MARK: - Backend
 
     private var backendSection: some View {
         Section {
@@ -57,9 +199,11 @@ struct SettingsTab: View {
         } header: {
             Text("Backend")
         } footer: {
-            Text("Selects which deployed Lambda backend the app talks to for OAuth (when wired) and packshot processing.")
+            Text("Selects which deployed Lambda backend the app talks to.")
         }
     }
+
+    // MARK: - Development (shard + API key)
 
     private var developmentSection: some View {
         Section {
@@ -83,9 +227,7 @@ struct SettingsTab: View {
                 }
 
             if apiKeyDirty {
-                Button("Save API key") {
-                    save()
-                }
+                Button("Save API key") { save() }
             } else if settings.hasAPIKey {
                 Label("API key configured", systemImage: "checkmark.seal.fill")
                     .foregroundStyle(.green)
@@ -94,9 +236,17 @@ struct SettingsTab: View {
                     .foregroundStyle(.orange)
             }
         } header: {
-            Text("Grand Shooting API")
+            Text("Grand Shooting API (fallback)")
         } footer: {
-            Text("Both shard and API key are stored locally on this device — the API key in the Keychain. Used for API calls until the OAuth plugin is wired.")
+            Text("Used as a Bearer token when no OAuth session is active. Stored in the Keychain.")
+        }
+    }
+
+    private var accountSection: some View {
+        Section("Account") {
+            Button("Sign out", role: .destructive) {
+                Task { await authState.signOut() }
+            }
         }
     }
 
@@ -115,5 +265,11 @@ struct SettingsTab: View {
             try? await Task.sleep(for: .seconds(1.5))
             await MainActor.run { withAnimation { savedToastVisible = false } }
         }
+    }
+
+    private func refreshCatalog() async {
+        isRefreshing = true
+        defer { isRefreshing = false }
+        await catalog.refresh(environment: settings.currentEnvironment)
     }
 }
