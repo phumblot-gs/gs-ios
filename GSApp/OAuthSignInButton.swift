@@ -57,7 +57,8 @@ struct OAuthSignInButton: View {
         do {
             let callbackURL = try await webAuthSession.authenticate(
                 using: env.oauthEntryURL,
-                callback: .customScheme(Self.callbackScheme)
+                callback: .customScheme(Self.callbackScheme),
+                additionalHeaderFields: [:]
             )
             let service = OAuthSignInService(environment: env)
             _ = try await service.completeSignIn(callbackURL: callbackURL)
