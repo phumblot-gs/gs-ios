@@ -18,14 +18,19 @@ struct ReferenceDetailView: View {
 
     let source: Source
 
+    // References live in State so the screen can reflect local mutations
+    // (e.g. after a stock-item status update) without a re-fetch. Hydrated
+    // from `source` on first appear via `.task(id:)`.
+    @State private var references: [ReferenceStock] = []
     @State private var selectedIndex: Int = 0
+    @State private var selectedStockItemIndex: Int = 0
     @State private var pictures: [Picture] = []
     @State private var picturesLoading = false
     @State private var picturesError: (any Error)?
     @State private var statusSheetVisible = false
     @State private var statusUpdating = false
 
-    private var references: [ReferenceStock] {
+    private var sourceReferences: [ReferenceStock] {
         switch source {
         case .scan(let match): return match.references
         case .stock(let refs): return refs
@@ -40,7 +45,6 @@ struct ReferenceDetailView: View {
         currentReferenceStock?.stockItems ?? []
     }
 
-    @State private var selectedStockItemIndex: Int = 0
     private var currentStockItem: StockItem? {
         stockItems.indices.contains(selectedStockItemIndex) ? stockItems[selectedStockItemIndex] : nil
     }
@@ -62,7 +66,8 @@ struct ReferenceDetailView: View {
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .background(Color(.systemGroupedBackground))
-        .task(id: currentReferenceStock?.reference.ref) {
+        .task {
+            if references.isEmpty { references = sourceReferences }
             await loadPictures()
         }
         .sheet(isPresented: $statusSheetVisible) {
@@ -329,28 +334,19 @@ struct ReferenceDetailView: View {
                 id: item.id,
                 payload: .init(status: newStatus)
             )
-            // Patch the local cache so the UI reflects the new value without
-            // a full refetch.
-            if let stockIndex = stockItems.firstIndex(where: { $0.id == updated.id }) {
+            // Splice the updated stock item back into `references` so the
+            // displayed status changes immediately, without a re-fetch.
+            if references.indices.contains(selectedIndex) {
                 var refStock = references[selectedIndex]
-                var items = refStock.stockItems
-                items[stockIndex] = updated
-                refStock = ReferenceStock(reference: refStock.reference, stockItems: items)
-                // (We can't mutate `references` because it's derived; ignore
-                // the deep update for now — the next scan or refresh shows
-                // the fresh value. UX: status row already updates because
-                // we replace `selectedStockItemIndex` and the displayed
-                // status is read from `currentStockItem`.)
-                _ = refStock
+                if let stockIndex = refStock.stockItems.firstIndex(where: { $0.id == updated.id }) {
+                    var items = refStock.stockItems
+                    items[stockIndex] = updated
+                    refStock = ReferenceStock(reference: refStock.reference, stockItems: items)
+                    references[selectedIndex] = refStock
+                }
             }
-            // Bandage: re-read the status off the patched item by stashing
-            // it via overrides. Done by simply forcing a UI refresh — the
-            // displayed value comes from the source-of-truth in our local
-            // copy, which we don't easily mutate. For the v1 we accept
-            // that the user has to back out and re-enter to see the update
-            // when there are multiple stock items in view, except for the
-            // status row above which we just re-render.
-            _ = updated
+        } catch let err as GSHTTPClient.HTTPError {
+            picturesError = NSError(domain: "GSHTTPClient", code: -1, userInfo: [NSLocalizedDescriptionKey: err.userMessage])
         } catch {
             picturesError = error
         }

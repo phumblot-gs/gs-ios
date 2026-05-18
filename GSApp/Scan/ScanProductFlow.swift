@@ -128,14 +128,15 @@ struct ScanProductFlow: View {
                 by: settings.searchAttribute
             )) ?? []
 
-            // Pair each reference with its stock items (matched by `ref`),
-            // falling back to "reference with empty stock_items" when the
-            // /stock endpoint had nothing.
+            // Pair each (richer) /reference row with the stock items from
+            // /stock. We deliberately keep the /reference variant — /stock
+            // often returns a thinner Reference that's missing fields like
+            // `category_id` and the shot list ends up blank.
             let combined: [ReferenceStock] = references.map { reference in
-                if let match = stockMatches.first(where: { $0.reference.ref == reference.ref }) {
-                    return match
-                }
-                return ReferenceStock(reference: reference, stockItems: [])
+                let items = stockMatches
+                    .first(where: { $0.reference.ref == reference.ref })?
+                    .stockItems ?? []
+                return ReferenceStock(reference: reference, stockItems: items)
             }
             feedback.didFindReference()
             lastScan = .matched(ScanState.MatchedReference(payload: code.payload, references: combined))
