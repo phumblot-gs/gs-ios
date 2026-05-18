@@ -59,7 +59,7 @@ struct ReferenceDetailView: View {
             }
             .padding()
         }
-        .navigationTitle(currentReferenceStock?.reference.ref ?? "Reference")
+        .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .background(Color(.systemGroupedBackground))
         .task(id: currentReferenceStock?.reference.ref) {

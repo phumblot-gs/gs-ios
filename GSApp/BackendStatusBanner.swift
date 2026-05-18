@@ -58,9 +58,15 @@ struct BackendStatusBanner: View {
 
     private var label: String {
         switch status {
-        case .pinging: return "\(environmentName) · …"
-        case .ok(let env): return "\(environmentName) · \(env)"
-        case .failed(let msg): return "\(environmentName) · \(msg)"
+        case .pinging:
+            return environmentName
+        case .ok(let env):
+            // When the backend confirms the same env we asked for, no point
+            // showing it twice — keep the badge compact. Surface the mismatch
+            // explicitly when they diverge (e.g. a stale custom domain).
+            return env == environmentName ? environmentName : "\(environmentName) ≠ \(env)"
+        case .failed(let msg):
+            return "\(environmentName) · \(msg)"
         }
     }
 
