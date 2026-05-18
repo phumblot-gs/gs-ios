@@ -1,11 +1,20 @@
 import SwiftUI
 import GSAPIClient
 
-/// Dev sign-in screen. Validates `test` / `test2026` against `MockAuthService`
-/// and flips `AuthState` to signed-in. No API key here — that's configured
-/// in the Settings tab after sign-in.
+/// Sign-in screen.
+///
+/// Two entry paths:
+///  - **Sign in with Grand Shooting** (primary): opens the real OAuth flow
+///    via `ASWebAuthenticationSession`. Once the backend issues an access
+///    token, the user is signed in and all API calls authenticate against
+///    that token.
+///  - **Dev credentials** (fallback): the existing `test` / `test2026` mock.
+///    Useful when working offline or when the GS plugin isn't reachable.
+///    Requires a personal API key configured in Settings (post sign-in)
+///    for the GS API calls to succeed.
 struct LoginView: View {
     let authState: AuthState
+    @Bindable var settings: DevSettings
 
     @State private var username = ""
     @State private var password = ""
@@ -32,7 +41,21 @@ struct LoginView: View {
 
             Spacer()
 
-            // Credentials
+            // Primary: OAuth
+            OAuthSignInButton(authState: authState, settings: settings)
+
+            // Divider
+            HStack {
+                Rectangle().fill(.tertiary).frame(height: 1)
+                Text("OR")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 8)
+                Rectangle().fill(.tertiary).frame(height: 1)
+            }
+            .padding(.vertical, 24)
+
+            // Fallback: dev credentials
             VStack(spacing: 12) {
                 TextField("Username", text: $username)
                     .textContentType(.username)
@@ -49,31 +72,26 @@ struct LoginView: View {
                         .foregroundStyle(.red)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
-            }
-            .padding(.horizontal, 8)
 
-            Spacer().frame(height: 24)
-
-            // Sign in button
-            Button {
-                Task { await signIn() }
-            } label: {
-                if isSigningIn {
-                    ProgressView()
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 24)
-                } else {
-                    Text("Sign in")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 24)
+                Button {
+                    Task { await signInWithMock() }
+                } label: {
+                    if isSigningIn {
+                        ProgressView()
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 24)
+                    } else {
+                        Text("Sign in with dev credentials")
+                            .font(.subheadline)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 24)
+                    }
                 }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+                .disabled(isSigningIn || username.isEmpty || password.isEmpty)
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .disabled(isSigningIn || username.isEmpty || password.isEmpty)
 
-            Spacer()
             Spacer()
         }
         .padding(.horizontal, 32)
@@ -82,7 +100,7 @@ struct LoginView: View {
         .ignoresSafeArea(.keyboard, edges: .bottom)
     }
 
-    private func signIn() async {
+    private func signInWithMock() async {
         errorMessage = nil
         isSigningIn = true
         defer { isSigningIn = false }
