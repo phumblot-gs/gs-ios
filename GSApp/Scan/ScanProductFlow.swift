@@ -102,20 +102,43 @@ struct ScanProductFlow: View {
         inflight = true
         lastScan = .lookingUp(code.payload)
 
-        let stockService = StockService(environment: settings.currentEnvironment)
+        let environment = settings.currentEnvironment
+        let referenceService = ReferenceLookupService(environment: environment)
+        let stockService = StockService(environment: environment)
+
         do {
-            let matches = try await stockService.search(
+            // Primary: catalog lookup — the GS endpoint that always returns
+            // the reference if it exists, even without stock items.
+            let references = try await referenceService.lookup(
                 scannedValue: code.payload,
                 by: settings.searchAttribute
             )
             inflight = false
-            if matches.isEmpty {
+            guard !references.isEmpty else {
                 feedback.didFailLookup(reason: .notFound)
                 lastScan = .noMatch(code.payload)
-            } else {
-                feedback.didFindReference()
-                lastScan = .matched(ScanState.MatchedReference(payload: code.payload, references: matches))
+                return
             }
+
+            // Enrichment: fetch stock items if any exist. Failure here
+            // doesn't fail the whole scan — we still show the reference,
+            // just without a Stock items section.
+            let stockMatches = (try? await stockService.search(
+                scannedValue: code.payload,
+                by: settings.searchAttribute
+            )) ?? []
+
+            // Pair each reference with its stock items (matched by `ref`),
+            // falling back to "reference with empty stock_items" when the
+            // /stock endpoint had nothing.
+            let combined: [ReferenceStock] = references.map { reference in
+                if let match = stockMatches.first(where: { $0.reference.ref == reference.ref }) {
+                    return match
+                }
+                return ReferenceStock(reference: reference, stockItems: [])
+            }
+            feedback.didFindReference()
+            lastScan = .matched(ScanState.MatchedReference(payload: code.payload, references: combined))
         } catch GSHTTPClient.HTTPError.notAuthenticated {
             inflight = false
             feedback.didFailLookup(reason: .other)
