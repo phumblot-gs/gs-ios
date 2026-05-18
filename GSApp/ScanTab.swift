@@ -13,7 +13,7 @@ struct ScanTab: View {
     var body: some View {
         NavigationStack {
             ZStack(alignment: .bottom) {
-                LiveBarcodeScannerView(cooldownSeconds: 2.0) { code in
+                LiveBarcodeScannerView(resetDelaySeconds: 0.5) { code in
                     Task { await handle(code) }
                 }
                 .ignoresSafeArea(edges: [.top, .leading, .trailing])

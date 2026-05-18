@@ -2,31 +2,33 @@
 import SwiftUI
 
 /// SwiftUI host for `LiveBarcodeScannerController`. Hand it an `onScan`
-/// closure; it gets called every time a centered barcode is detected,
-/// throttled by the controller's cooldown.
+/// closure; it gets called the first time a centered barcode is detected,
+/// and only re-fires when the centered payload changes (i.e. the camera
+/// moves to a different code, or returns to a code after losing sight of
+/// every code for `resetDelaySeconds`).
 public struct LiveBarcodeScannerView: UIViewControllerRepresentable {
     public typealias UIViewControllerType = LiveBarcodeScannerController
 
-    private let cooldownSeconds: TimeInterval
+    private let resetDelaySeconds: TimeInterval
     private let onScan: @MainActor (ScannedCode) -> Void
 
     public init(
-        cooldownSeconds: TimeInterval = 2.0,
+        resetDelaySeconds: TimeInterval = 0.5,
         onScan: @escaping @MainActor (ScannedCode) -> Void
     ) {
-        self.cooldownSeconds = cooldownSeconds
+        self.resetDelaySeconds = resetDelaySeconds
         self.onScan = onScan
     }
 
     public func makeUIViewController(context: Context) -> LiveBarcodeScannerController {
         let controller = LiveBarcodeScannerController()
-        controller.cooldownSeconds = cooldownSeconds
+        controller.resetDelaySeconds = resetDelaySeconds
         controller.onScan = onScan
         return controller
     }
 
     public func updateUIViewController(_ uiViewController: LiveBarcodeScannerController, context: Context) {
-        uiViewController.cooldownSeconds = cooldownSeconds
+        uiViewController.resetDelaySeconds = resetDelaySeconds
         uiViewController.onScan = onScan
     }
 }

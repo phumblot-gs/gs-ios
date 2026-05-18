@@ -31,15 +31,24 @@ public final class LiveBarcodeScannerController: UIViewController {
 
     public var onScan: (@MainActor (ScannedCode) -> Void)?
 
-    /// Re-fire `onScan` on the same payload only after this many seconds.
-    public var cooldownSeconds: TimeInterval = 2.0
+    /// We only re-accept a payload after we've lost sight of every code for
+    /// this many seconds. Lets the user re-scan the same EAN by simply
+    /// pointing away and back, without the API firing repeatedly while the
+    /// camera is held steady on a single item.
+    public var resetDelaySeconds: TimeInterval = 0.5
 
     public override init(nibName: String?, bundle: Bundle?) {
         super.init(nibName: nibName, bundle: bundle)
+        startResetTimer()
     }
 
     public required init?(coder: NSCoder) {
         super.init(coder: coder)
+        startResetTimer()
+    }
+
+    deinit {
+        resetTimer?.invalidate()
     }
 
     // MARK: - Private state
@@ -51,8 +60,16 @@ public final class LiveBarcodeScannerController: UIViewController {
     private var previewLayer: AVCaptureVideoPreviewLayer!
     private let overlay = ScannerOverlayView()
 
-    /// payload → last accepted time, used for the cooldown.
-    private var recentlyAccepted: [String: Date] = [:]
+    /// The payload `onScan` was last fired for. Same payload in view = no
+    /// new fire. Set back to `nil` by the reset timer once the camera has
+    /// lost sight of every code for `resetDelaySeconds`.
+    private var lastAcceptedPayload: String?
+    private var lastDetectionTime: Date?
+
+    /// `nonisolated(unsafe)`: same reasoning as ScannerOverlayView's prune
+    /// timer — UIViewController deinit is nonisolated under Swift 6, the
+    /// view controller is `@MainActor`, and `Timer.invalidate` is thread-safe.
+    private nonisolated(unsafe) var resetTimer: Timer?
 
     // MARK: - Lifecycle
 
@@ -188,6 +205,26 @@ public final class LiveBarcodeScannerController: UIViewController {
         }
         return nil
     }
+
+    // MARK: - Reset timer
+
+    private func startResetTimer() {
+        let timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.tickResetTimer()
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        resetTimer = timer
+    }
+
+    private func tickResetTimer() {
+        guard let lastDetectionTime else { return }
+        if Date().timeIntervalSince(lastDetectionTime) > resetDelaySeconds {
+            lastAcceptedPayload = nil
+            self.lastDetectionTime = nil
+        }
+    }
 }
 
 // MARK: - AVCaptureMetadataOutputObjectsDelegate
@@ -244,11 +281,13 @@ private extension LiveBarcodeScannerController {
               let payload = transformed.stringValue ?? raw.stringValue else { return }
 
         let now = Date()
-        if let last = recentlyAccepted[payload],
-           now.timeIntervalSince(last) < cooldownSeconds {
-            return
-        }
-        recentlyAccepted[payload] = now
+        lastDetectionTime = now
+
+        // Same payload as last fire while it's still in view → no re-fire.
+        // The reset timer will set `lastAcceptedPayload` back to nil after
+        // `resetDelaySeconds` of nothing being detected.
+        guard payload != lastAcceptedPayload else { return }
+        lastAcceptedPayload = payload
 
         let symbology = ScannedSymbology(transformed.type)
         let code = ScannedCode(payload: payload, symbology: symbology, detectedAt: now)
