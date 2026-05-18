@@ -47,8 +47,29 @@ targets:
     deploymentTarget: "26.0"
     sources:
       - path: GSApp
+    # All Info.plist contents live here so xcodegen regenerates them
+    # consistently on every `bin/bootstrap.sh`. Edits made directly to
+    # GSApp/Info.plist would be overwritten — change this block instead.
     info:
       path: GSApp/Info.plist
+      properties:
+        CFBundleDisplayName: GS Mobile
+        CFBundleShortVersionString: "1.0"
+        CFBundleVersion: "1"
+        LSRequiresIPhoneOS: true
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        UIRequiredDeviceCapabilities:
+          - arm64
+        NSCameraUsageDescription: GS Mobile uses the camera to scan product barcodes, take photos, and run LiDAR measurements.
+        NSPhotoLibraryUsageDescription: GS Mobile can save captured product photos to your library.
+        NSPhotoLibraryAddUsageDescription: GS Mobile can save captured product photos and packshots to your library.
+        CFBundleURLTypes:
+          - CFBundleTypeRole: Editor
+            CFBundleURLName: com.grandshooting.gsmobile
+            CFBundleURLSchemes:
+              - gsmobile
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.grandshooting.gsmobile
