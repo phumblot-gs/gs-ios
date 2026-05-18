@@ -13,12 +13,11 @@ struct SettingsTab: View {
     var body: some View {
         NavigationStack {
             Form {
-                accountSection
                 backendSection
                 developmentSection
+                accountSection
             }
             .navigationTitle("Settings")
-            .navigationBarTitleDisplayMode(.inline)
             .onAppear(perform: loadDraft)
             .overlay(alignment: .top) {
                 if savedToastVisible {
@@ -39,16 +38,8 @@ struct SettingsTab: View {
 
     private var accountSection: some View {
         Section("Account") {
-            HStack {
-                Text("Status")
-                Spacer()
-                Text(authState.isAuthenticated ? "Signed in" : "Not signed in")
-                    .foregroundStyle(authState.isAuthenticated ? .green : .secondary)
-            }
-            if authState.isAuthenticated {
-                Button("Sign out", role: .destructive) {
-                    Task { await authState.signOut() }
-                }
+            Button("Sign out", role: .destructive) {
+                Task { await authState.signOut() }
             }
         }
     }
@@ -61,8 +52,8 @@ struct SettingsTab: View {
                 }
             }
             LabeledContent("Mobile backend", value: settings.backendEnvironment.mobileBackendURL.host ?? "—")
-                .foregroundStyle(.secondary)
                 .font(.footnote)
+                .foregroundStyle(.secondary)
         } header: {
             Text("Backend")
         } footer: {
@@ -81,8 +72,8 @@ struct SettingsTab: View {
                     .keyboardType(.URL)
             }
             LabeledContent("API URL", value: settings.currentEnvironment.apiBaseURL.host ?? "—")
-                .foregroundStyle(.secondary)
                 .font(.footnote)
+                .foregroundStyle(.secondary)
 
             SecureField("Personal API key (bearer)", text: $apiKeyDraft)
                 .autocorrectionDisabled()
@@ -105,7 +96,7 @@ struct SettingsTab: View {
         } header: {
             Text("Grand Shooting API")
         } footer: {
-            Text("Both shard and API key are stored locally on this device — the API key in the Keychain. Used for the mock auth flow until the OAuth plugin is wired.")
+            Text("Both shard and API key are stored locally on this device — the API key in the Keychain. Used for API calls until the OAuth plugin is wired.")
         }
     }
 
@@ -119,14 +110,6 @@ struct SettingsTab: View {
     private func save() {
         settings.apiKey = apiKeyDraft
         apiKeyDirty = false
-
-        // If the user is currently signed in via the mock flow, refresh
-        // the token in the session so subsequent API calls pick up the new key.
-        if authState.isAuthenticated {
-            let updated = GSAccessToken(token: apiKeyDraft, scheme: .bearer)
-            Task { await authState.signIn(updated) }
-        }
-
         withAnimation { savedToastVisible = true }
         Task {
             try? await Task.sleep(for: .seconds(1.5))

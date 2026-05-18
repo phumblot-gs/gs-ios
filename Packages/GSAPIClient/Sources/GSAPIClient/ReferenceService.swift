@@ -22,6 +22,7 @@ public actor ReferenceService {
 
     public enum LookupError: Error, Sendable {
         case notFound
+        case notAuthenticated
         case http(status: Int)
         case transport(any Error)
     }
@@ -29,7 +30,14 @@ public actor ReferenceService {
     /// Look up a reference by EAN. The Grand Shooting endpoint always
     /// returns HTTP 200 with a (possibly empty) array — empty means
     /// "no match", not a transport error.
+    ///
+    /// Throws `.notAuthenticated` if neither an OAuth token nor a personal
+    /// API key is available locally, so the caller can short-circuit and
+    /// prompt the user to configure one in Settings.
     public func lookupByEAN(_ ean: String) async throws -> [Components.Schemas.Reference] {
+        guard await GSAuthSession.shared.hasUsableToken() else {
+            throw LookupError.notAuthenticated
+        }
         do {
             let output = try await client.getReference(query: .init(ean: ean))
             switch output {

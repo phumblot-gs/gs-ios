@@ -35,8 +35,6 @@ struct GSAPIClientTests {
             environment: .placeholder,
             tokenProvider: { GSAccessToken(token: "fake-token") }
         )
-        // The instance itself is enough — we don't hit the network here.
-        // The compile-time test is that the generated `Client` type exists.
         _ = client
     }
 
@@ -49,39 +47,20 @@ struct GSAPIClientTests {
     }
 
     @Test("MockAuthService rejects bad credentials")
-    func mockAuthRejectsBadCredentials() async {
+    func mockAuthRejectsBadCredentials() {
         let mock = MockAuthService()
-        await #expect(throws: MockAuthService.SignInError.invalidCredentials) {
-            _ = try await mock.signIn(username: "wrong", password: "wrong", bearerToken: "x")
+        #expect(throws: MockAuthService.SignInError.invalidCredentials) {
+            try mock.signIn(username: "wrong", password: "wrong")
         }
     }
 
-    @Test("MockAuthService rejects an empty bearer token")
-    func mockAuthRejectsEmptyToken() async {
+    @Test("MockAuthService accepts the canonical dev credentials")
+    func mockAuthAcceptsValid() throws {
         let mock = MockAuthService()
-        await #expect(throws: MockAuthService.SignInError.missingBearerToken) {
-            _ = try await mock.signIn(
-                username: MockAuthService.acceptedUsername,
-                password: MockAuthService.acceptedPassword,
-                bearerToken: "   "
-            )
-        }
-    }
-
-    @Test("MockAuthService persists a bearer token on success")
-    func mockAuthPersistsToken() async throws {
-        let mock = MockAuthService()
-        let token = try await mock.signIn(
+        try mock.signIn(
             username: MockAuthService.acceptedUsername,
-            password: MockAuthService.acceptedPassword,
-            bearerToken: "test-bearer-xyz"
+            password: MockAuthService.acceptedPassword
         )
-        #expect(token.scheme == .bearer)
-        #expect(token.authorizationHeaderValue == "Bearer test-bearer-xyz")
-        let current = await GSAuthSession.shared.currentToken()
-        #expect(current?.token == "test-bearer-xyz")
-        // Cleanup so subsequent test runs don't see leftover state.
-        await GSAuthSession.shared.setToken(nil)
     }
 }
 

@@ -15,10 +15,10 @@ struct GSApp: App {
     var body: some Scene {
         WindowGroup {
             Group {
-                if authState.isAuthenticated {
+                if authState.isSignedIn {
                     RootView(authState: authState, settings: settings)
                 } else {
-                    LoginView(authState: authState, settings: settings)
+                    LoginView(authState: authState)
                 }
             }
             .onOpenURL { url in
@@ -42,7 +42,7 @@ struct RootView: View {
                 .tabItem { Label("Photo", systemImage: "camera") }
             LiDARTab()
                 .tabItem { Label("LiDAR", systemImage: "cube.transparent") }
-            HistoryTab(authState: authState)
+            HistoryTab()
                 .tabItem { Label("History", systemImage: "clock") }
             SettingsTab(authState: authState, settings: settings)
                 .tabItem { Label("Settings", systemImage: "gearshape") }

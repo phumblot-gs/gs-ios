@@ -1,175 +1,96 @@
 import SwiftUI
 import GSAPIClient
-import GSCore
 
-/// Dev login screen. Until the real GS OAuth plugin is wired, signing in
-/// boils down to:
-///   1. Configure a personal API key in Settings (one-time, persisted
-///      in Keychain).
-///   2. Type the mock credentials `test` / `test2026` here.
-///
-/// Will be replaced by `ASWebAuthenticationSession` against the backend
-/// `/auth/start` endpoint once the GS plugin is registered.
+/// Dev sign-in screen. Validates `test` / `test2026` against `MockAuthService`
+/// and flips `AuthState` to signed-in. No API key here — that's configured
+/// in the Settings tab after sign-in.
 struct LoginView: View {
     let authState: AuthState
-    @Bindable var settings: DevSettings
 
     @State private var username = ""
     @State private var password = ""
     @State private var isSigningIn = false
     @State private var errorMessage: String?
-    @State private var showSettings = false
 
     private let mock = MockAuthService()
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: 24) {
-                    header
+        VStack(spacing: 0) {
+            Spacer(minLength: 40)
 
-                    if !settings.hasAPIKey {
-                        apiKeyMissingCard
-                    }
-
-                    credentialsCard
-
-                    if let errorMessage {
-                        Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.red)
-                            .font(.subheadline)
-                    }
-
-                    signInButton
-
-                    Spacer(minLength: 32)
-                }
-                .padding(.horizontal, 20)
-                .padding(.top, 32)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // Brand
+            VStack(spacing: 12) {
+                Image(systemName: "camera.aperture")
+                    .font(.system(size: 64, weight: .light))
+                    .foregroundStyle(.tint)
+                Text("GS Mobile")
+                    .font(.largeTitle.bold())
+                Text("Sign in to start scanning")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
             }
-            .scrollDismissesKeyboard(.interactively)
-            .background(Color(.systemGroupedBackground))
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        showSettings = true
-                    } label: {
-                        Image(systemName: "gearshape")
-                    }
-                    .accessibilityLabel("Settings")
+
+            Spacer()
+
+            // Credentials
+            VStack(spacing: 12) {
+                TextField("Username", text: $username)
+                    .textContentType(.username)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                    .textFieldStyle(.roundedBorder)
+                SecureField("Password", text: $password)
+                    .textContentType(.password)
+                    .textFieldStyle(.roundedBorder)
+
+                if let errorMessage {
+                    Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
-            .sheet(isPresented: $showSettings) {
-                NavigationStack {
-                    SettingsTab(authState: authState, settings: settings)
-                        .toolbar {
-                            ToolbarItem(placement: .topBarTrailing) {
-                                Button("Done") { showSettings = false }
-                            }
-                        }
-                }
-            }
-        }
-    }
+            .padding(.horizontal, 8)
 
-    // MARK: - Sub-views
+            Spacer().frame(height: 24)
 
-    private var header: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "camera.aperture")
-                .font(.system(size: 56, weight: .light))
-                .foregroundStyle(.tint)
-            Text("GS Mobile")
-                .font(.largeTitle.bold())
-            Text("Sign in to start scanning")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity)
-    }
-
-    private var apiKeyMissingCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Label("No API key configured", systemImage: "key.slash")
-                .font(.headline)
-            Text("Add your personal Grand Shooting API key in Settings before signing in.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+            // Sign in button
             Button {
-                showSettings = true
+                Task { await signIn() }
             } label: {
-                Label("Open Settings", systemImage: "gearshape")
+                if isSigningIn {
+                    ProgressView()
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 24)
+                } else {
+                    Text("Sign in")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 24)
+                }
             }
             .buttonStyle(.borderedProminent)
-            .padding(.top, 4)
-        }
-        .padding()
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(.orange.opacity(0.5), lineWidth: 1)
-        )
-    }
+            .controlSize(.large)
+            .disabled(isSigningIn || username.isEmpty || password.isEmpty)
 
-    private var credentialsCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Dev credentials")
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(.secondary)
-            TextField("Username", text: $username)
-                .textContentType(.username)
-                .autocorrectionDisabled()
-                .textInputAutocapitalization(.never)
-                .textFieldStyle(.roundedBorder)
-            SecureField("Password", text: $password)
-                .textContentType(.password)
-                .textFieldStyle(.roundedBorder)
+            Spacer()
+            Spacer()
         }
-        .padding()
-        .background(.background, in: RoundedRectangle(cornerRadius: 16))
-        .shadow(color: .black.opacity(0.04), radius: 8, y: 2)
+        .padding(.horizontal, 32)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(.systemBackground))
+        .ignoresSafeArea(.keyboard, edges: .bottom)
     }
-
-    private var signInButton: some View {
-        Button {
-            Task { await signIn() }
-        } label: {
-            if isSigningIn {
-                ProgressView()
-                    .frame(maxWidth: .infinity)
-            } else {
-                Text("Sign in")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-            }
-        }
-        .buttonStyle(.borderedProminent)
-        .controlSize(.large)
-        .disabled(isSigningIn || username.isEmpty || password.isEmpty || !settings.hasAPIKey)
-    }
-
-    // MARK: - Sign-in
 
     private func signIn() async {
         errorMessage = nil
-        guard let bearer = settings.apiKey else {
-            errorMessage = "Configure your API key in Settings first."
-            return
-        }
         isSigningIn = true
         defer { isSigningIn = false }
         do {
-            let token = try await mock.signIn(
-                username: username,
-                password: password,
-                bearerToken: bearer
-            )
-            await authState.signIn(token)
+            try mock.signIn(username: username, password: password)
+            authState.signIn()
         } catch MockAuthService.SignInError.invalidCredentials {
             errorMessage = "Invalid username or password."
-        } catch MockAuthService.SignInError.missingBearerToken {
-            errorMessage = "API key is empty — reopen Settings."
         } catch {
             errorMessage = "Sign-in failed: \(error.localizedDescription)"
         }

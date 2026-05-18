@@ -1,9 +1,6 @@
 import SwiftUI
-import GSAPIClient
 
 struct HistoryTab: View {
-    let authState: AuthState
-
     var body: some View {
         NavigationStack {
             ContentUnavailableView(
@@ -12,13 +9,6 @@ struct HistoryTab: View {
                 description: Text("Recent scans, photos, and shipments will appear here.")
             )
             .navigationTitle("History")
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Sign out", role: .destructive) {
-                        Task { await authState.signOut() }
-                    }
-                }
-            }
         }
     }
 }

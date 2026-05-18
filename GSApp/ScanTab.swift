@@ -98,6 +98,16 @@ struct ScanTab: View {
                     accent: .orange
                 )
             }
+        } catch ReferenceService.LookupError.notAuthenticated {
+            inflight = false
+            feedback.didFailLookup(reason: .other)
+            lastResult = ScanResultUI(
+                id: UUID(),
+                title: "Scanned \(code.payload)",
+                subtitle: "Configure your API key in Settings to enable lookups",
+                systemImage: "key.slash",
+                accent: .orange
+            )
         } catch ReferenceService.LookupError.transport(let underlying) {
             inflight = false
             feedback.didFailLookup(reason: .transport)
