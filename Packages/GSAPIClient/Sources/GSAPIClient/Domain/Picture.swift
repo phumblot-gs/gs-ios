@@ -90,7 +90,7 @@ public struct Picture: Sendable, Hashable, Identifiable, Codable {
         if let stringRefID = try? c.decodeIfPresent(String.self, forKey: .referenceID) {
             self.referenceID = stringRefID
         } else if let intRefID = try? c.decodeIfPresent(Int.self, forKey: .referenceID) {
-            self.referenceID = intRefID.map(String.init)
+            self.referenceID = String(intRefID)
         } else {
             self.referenceID = nil
         }
