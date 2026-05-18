@@ -91,23 +91,37 @@ final class ScannerOverlayView: UIView {
     }
 
     /// Build a "laser line" that goes through the centre of the barcode along
-    /// its long axis — perpendicular to the bars, spanning the full length.
-    /// Works the same whether the code is held upright, sideways, or tilted:
-    /// we never rely on screen-space "up", only on the code's own geometry.
+    /// its long axis — i.e. from the first bar to the last bar, perpendicular
+    /// to the bars themselves. Works the same whether the code is held
+    /// upright, sideways, tilted, or upside-down.
     ///
-    /// AVMetadata returns the four corners clockwise starting from the
-    /// barcode's intrinsic top-left, so:
-    ///   - corners[0] (TL) → corners[3] (BL) is one short (along-the-bars) edge
-    ///   - corners[1] (TR) → corners[2] (BR) is the other short edge
-    /// The line between the mid-points of those two edges is exactly the
-    /// long-axis centreline.
+    /// We don't rely on AVFoundation's corner ordering (which empirically
+    /// disagrees with the docs depending on rotation): we measure the length
+    /// of two adjacent edges and treat the shorter pair as the "short" edges
+    /// — the ones running along the bars. The midpoints of those short edges
+    /// joined together give the long-axis centreline regardless of the
+    /// underlying corner order.
     private func path1D(for h: Highlight) -> CGPath {
         let path = CGMutablePath()
         guard h.corners.count == 4 else { return path }
-        let leftMidpoint = midpoint(h.corners[0], h.corners[3])
-        let rightMidpoint = midpoint(h.corners[1], h.corners[2])
-        path.move(to: leftMidpoint)
-        path.addLine(to: rightMidpoint)
+        let c = h.corners
+
+        let edge01 = distance(c[0], c[1])
+        let edge12 = distance(c[1], c[2])
+
+        // The shorter pair of adjacent edges runs along the bars. The midpoints
+        // of those two short edges define the long-axis centreline (perpendicular
+        // to the bars, full code length).
+        let (a, b): (CGPoint, CGPoint)
+        if edge01 < edge12 {
+            a = midpoint(c[0], c[1])
+            b = midpoint(c[2], c[3])
+        } else {
+            a = midpoint(c[1], c[2])
+            b = midpoint(c[3], c[0])
+        }
+        path.move(to: a)
+        path.addLine(to: b)
         return path
     }
 
