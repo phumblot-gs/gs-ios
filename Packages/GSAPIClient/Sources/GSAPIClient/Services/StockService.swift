@@ -77,8 +77,12 @@ public struct StockService: Sendable {
         }
     }
 
-    public func create(_ payload: CreatePayload) async throws -> StockItem {
-        try await http.post("/stock", body: payload, as: StockItem.self)
+    /// `POST /stock` returns the GS `Stock_item` schema, which is actually
+    /// the *reference with all its stock items* (same shape as
+    /// `GET /stock` rows), NOT a single `stock_item` row. We decode it as
+    /// our `ReferenceStock` to match.
+    public func create(_ payload: CreatePayload) async throws -> ReferenceStock {
+        try await http.post("/stock", body: payload, as: ReferenceStock.self)
     }
 
     // MARK: - Update

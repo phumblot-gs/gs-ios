@@ -264,14 +264,23 @@ struct RegisterProductFlow: View {
             ?? .addToStock
 
         do {
-            let item = try await stockService.create(.init(
+            let response = try await stockService.create(.init(
                 referenceID: referenceID,
                 batchID: resolvedBatch.id,
                 status: status,
                 ean: ean
             ))
             feedback.didFindReference()
-            lastResult = .created(reference: reference, item: item)
+            // The newly-created stock item is the most recent one of the
+            // response. Fall back to a locally-built placeholder if the
+            // response unexpectedly carries no items.
+            let createdItem = response.stockItems.last ?? StockItem(
+                id: 0,
+                batchID: resolvedBatch.id,
+                status: status,
+                ean: ean
+            )
+            lastResult = .created(reference: reference, item: createdItem)
         } catch let err as GSHTTPClient.HTTPError {
             feedback.didFailLookup(reason: .other)
             lastResult = .failed(err.userMessage)
