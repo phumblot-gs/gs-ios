@@ -166,17 +166,26 @@ public struct GSHTTPClient: Sendable {
             throw HTTPError.notAuthenticated
         }
 
+        Self.log("→ \(request.httpMethod ?? "?") \(request.url?.absoluteString ?? "?")")
+        if let body = request.httpBody, let bodyString = String(data: body, encoding: .utf8) {
+            Self.log("  body: \(bodyString)")
+        }
+
         let data: Data
         let response: URLResponse
         do {
             (data, response) = try await session.data(for: request)
         } catch {
+            Self.log("✗ transport error: \(error.localizedDescription)")
             throw HTTPError.transport(error)
         }
 
         guard let http = response as? HTTPURLResponse else {
+            Self.log("✗ no HTTPURLResponse")
             throw HTTPError.http(status: -1, body: nil)
         }
+        let bodyPreview = String(data: data, encoding: .utf8).map { $0.prefix(500) } ?? "<\(data.count) bytes binary>"
+        Self.log("← \(http.statusCode) \(request.url?.lastPathComponent ?? "")  body: \(bodyPreview)")
         guard (200..<300).contains(http.statusCode) else {
             throw HTTPError.http(status: http.statusCode, body: String(data: data, encoding: .utf8))
         }
@@ -184,14 +193,24 @@ public struct GSHTTPClient: Sendable {
     }
 
     private func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
-        // The empty-body case (e.g. DELETE 204) shows up here too — wrap
-        // it sensibly when the caller expects `EmptyResponse`.
         if data.isEmpty, let empty = EmptyResponse() as? T { return empty }
         do {
             return try decoder.decode(T.self, from: data)
         } catch {
+            Self.log("✗ decoding \(T.self) failed: \(error)")
             throw HTTPError.decoding(error)
         }
+    }
+
+    // MARK: - Logging
+
+    private static let logger = GSLogger(category: "GSHTTPClient")
+
+    /// All HTTP traffic is logged through `GSLogger` (visible in Xcode's
+    /// debug console + Console.app). Cheap; safe to leave on in DEBUG
+    /// builds and turn off later if it gets noisy.
+    private static func log(_ message: String) {
+        logger.debug(message)
     }
 }
 

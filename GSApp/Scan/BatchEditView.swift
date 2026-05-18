@@ -112,14 +112,35 @@ struct BatchEditView: View {
         let service = BatchService(environment: settings.currentEnvironment)
         do {
             let updated = try await service.update(id: original.id, payload: payload)
-            // If the user introduced a new type, remember it in settings.
             if !type.isEmpty, !settings.batchTypes.contains(type) {
                 settings.batchTypes.append(type)
             }
             onSaved(updated)
             dismiss()
+        } catch let err as GSHTTPClient.HTTPError {
+            errorMessage = err.userMessage
         } catch {
             errorMessage = error.localizedDescription
+        }
+    }
+}
+
+extension GSHTTPClient.HTTPError {
+    /// Human-friendly error string surfaced in the Save sheet. Keeps the
+    /// raw status + body preview so we can debug from a screenshot.
+    public var userMessage: String {
+        switch self {
+        case .notAuthenticated:
+            return "Not authenticated — sign in again."
+        case .invalidURL:
+            return "Internal error: invalid URL."
+        case .http(let status, let body):
+            let trimmed = (body ?? "").prefix(200)
+            return "HTTP \(status) · \(trimmed)"
+        case .decoding(let err):
+            return "Response decoding failed: \(err)"
+        case .transport(let err):
+            return "Network error: \(err.localizedDescription)"
         }
     }
 }
