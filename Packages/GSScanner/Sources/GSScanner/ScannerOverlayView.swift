@@ -29,7 +29,13 @@ final class ScannerOverlayView: UIView {
     /// has stopped calling the metadata delegate (which happens the moment
     /// the user moves the camera off every visible code). Without this the
     /// last green line would freeze on screen until the next detection.
-    private var pruneTimer: Timer?
+    ///
+    /// `nonisolated(unsafe)`: UIView's deinit is nonisolated under Swift 6
+    /// strict concurrency, but UIView itself is `@MainActor` so deinit only
+    /// ever fires on the main thread. `Timer.invalidate()` is also documented
+    /// thread-safe — accessing it from deinit is sound, the unsafe marker
+    /// just bypasses the compiler check.
+    private nonisolated(unsafe) var pruneTimer: Timer?
 
     private let strokeColor = UIColor.systemGreen.cgColor
     private let crosshairColor = UIColor.white.withAlphaComponent(0.75).cgColor
@@ -51,10 +57,13 @@ final class ScannerOverlayView: UIView {
 
     private func startPruneTimer() {
         let timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
-            guard let self else { return }
-            // CALayer mutation must stay on the main thread; Timer fires on
-            // the runloop it was scheduled on, which is `.main` here.
-            self.pruneStale(now: Date())
+            // Timer.scheduledTimer fires on the current runloop, which is
+            // `.main` here (we're called from a MainActor init). The
+            // `@Sendable` closure is opaque to the type system, so we hop
+            // via `MainActor.assumeIsolated` to access the view's state.
+            MainActor.assumeIsolated {
+                self?.pruneStale(now: Date())
+            }
         }
         RunLoop.main.add(timer, forMode: .common)
         pruneTimer = timer
