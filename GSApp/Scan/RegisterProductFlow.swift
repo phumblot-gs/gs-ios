@@ -252,20 +252,29 @@ struct RegisterProductFlow: View {
         batch: Batch? = nil
     ) async {
         guard let resolvedBatch = batch ?? activeBatch else { return }
+        // `reference_id` is required by GS — bail out clearly if the
+        // lookup response didn't include one.
+        guard let referenceID = reference.id else {
+            feedback.didFailLookup(reason: .other)
+            lastResult = .failed("Reference \(reference.ref) is missing a reference_id, can't register.")
+            return
+        }
         let stockService = StockService(environment: settings.currentEnvironment)
         let status = StockItemStatus(rawValue: settings.defaultStockItemStatusOnRegister)
             ?? .addToStock
 
         do {
             let item = try await stockService.create(.init(
-                referenceID: reference.id,
-                ref: reference.ref,
-                ean: ean,
+                referenceID: referenceID,
                 batchID: resolvedBatch.id,
-                status: status
+                status: status,
+                ean: ean
             ))
             feedback.didFindReference()
             lastResult = .created(reference: reference, item: item)
+        } catch let err as GSHTTPClient.HTTPError {
+            feedback.didFailLookup(reason: .other)
+            lastResult = .failed(err.userMessage)
         } catch {
             feedback.didFailLookup(reason: .other)
             lastResult = .failed(error.localizedDescription)

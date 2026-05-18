@@ -51,27 +51,28 @@ public struct StockService: Sendable {
 
     // MARK: - Create
 
+    /// Matches the GS `Model75` schema for `POST /stock`. `reference_id` and
+    /// `stock_item_status` are required by the server; the rest are
+    /// optional. We deliberately do NOT send `ref` — the schema doesn't
+    /// declare it and we've seen GS reject the payload when it's present.
     public struct CreatePayload: Encodable, Sendable {
-        public let reference_id: Int?
-        public let ref: String?
-        public let ean: String?
-        public let batch_id: Int
+        public let reference_id: Int
         public let stock_item_status: Int
+        public let batch_id: Int?
+        public let ean: String?
         public let smalltext: String?
 
         public init(
-            referenceID: Int?,
-            ref: String?,
-            ean: String?,
-            batchID: Int,
+            referenceID: Int,
+            batchID: Int?,
             status: StockItemStatus,
+            ean: String? = nil,
             smalltext: String? = nil
         ) {
             self.reference_id = referenceID
-            self.ref = ref
-            self.ean = ean
-            self.batch_id = batchID
             self.stock_item_status = status.rawValue
+            self.batch_id = batchID
+            self.ean = ean
             self.smalltext = smalltext
         }
     }
