@@ -4,6 +4,8 @@
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleDisplayName</key>
+	<string>GS Mobile</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -18,5 +20,46 @@
 	<string>1.0</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>UILaunchScreen</key>
+	<dict/>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+	</array>
+	<key>UIRequiredDeviceCapabilities</key>
+	<array>
+		<string>arm64</string>
+	</array>
+
+	<!-- ============================================================ -->
+	<!-- Privacy usage descriptions                                    -->
+	<!-- iOS shows these strings when prompting the user for access.   -->
+	<!-- ============================================================ -->
+	<key>NSCameraUsageDescription</key>
+	<string>GS Mobile uses the camera to scan product barcodes, take photos, and run LiDAR measurements.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>GS Mobile can save captured product photos to your library.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>GS Mobile can save captured product photos and packshots to your library.</string>
+
+	<!-- ============================================================ -->
+	<!-- URL scheme (deep link back from the OAuth web flow)            -->
+	<!-- gsmobile://auth/done?session_id=...                            -->
+	<!-- ============================================================ -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.grandshooting.gsmobile</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>gsmobile</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>
