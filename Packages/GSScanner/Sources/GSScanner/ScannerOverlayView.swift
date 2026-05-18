@@ -90,18 +90,29 @@ final class ScannerOverlayView: UIView {
         return layer
     }
 
-    /// Build a single straight line just above the barcode, parallel to the
-    /// top edge defined by its top-left → top-right corners.
+    /// Build a "laser line" that goes through the centre of the barcode along
+    /// its long axis — perpendicular to the bars, spanning the full length.
+    /// Works the same whether the code is held upright, sideways, or tilted:
+    /// we never rely on screen-space "up", only on the code's own geometry.
+    ///
+    /// AVMetadata returns the four corners clockwise starting from the
+    /// barcode's intrinsic top-left, so:
+    ///   - corners[0] (TL) → corners[3] (BL) is one short (along-the-bars) edge
+    ///   - corners[1] (TR) → corners[2] (BR) is the other short edge
+    /// The line between the mid-points of those two edges is exactly the
+    /// long-axis centreline.
     private func path1D(for h: Highlight) -> CGPath {
         let path = CGMutablePath()
         guard h.corners.count == 4 else { return path }
-        let topLeft = h.corners[0]
-        let topRight = h.corners[1]
-        // Lift the line 10 pts off the barcode so the user clearly sees both.
-        let offset = CGPoint(x: 0, y: -10)
-        path.move(to: CGPoint(x: topLeft.x + offset.x, y: topLeft.y + offset.y))
-        path.addLine(to: CGPoint(x: topRight.x + offset.x, y: topRight.y + offset.y))
+        let leftMidpoint = midpoint(h.corners[0], h.corners[3])
+        let rightMidpoint = midpoint(h.corners[1], h.corners[2])
+        path.move(to: leftMidpoint)
+        path.addLine(to: rightMidpoint)
         return path
+    }
+
+    private func midpoint(_ a: CGPoint, _ b: CGPoint) -> CGPoint {
+        CGPoint(x: (a.x + b.x) / 2, y: (a.y + b.y) / 2)
     }
 
     /// Build four L-shaped corner brackets, one at each corner of the QR /
