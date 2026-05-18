@@ -23,7 +23,10 @@ struct GSAPIClientTests {
     @Test("Live API exposes the configured environment")
     func liveEnvironment() async {
         let live = LiveGSAPI(environment: .placeholder)
-        #expect(live.environment.apiBaseURL.absoluteString.contains("api-34"))
+        // GSEnvironment.placeholder == .staging, which targets api-19 (the
+        // user's tenant shard) and api-staging.mobile.grand-shooting.com.
+        #expect(live.environment.apiBaseURL.absoluteString.contains("api-19"))
+        #expect(live.environment.mobileBackendBaseURL.absoluteString.contains("api-staging.mobile"))
     }
 
     @Test("Generated client instantiates with a token provider")
