@@ -1,0 +1,396 @@
+{
+  "sourceLanguage" : "en",
+  "version" : "1.0",
+  "strings" : {
+    "Account" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Compte" } }
+      }
+    },
+    "Active zone" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Zone active" } }
+      }
+    },
+    "Add another" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "En ajouter un autre" } }
+      }
+    },
+    "Already in stock" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Déjà en stock" } }
+      }
+    },
+    "Backend" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Backend" } }
+      }
+    },
+    "Batches" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Batchs" } }
+      }
+    },
+    "Batch types" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Types de batch" } }
+      }
+    },
+    "Browse boxes and shelves. Scan a batch barcode to open it." : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Parcourez vos cartons et étagères. Scannez le code d'un batch pour l'ouvrir." } }
+      }
+    },
+    "Cancel" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Annuler" } }
+      }
+    },
+    "Change status" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Changer le statut" } }
+      }
+    },
+    "Choose a batch first" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Choisis un batch d'abord" } }
+      }
+    },
+    "Close" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Fermer" } }
+      }
+    },
+    "Code" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Code" } }
+      }
+    },
+    "Code (barcode)" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Code (barcode)" } }
+      }
+    },
+    "Configure your API key in Settings to enable lookups." : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Renseigne ta clé API dans les Paramètres pour activer les recherches." } }
+      }
+    },
+    "Create" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Créer" } }
+      }
+    },
+    "Create a new batch" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Créer un nouveau batch" } }
+      }
+    },
+    "Default status on register" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Statut par défaut à l'enregistrement" } }
+      }
+    },
+    "EAN" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "EAN" } }
+      }
+    },
+    "EAN not found in catalog." : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "EAN absent du catalogue." } }
+      }
+    },
+    "EAN not in catalog" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "EAN absent du catalogue" } }
+      }
+    },
+    "Edit batch" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Modifier le batch" } }
+      }
+    },
+    "Enabled statuses" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Statuts actifs" } }
+      }
+    },
+    "Environment" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Environnement" } }
+      }
+    },
+    "Find a product manually by ref, label, sku or ean." : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Trouve un produit manuellement par ref, libellé, sku ou ean." } }
+      }
+    },
+    "History" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Historique" } }
+      }
+    },
+    "Label" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Libellé" } }
+      }
+    },
+    "Language" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Langue" } }
+      }
+    },
+    "LiDAR" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "LiDAR" } }
+      }
+    },
+    "Look up a reference and update its stock item status." : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Recherche une référence et mets à jour le statut de ses échantillons." } }
+      }
+    },
+    "Missing" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Manquant" } }
+      }
+    },
+    "Mobile backend" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Backend mobile" } }
+      }
+    },
+    "New batch" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Nouveau batch" } }
+      }
+    },
+    "Photo" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Photo" } }
+      }
+    },
+    "Pictures" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Pictures" } }
+      }
+    },
+    "Reference (ref)" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Référence (ref)" } }
+      }
+    },
+    "Refresh catalog" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Rafraîchir le catalogue" } }
+      }
+    },
+    "Register products" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Enregistrer des produits" } }
+      }
+    },
+    "Save" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Enregistrer" } }
+      }
+    },
+    "Saved" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Enregistré" } }
+      }
+    },
+    "Scan" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Scanner" } }
+      }
+    },
+    "Scan an item to add it to a batch in your stock." : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Scanne un article pour l'ajouter à un batch dans ton stock." } }
+      }
+    },
+    "Scan lookup" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Recherche par scan" } }
+      }
+    },
+    "Scan products" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Scanner des produits" } }
+      }
+    },
+    "Search references" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Rechercher des références" } }
+      }
+    },
+    "Select a batch" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Sélectionner un batch" } }
+      }
+    },
+    "Select batch" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Sélectionner un batch" } }
+      }
+    },
+    "Settings" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Paramètres" } }
+      }
+    },
+    "Shard" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Shard" } }
+      }
+    },
+    "Sign in" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Se connecter" } }
+      }
+    },
+    "Sign in to start scanning" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Connectez-vous pour commencer à scanner" } }
+      }
+    },
+    "Sign in with dev credentials" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Se connecter en mode dev" } }
+      }
+    },
+    "Sign in with Grand Shooting" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Se connecter avec Grand Shooting" } }
+      }
+    },
+    "Sign out" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Se déconnecter" } }
+      }
+    },
+    "Skip" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Passer" } }
+      }
+    },
+    "Status" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Statut" } }
+      }
+    },
+    "System" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Système" } }
+      }
+    },
+    "Tap to view details" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Touche pour voir le détail" } }
+      }
+    },
+    "Type" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Type" } }
+      }
+    },
+    "Username" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Identifiant" } }
+      }
+    },
+    "Password" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Mot de passe" } }
+      }
+    },
+    "Workflow" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Workflow" } }
+      }
+    },
+    "Zone" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Zone" } }
+      }
+    },
+    "Warehouse stock" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Stock entrepôt" } }
+      }
+    },
+    "Picking" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Préparation" } }
+      }
+    },
+    "Sent" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Envoyé" } }
+      }
+    },
+    "Sent from warehouse" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Envoyé depuis l'entrepôt" } }
+      }
+    },
+    "Receive" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Réception" } }
+      }
+    },
+    "Add to stock" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Ajout au stock" } }
+      }
+    },
+    "Inventory" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Inventaire" } }
+      }
+    },
+    "Transfer" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Transfert" } }
+      }
+    },
+    "Enriched" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Enrichi" } }
+      }
+    },
+    "Prepare" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Préparation" } }
+      }
+    },
+    "Client return" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Retour client" } }
+      }
+    },
+    "Error" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Erreur" } }
+      }
+    },
+    "Mark as dispatched" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Marquer expédié" } }
+      }
+    },
+    "Back in warehouse" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Retour entrepôt" } }
+      }
+    },
+    "Lost" : {
+      "localizations" : {
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Perdu" } }
+      }
+    }
+  }
+}

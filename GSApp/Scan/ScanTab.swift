@@ -43,6 +43,14 @@ struct ScanMenuView: View {
                     gradient: [.green, .mint],
                     destination: AnyView(RegisterProductFlow(settings: settings))
                 )
+
+                ScanMenuCard(
+                    title: "Search references",
+                    subtitle: "Find a product manually by ref, label, sku or ean.",
+                    systemImage: "magnifyingglass",
+                    gradient: [.purple, .pink],
+                    destination: AnyView(ReferenceSearchView(settings: settings))
+                )
             }
             .padding()
         }
