@@ -21,9 +21,15 @@ final class ScannerOverlayView: UIView {
 
     /// How long a highlight stays visible after its last detection frame.
     /// Tuned to feel "live" without flickering when the recogniser briefly
-    /// misses a frame.
-    private let highlightTTL: TimeInterval = 0.3
+    /// misses a frame at ~30 fps.
+    private let highlightTTL: TimeInterval = 0.15
     private var lastSeen: [String: Date] = [:]
+
+    /// Independent timer that prunes stale highlights even when AVFoundation
+    /// has stopped calling the metadata delegate (which happens the moment
+    /// the user moves the camera off every visible code). Without this the
+    /// last green line would freeze on screen until the next detection.
+    private var pruneTimer: Timer?
 
     private let strokeColor = UIColor.systemGreen.cgColor
     private let crosshairColor = UIColor.white.withAlphaComponent(0.75).cgColor
@@ -34,9 +40,25 @@ final class ScannerOverlayView: UIView {
         isOpaque = false
         isUserInteractionEnabled = false
         configureCrosshair()
+        startPruneTimer()
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+    deinit {
+        pruneTimer?.invalidate()
+    }
+
+    private func startPruneTimer() {
+        let timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            // CALayer mutation must stay on the main thread; Timer fires on
+            // the runloop it was scheduled on, which is `.main` here.
+            self.pruneStale(now: Date())
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        pruneTimer = timer
+    }
 
     override func layoutSubviews() {
         super.layoutSubviews()
@@ -54,9 +76,18 @@ final class ScannerOverlayView: UIView {
             let layer = highlightLayers[h.payload] ?? makeHighlightLayer(for: h.payload)
             layer.path = h.isOneDimensional ? path1D(for: h) : path2D(for: h)
         }
-        // Retire stale highlights.
+        pruneStale(now: now)
+    }
+
+    /// Remove layers whose last detection is older than `highlightTTL`.
+    /// Called both from `updateHighlights` (on each delegate fire) and from
+    /// the prune timer (when the delegate stops firing because no code is
+    /// in view anymore).
+    private func pruneStale(now: Date) {
+        guard !highlightLayers.isEmpty else { return }
         for (payload, layer) in highlightLayers {
-            if let seen = lastSeen[payload], now.timeIntervalSince(seen) > highlightTTL {
+            let seen = lastSeen[payload] ?? .distantPast
+            if now.timeIntervalSince(seen) > highlightTTL {
                 layer.removeFromSuperlayer()
                 highlightLayers.removeValue(forKey: payload)
                 lastSeen.removeValue(forKey: payload)
