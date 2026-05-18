@@ -80,7 +80,9 @@ public struct BatchService: Sendable {
         }
     }
 
+    /// GS uses POST (not PATCH) for batch updates — confirmed in
+    /// `/stock/batch/{batch_id}` of the OpenAPI spec. PATCH yields a 405.
     public func update(id: Int, payload: UpdatePayload) async throws -> Batch {
-        try await http.patch("/stock/batch/\(id)", body: payload, as: Batch.self)
+        try await http.post("/stock/batch/\(id)", body: payload, as: Batch.self)
     }
 }
