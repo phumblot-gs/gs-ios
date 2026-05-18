@@ -119,7 +119,7 @@ struct ReferenceDetailView: View {
         }
     }
 
-    private var categoryForCurrent: Category? {
+    private var categoryForCurrent: GSAPIClient.Category? {
         guard let id = currentReferenceStock?.reference.categoryID else { return nil }
         return CatalogCache.shared.category(id: id)
     }
@@ -261,8 +261,8 @@ struct ReferenceDetailView: View {
     /// Build a row per view_type (in `rang` order) + extra picture rows
     /// for pictures whose view_type_code doesn't match any expected one.
     private var shotListRows: [ShotListRow.Row] {
-        let category = categoryForCurrent
-        let expected = category?.viewTypesByRang ?? []
+        let cat = categoryForCurrent
+        let expected = cat?.viewTypesByRang ?? []
         let latest = picturesLatest
 
         var rows: [ShotListRow.Row] = []
