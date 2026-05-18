@@ -117,10 +117,8 @@ struct RegisterProductFlow: View {
                     HStack(spacing: 6) {
                         Image(systemName: "shippingbox.fill")
                         Text("Registering to \(batch.displayName)")
-                        if let zoneID = batch.zoneID,
-                           let zone = CatalogCache.shared.zones.first(where: { $0.id == zoneID }),
-                           let label = zone.smalltext {
-                            Text("· \(label)")
+                        if let zone = batch.zone, !zone.isEmpty {
+                            Text("· \(zone)")
                                 .foregroundStyle(.secondary)
                         }
                     }

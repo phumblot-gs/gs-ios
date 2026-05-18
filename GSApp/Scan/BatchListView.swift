@@ -124,10 +124,8 @@ private struct BatchRow: View {
                         .padding(.vertical, 2)
                         .background(.quaternary, in: Capsule())
                 }
-                if let zoneID = batch.zoneID,
-                   let zone = catalog.zones.first(where: { $0.id == zoneID }),
-                   let label = zone.smalltext {
-                    Label(label, systemImage: "mappin.circle")
+                if let zone = batch.zone, !zone.isEmpty {
+                    Label(zone, systemImage: "mappin.circle")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

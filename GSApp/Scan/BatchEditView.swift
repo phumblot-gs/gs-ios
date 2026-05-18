@@ -12,7 +12,7 @@ struct BatchEditView: View {
     @State private var smalltext: String
     @State private var code: String
     @State private var type: String
-    @State private var zoneID: Int?
+    @State private var zone: String?
     @State private var isSaving = false
     @State private var errorMessage: String?
 
@@ -25,7 +25,7 @@ struct BatchEditView: View {
         _smalltext = State(initialValue: batch.smalltext ?? "")
         _code = State(initialValue: batch.code ?? "")
         _type = State(initialValue: batch.type ?? "")
-        _zoneID = State(initialValue: batch.zoneID)
+        _zone = State(initialValue: batch.zone)
     }
 
     var body: some View {
@@ -54,12 +54,19 @@ struct BatchEditView: View {
                 if CatalogCache.shared.hasZones {
                     Section("Zone") {
                         Picker("Zone", selection: Binding(
-                            get: { zoneID ?? -1 },
-                            set: { zoneID = $0 >= 0 ? $0 : nil }
+                            get: { zone ?? "" },
+                            set: { zone = $0.isEmpty ? nil : $0 }
                         )) {
-                            Text("None").tag(-1)
-                            ForEach(CatalogCache.shared.zones) { zone in
-                                Text(zone.smalltext ?? "Zone #\(zone.id)").tag(zone.id)
+                            Text("None").tag("")
+                            // Keep the current selection visible even if the
+                            // account's known zone list doesn't include it
+                            // (rare, but happens after zone rename on GS).
+                            if let current = zone, !current.isEmpty,
+                               !CatalogCache.shared.zones.contains(where: { $0.smalltext == current }) {
+                                Text(current).tag(current)
+                            }
+                            ForEach(CatalogCache.shared.zones) { z in
+                                Text(z.smalltext).tag(z.smalltext)
                             }
                         }
                     }
@@ -100,7 +107,7 @@ struct BatchEditView: View {
             smalltext: smalltext,
             code: code.isEmpty ? nil : code,
             type: type.isEmpty ? nil : type,
-            zoneID: zoneID
+            zone: zone
         )
         let service = BatchService(environment: settings.currentEnvironment)
         do {

@@ -84,8 +84,8 @@ public final class CatalogCache {
     /// Look up the user's currently-selected zone if any, falling back to
     /// the first available zone, or nil if the account has none.
     public func resolveActiveZone(settings: DevSettings) -> Zone? {
-        if let id = settings.activeZoneID,
-           let zone = zones.first(where: { $0.id == id }) {
+        if let label = settings.activeZone,
+           let zone = zones.first(where: { $0.smalltext == label }) {
             return zone
         }
         return zones.first

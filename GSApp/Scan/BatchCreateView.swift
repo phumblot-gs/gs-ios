@@ -11,7 +11,7 @@ struct BatchCreateView: View {
     @State private var smalltext: String = ""
     @State private var code: String = ""
     @State private var type: String = ""
-    @State private var zoneID: Int?
+    @State private var zone: String?
     @State private var isSaving = false
     @State private var errorMessage: String?
 
@@ -20,7 +20,7 @@ struct BatchCreateView: View {
     init(settings: DevSettings, onCreated: @escaping @MainActor (Batch) -> Void) {
         self.settings = settings
         self.onCreated = onCreated
-        _zoneID = State(initialValue: settings.activeZoneID)
+        _zone = State(initialValue: settings.activeZone)
     }
 
     var body: some View {
@@ -53,12 +53,12 @@ struct BatchCreateView: View {
                 if CatalogCache.shared.hasZones {
                     Section("Zone") {
                         Picker("Zone", selection: Binding(
-                            get: { zoneID ?? -1 },
-                            set: { zoneID = $0 >= 0 ? $0 : nil }
+                            get: { zone ?? "" },
+                            set: { zone = $0.isEmpty ? nil : $0 }
                         )) {
-                            Text("None").tag(-1)
-                            ForEach(CatalogCache.shared.zones) { zone in
-                                Text(zone.smalltext ?? "Zone #\(zone.id)").tag(zone.id)
+                            Text("None").tag("")
+                            ForEach(CatalogCache.shared.zones) { z in
+                                Text(z.smalltext).tag(z.smalltext)
                             }
                         }
                     }
@@ -99,7 +99,7 @@ struct BatchCreateView: View {
             smalltext: smalltext,
             code: code.isEmpty ? nil : code,
             type: type.isEmpty ? nil : type,
-            zoneID: zoneID
+            zone: zone
         )
         let service = BatchService(environment: settings.currentEnvironment)
         do {

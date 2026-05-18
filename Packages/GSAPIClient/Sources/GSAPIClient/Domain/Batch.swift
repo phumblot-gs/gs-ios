@@ -1,14 +1,15 @@
 import Foundation
 
-/// A logical grouping of stock items — a box, a shelf, a pallet. Optionally
-/// linked to a `Zone`. The `code` attribute is a barcode the user can scan
-/// to open the batch's contents directly.
+/// A logical grouping of stock items — a box, a shelf, a pallet.
+/// Optionally linked to a `Zone` (string label, per the GS API). The
+/// `code` attribute is a barcode the user can scan to open the batch's
+/// contents directly.
 public struct Batch: Sendable, Hashable, Identifiable, Codable {
     public let id: Int
     public let smalltext: String?
     public let code: String?
     public let type: String?
-    public let zoneID: Int?
+    public let zone: String?
     public let dateCre: String?
     public let dateMod: String?
 
@@ -17,7 +18,7 @@ public struct Batch: Sendable, Hashable, Identifiable, Codable {
         smalltext: String? = nil,
         code: String? = nil,
         type: String? = nil,
-        zoneID: Int? = nil,
+        zone: String? = nil,
         dateCre: String? = nil,
         dateMod: String? = nil
     ) {
@@ -25,7 +26,7 @@ public struct Batch: Sendable, Hashable, Identifiable, Codable {
         self.smalltext = smalltext
         self.code = code
         self.type = type
-        self.zoneID = zoneID
+        self.zone = zone
         self.dateCre = dateCre
         self.dateMod = dateMod
     }
@@ -35,7 +36,7 @@ public struct Batch: Sendable, Hashable, Identifiable, Codable {
         case smalltext
         case code
         case type
-        case zoneID = "zone_id"
+        case zone
         case dateCre = "date_cre"
         case dateMod = "date_mod"
     }

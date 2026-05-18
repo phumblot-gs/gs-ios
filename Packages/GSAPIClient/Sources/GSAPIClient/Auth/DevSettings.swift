@@ -86,10 +86,11 @@ public final class DevSettings {
 
     /// The studio zone the user is working from. Single value (one fixed
     /// zone per session), persisted across launches. `nil` when the account
-    /// has no zones or before the user makes a choice.
-    public var activeZoneID: Int? {
+    /// has no zones or before the user makes a choice. GS identifies zones
+    /// by their label string, not a numeric id — hence `String?`.
+    public var activeZone: String? {
         didSet {
-            if let id = activeZoneID {
+            if let id = activeZone {
                 UserDefaults.standard.set(id, forKey: Self.activeZoneKey)
             } else {
                 UserDefaults.standard.removeObject(forKey: Self.activeZoneKey)
@@ -152,11 +153,7 @@ public final class DevSettings {
         let envRaw = UserDefaults.standard.string(forKey: Self.envKey) ?? "staging"
         self.backendEnvironment = BackendEnvironment(rawValue: envRaw) ?? .staging
 
-        if UserDefaults.standard.object(forKey: Self.activeZoneKey) != nil {
-            self.activeZoneID = UserDefaults.standard.integer(forKey: Self.activeZoneKey)
-        } else {
-            self.activeZoneID = nil
-        }
+        self.activeZone = UserDefaults.standard.string(forKey: Self.activeZoneKey)
 
         let allStatuses: Set<Int> = Set(StockItemStatus.allCases.map(\.rawValue))
         if let stored = UserDefaults.standard.array(forKey: Self.enabledStatusesKey) as? [Int],

@@ -62,9 +62,8 @@ struct BatchDetailView: View {
             if let type = currentBatch.type, !type.isEmpty {
                 LabeledContent("Type", value: type)
             }
-            if let zoneID = currentBatch.zoneID,
-               let zone = CatalogCache.shared.zones.first(where: { $0.id == zoneID }) {
-                LabeledContent("Zone", value: zone.smalltext ?? "Zone #\(zone.id)")
+            if let zone = currentBatch.zone, !zone.isEmpty {
+                LabeledContent("Zone", value: zone)
             }
         } header: {
             Text("Batch info")

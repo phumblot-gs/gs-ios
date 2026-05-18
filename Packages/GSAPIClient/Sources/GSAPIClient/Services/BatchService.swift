@@ -48,36 +48,28 @@ public struct BatchService: Sendable {
 
     // MARK: - Create / update
 
-    public struct CreatePayload: Encodable, Sendable {
+    /// Body for `POST /stock/batch` and `POST /stock/batch/{id}` — they
+    /// share the same `batch_modification`/`batch_creation` schema, both
+    /// of which use `zone` (label string) rather than `zone_id`.
+    public struct ModificationPayload: Encodable, Sendable {
         public let smalltext: String?
         public let code: String?
         public let type: String?
-        public let zone_id: Int?
+        public let zone: String?
 
-        public init(smalltext: String?, code: String?, type: String?, zoneID: Int?) {
+        public init(smalltext: String?, code: String?, type: String?, zone: String?) {
             self.smalltext = smalltext
             self.code = code
             self.type = type
-            self.zone_id = zoneID
+            self.zone = zone
         }
     }
+
+    public typealias CreatePayload = ModificationPayload
+    public typealias UpdatePayload = ModificationPayload
 
     public func create(_ payload: CreatePayload) async throws -> Batch {
         try await http.post("/stock/batch", body: payload, as: Batch.self)
-    }
-
-    public struct UpdatePayload: Encodable, Sendable {
-        public let smalltext: String?
-        public let code: String?
-        public let type: String?
-        public let zone_id: Int?
-
-        public init(smalltext: String? = nil, code: String? = nil, type: String? = nil, zoneID: Int? = nil) {
-            self.smalltext = smalltext
-            self.code = code
-            self.type = type
-            self.zone_id = zoneID
-        }
     }
 
     /// GS uses POST (not PATCH) for batch updates — confirmed in

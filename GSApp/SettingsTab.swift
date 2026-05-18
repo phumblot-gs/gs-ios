@@ -80,11 +80,11 @@ struct SettingsTab: View {
         if catalog.hasZones {
             Section {
                 Picker("Active zone", selection: Binding(
-                    get: { settings.activeZoneID ?? catalog.zones.first?.id ?? -1 },
-                    set: { newValue in settings.activeZoneID = newValue >= 0 ? newValue : nil }
+                    get: { settings.activeZone ?? catalog.zones.first?.smalltext ?? "" },
+                    set: { newValue in settings.activeZone = newValue.isEmpty ? nil : newValue }
                 )) {
                     ForEach(catalog.zones) { zone in
-                        Text(zone.smalltext ?? "Zone #\(zone.id)").tag(zone.id)
+                        Text(zone.smalltext).tag(zone.smalltext)
                     }
                 }
             } header: {
