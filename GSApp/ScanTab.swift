@@ -4,10 +4,11 @@ import GSAPIClient
 import GSCore
 
 struct ScanTab: View {
+    let settings: DevSettings
+
     @State private var lastResult: ScanResultUI?
     @State private var inflight = false
     @State private var feedback = ScannerFeedback()
-    private let service = ReferenceService(environment: .placeholder)
 
     var body: some View {
         NavigationStack {
@@ -71,6 +72,10 @@ struct ScanTab: View {
             accent: .gray
         )
 
+        // Resolve the API service against the *current* settings on every
+        // call so changing the shard / env in Settings takes effect without
+        // restarting the app.
+        let service = ReferenceService(environment: settings.currentEnvironment)
         do {
             let refs = try await service.lookupByEAN(code.payload)
             inflight = false

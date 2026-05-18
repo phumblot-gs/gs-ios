@@ -5,6 +5,7 @@ import GSCore
 @main
 struct GSApp: App {
     @State private var authState = AuthState()
+    @State private var settings = DevSettings.shared
     private let logger = GSLogger(category: "App")
 
     init() {
@@ -15,9 +16,9 @@ struct GSApp: App {
         WindowGroup {
             Group {
                 if authState.isAuthenticated {
-                    RootView(authState: authState)
+                    RootView(authState: authState, settings: settings)
                 } else {
-                    LoginView(authState: authState)
+                    LoginView(authState: authState, settings: settings)
                 }
             }
             .onOpenURL { url in
@@ -31,10 +32,11 @@ struct GSApp: App {
 
 struct RootView: View {
     let authState: AuthState
+    @Bindable var settings: DevSettings
 
     var body: some View {
         TabView {
-            ScanTab()
+            ScanTab(settings: settings)
                 .tabItem { Label("Scan", systemImage: "barcode.viewfinder") }
             PhotoTab()
                 .tabItem { Label("Photo", systemImage: "camera") }
@@ -42,10 +44,15 @@ struct RootView: View {
                 .tabItem { Label("LiDAR", systemImage: "cube.transparent") }
             HistoryTab(authState: authState)
                 .tabItem { Label("History", systemImage: "clock") }
+            SettingsTab(authState: authState, settings: settings)
+                .tabItem { Label("Settings", systemImage: "gearshape") }
         }
         .overlay(alignment: .top) {
-            BackendStatusBanner(environment: .staging, environmentName: "staging")
-                .padding(.top, 4)
+            BackendStatusBanner(
+                environment: settings.currentEnvironment,
+                environmentName: settings.backendEnvironment.rawValue
+            )
+            .padding(.top, 4)
         }
     }
 }
