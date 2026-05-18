@@ -97,12 +97,7 @@ public struct GSHTTPClient: Sendable {
         offset: Int?,
         body: Body?
     ) throws -> URLRequest {
-        var components = URLComponents()
-        components.path = path.hasPrefix("/") ? path : "/" + path
-        if !query.isEmpty {
-            components.queryItems = query.map { URLQueryItem(name: $0.key, value: $0.value) }
-        }
-        guard let url = components.url(relativeTo: environment.apiBaseURL)?.absoluteURL else {
+        guard let url = buildURL(path: path, query: query) else {
             throw HTTPError.invalidURL
         }
         var request = URLRequest(url: url)
@@ -126,12 +121,7 @@ public struct GSHTTPClient: Sendable {
         body: Data?
     ) throws -> URLRequest {
         // Overload that skips the encoder when there's no typed body.
-        var components = URLComponents()
-        components.path = path.hasPrefix("/") ? path : "/" + path
-        if !query.isEmpty {
-            components.queryItems = query.map { URLQueryItem(name: $0.key, value: $0.value) }
-        }
-        guard let url = components.url(relativeTo: environment.apiBaseURL)?.absoluteURL else {
+        guard let url = buildURL(path: path, query: query) else {
             throw HTTPError.invalidURL
         }
         var request = URLRequest(url: url)
@@ -145,6 +135,23 @@ public struct GSHTTPClient: Sendable {
             request.httpBody = body
         }
         return request
+    }
+
+    /// Concatenate `path` onto `environment.apiBaseURL` *appending* to the
+    /// base's existing path (e.g. `/v3`), rather than replacing it the way
+    /// `URLComponents.url(relativeTo:)` does for absolute paths.
+    private func buildURL(path: String, query: [String: String]) -> URL? {
+        guard var components = URLComponents(url: environment.apiBaseURL, resolvingAgainstBaseURL: false) else {
+            return nil
+        }
+        let basePath = components.path
+        let suffix = path.hasPrefix("/") ? path : "/" + path
+        let trimmedBase = basePath.hasSuffix("/") ? String(basePath.dropLast()) : basePath
+        components.path = trimmedBase + suffix
+        if !query.isEmpty {
+            components.queryItems = query.map { URLQueryItem(name: $0.key, value: $0.value) }
+        }
+        return components.url
     }
 
     // MARK: - Execution
