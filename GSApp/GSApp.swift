@@ -18,7 +18,7 @@ struct GSApp: App {
                 if authState.isSignedIn {
                     RootView(authState: authState, settings: settings)
                 } else {
-                    LoginView(authState: authState)
+                    LoginView(authState: authState, settings: settings)
                 }
             }
             .onOpenURL { url in
