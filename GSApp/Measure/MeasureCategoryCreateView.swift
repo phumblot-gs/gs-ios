@@ -5,8 +5,9 @@ import GSAPIClient
 
 /// Form to define a brand-new `MeasureCategory` using the captured frame
 /// as the example. The user names the category and declares one or more
-/// `MeasurementTemplate`s — each a name (e.g. "manche") plus an ordered
-/// list of point labels (e.g. ["col", "emmanchure", "bout"]).
+/// `MeasurementTemplate`s — each a name (e.g. "manche") and a number of
+/// points (minimum 2). Points themselves are unlabelled: at capture
+/// time, the user is simply told "Place point N / M".
 struct MeasureCategoryCreateView: View {
     let settings: DevSettings
     let capturedFrame: CapturedFrame
@@ -23,7 +24,7 @@ struct MeasureCategoryCreateView: View {
     private struct TemplateDraft: Identifiable {
         let id = UUID()
         var name: String = ""
-        var labels: [String] = ["", ""]
+        var pointCount: Int = 2
 
         static var blank: TemplateDraft { TemplateDraft() }
     }
@@ -58,9 +59,7 @@ struct MeasureCategoryCreateView: View {
         guard !name.trimmingCharacters(in: .whitespaces).isEmpty else { return false }
         let cleanTemplates = templates.filter { !$0.name.trimmingCharacters(in: .whitespaces).isEmpty }
         guard !cleanTemplates.isEmpty else { return false }
-        return cleanTemplates.allSatisfy { template in
-            template.labels.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }.count >= 2
-        }
+        return cleanTemplates.allSatisfy { $0.pointCount >= 2 }
     }
 
     // MARK: - Sections
@@ -90,35 +89,19 @@ struct MeasureCategoryCreateView: View {
         Section {
             TextField("Measurement name (e.g. sleeve)", text: binding.name)
                 .autocorrectionDisabled()
-            ForEach(binding.labels.indices, id: \.self) { index in
+            Stepper(value: binding.pointCount, in: 2...20) {
                 HStack {
-                    Text("Point \(index + 1)")
-                        .font(.subheadline.weight(.medium))
+                    Text("Points")
+                    Spacer()
+                    Text("\(binding.wrappedValue.pointCount)")
+                        .font(.subheadline.monospacedDigit())
                         .foregroundStyle(.secondary)
-                    TextField("Label (e.g. collar)", text: binding.labels[index])
-                        .multilineTextAlignment(.trailing)
-                        .autocorrectionDisabled()
-                }
-            }
-            HStack(spacing: 12) {
-                Button {
-                    binding.wrappedValue.labels.append("")
-                } label: {
-                    Label("Add point", systemImage: "plus.circle")
-                }
-                Spacer()
-                if binding.wrappedValue.labels.count > 2 {
-                    Button(role: .destructive) {
-                        binding.wrappedValue.labels.removeLast()
-                    } label: {
-                        Label("Remove last", systemImage: "minus.circle")
-                    }
                 }
             }
         } header: {
             Text("Measurement")
         } footer: {
-            Text("Distance = sum of segments between successive points. Minimum 2 points (1 segment).")
+            Text("Distance = sum of the segments between successive points. Minimum 2 points = 1 segment.")
         }
     }
 
@@ -153,11 +136,11 @@ struct MeasureCategoryCreateView: View {
         for draft in templates {
             let cleanName = draft.name.trimmingCharacters(in: .whitespaces)
             guard !cleanName.isEmpty else { continue }
-            let cleanLabels = draft.labels
-                .map { $0.trimmingCharacters(in: .whitespaces) }
-                .filter { !$0.isEmpty }
-            guard cleanLabels.count >= 2 else { continue }
-            let template = MeasurementTemplate(name: cleanName, pointLabels: cleanLabels, order: order)
+            let template = MeasurementTemplate(
+                name: cleanName,
+                pointCount: max(2, draft.pointCount),
+                order: order
+            )
             template.category = category
             modelContext.insert(template)
             order += 1
@@ -166,8 +149,6 @@ struct MeasureCategoryCreateView: View {
             try modelContext.save()
             onCreated(category)
         } catch {
-            // Best-effort: surface via a print for now. Phase 5 will add
-            // proper error UI when we wire the API save.
             print("[MeasureCategoryCreateView] save failed: \(error)")
         }
         isSaving = false

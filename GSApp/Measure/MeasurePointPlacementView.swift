@@ -39,7 +39,7 @@ struct MeasurePointPlacementView: View {
 
     private var allMeasurementsComplete: Bool {
         sortedTemplates.allSatisfy { template in
-            (pointsByTemplate[template.persistentModelID]?.count ?? 0) == template.pointLabels.count
+            (pointsByTemplate[template.persistentModelID]?.count ?? 0) == template.pointCount
         }
     }
 
@@ -114,12 +114,9 @@ struct MeasurePointPlacementView: View {
     private var controls: some View {
         VStack(alignment: .leading, spacing: 12) {
             if let template = currentTemplate {
-                if currentPointIndex < template.pointLabels.count {
-                    Label("Place \(template.pointLabels[currentPointIndex])", systemImage: "scope")
+                if currentPointIndex < template.pointCount {
+                    Label("\(template.name) — point \(currentPointIndex + 1) of \(template.pointCount)", systemImage: "scope")
                         .font(.headline)
-                    Text("\(currentPointIndex + 1) / \(template.pointLabels.count) of \(template.name)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                 } else {
                     Label(
                         "\(template.name) — \(formattedDistance(of: currentPoints))",
@@ -169,14 +166,14 @@ struct MeasurePointPlacementView: View {
 
     private var isCurrentTemplateComplete: Bool {
         guard let template = currentTemplate else { return false }
-        return currentPoints.count >= template.pointLabels.count
+        return currentPoints.count >= template.pointCount
     }
 
     // MARK: - Tap handling
 
     private func handleTap(at viewLocation: CGPoint, in viewSize: CGSize) {
         guard let template = currentTemplate else { return }
-        guard currentPoints.count < template.pointLabels.count else { return }
+        guard currentPoints.count < template.pointCount else { return }
         let rect = imageRect(in: viewSize)
         guard rect.contains(viewLocation) else { return }
         let normalized = normalizedPoint(from: viewLocation, viewRect: rect)
@@ -264,7 +261,7 @@ struct MeasurePointPlacementView: View {
         var result: [String: Float] = [:]
         for template in sortedTemplates {
             let points = pointsByTemplate[template.persistentModelID] ?? []
-            guard points.count == template.pointLabels.count else { continue }
+            guard points.count == template.pointCount else { continue }
             let meters = DepthRaycaster.chainDistance(points.map(\.world))
             result[template.name] = meters
         }

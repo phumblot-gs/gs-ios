@@ -1,27 +1,24 @@
 import Foundation
 import SwiftData
 
-/// One named measurement within a `MeasureCategory` — e.g. "manche" with
-/// the labelled points [`col`, `emmanchure`, `bout de manche`]. The
-/// distance for a captured measurement is the sum of the segments
-/// between consecutive points.
+/// One named measurement within a `MeasureCategory` — e.g. "manche". The
+/// distance recorded for the measurement is the sum of the segments
+/// between `pointCount` points placed sequentially by the user. Points
+/// themselves carry no labels: only the measurement does.
 @Model
 final class MeasurementTemplate {
     var name: String
-    /// Labels that guide the user when placing points on a new object,
-    /// in placement order. Number of labels = number of points the user
-    /// must place. A two-point measurement (`["col", "ourlet"]`) gives
-    /// a single segment; three points give a chain of two segments.
-    var pointLabels: [String]
+    /// How many points the user is asked to place to compute this
+    /// measurement. Minimum 2 (one segment); chain of N points gives
+    /// `N − 1` segments summed.
+    var pointCount: Int
     /// Position within the category's display order.
     var order: Int
     var category: MeasureCategory?
 
-    init(name: String, pointLabels: [String], order: Int) {
+    init(name: String, pointCount: Int = 2, order: Int) {
         self.name = name
-        self.pointLabels = pointLabels
+        self.pointCount = max(2, pointCount)
         self.order = order
     }
-
-    var pointCount: Int { pointLabels.count }
 }
