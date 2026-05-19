@@ -37,60 +37,58 @@ struct MeasureFlowPlacingOverlay: View {
     var body: some View {
         // The reticle must sit at the geometric centre of the live AR
         // view, which fills the full screen (via .ignoresSafeArea on
-        // ARLiveView). The depth raycast samples (0.5, 0.5) of the
-        // landscape depth map — i.e. the camera's optical axis, which
-        // projects to the geometric centre of that full-screen feed.
-        // We therefore make this overlay ignore the safe area too so
-        // the ZStack centre coincides with the screen centre; the
-        // controls inside the VStack opt back in via .safeAreaPadding
-        // so the X button and the bottom panel stay clear of the
-        // Dynamic Island and home indicator.
-        ZStack {
-            // Catch taps anywhere in the AR view area to manually
-            // commit the current world point — the auto-lock relies
-            // on the stability tracker, but tapping any UI button
-            // shakes the device just enough to fail the variance
-            // check. Listening on the full-screen background means
-            // the user can tap anywhere away from the controls
-            // without precision, with their other hand if needed.
-            // The forceLock guard rejects the tap when the reticle
-            // is off the subject, so accidental taps don't capture
-            // bogus points.
-            Color.clear
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    coordinator.forceLockAtCurrentPosition()
+        // ARLiveView). We therefore extend this overlay into the
+        // safe area too so the ZStack centre coincides with the
+        // screen centre. The top bar and bottom panel use a
+        // GeometryReader to read the system safe area insets and pad
+        // back in — `.safeAreaPadding` didn't work reliably under
+        // `.ignoresSafeArea`, leaving the X button under the Dynamic
+        // Island.
+        GeometryReader { proxy in
+            let topInset = proxy.safeAreaInsets.top
+            let bottomInset = proxy.safeAreaInsets.bottom
+            ZStack {
+                // Tap anywhere in the AR view to force-lock the
+                // current point. Touching a button still shakes the
+                // device but force-lock uses the averaged window
+                // position so the captured point reflects steady aim
+                // from before the tap.
+                Color.clear
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        coordinator.forceLockAtCurrentPosition()
+                    }
+
+                MeasureLiveReticleHUD(
+                    surface: hudSurface,
+                    stability: coordinator.reticleState?.stability ?? 0,
+                    pulse: pulseLock
+                )
+
+                VStack(spacing: 0) {
+                    topBar
+                        .padding(.top, topInset)
+                    Spacer()
+                    bottomPanel
+                        .padding(.bottom, bottomInset)
                 }
 
-            MeasureLiveReticleHUD(
-                surface: hudSurface,
-                stability: coordinator.reticleState?.stability ?? 0,
-                pulse: pulseLock
-            )
-
-            VStack {
-                topBar
-                Spacer()
-                bottomPanel
-            }
-            .safeAreaPadding(.vertical)
-
-            if showReprojectionDebug {
-                VStack {
-                    HStack {
-                        MeasureReprojectionDebugOverlay(
-                            referenceFrame: referenceFrame,
-                            maskImage: maskDebugImage,
-                            worldPosition: coordinator.reticleState?.worldPosition
-                        )
+                if showReprojectionDebug {
+                    VStack {
+                        HStack {
+                            MeasureReprojectionDebugOverlay(
+                                referenceFrame: referenceFrame,
+                                maskImage: maskDebugImage,
+                                worldPosition: coordinator.reticleState?.worldPosition
+                            )
+                            Spacer()
+                        }
+                        .padding(.top, topInset + 56)   // clear the X button row
                         Spacer()
                     }
-                    Spacer()
+                    .padding(.leading, 12)
+                    .allowsHitTesting(false)
                 }
-                .safeAreaPadding(.vertical)
-                .padding(.leading, 12)
-                .padding(.top, 56)   // clear the X button
-                .allowsHitTesting(false)
             }
         }
         .ignoresSafeArea()
