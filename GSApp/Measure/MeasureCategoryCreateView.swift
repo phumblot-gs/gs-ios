@@ -23,8 +23,6 @@ struct MeasureCategoryCreateView: View {
     @State private var measurements: [MeasurementDraft] = [MeasurementDraft.blank]
     @State private var isSaving = false
 
-    private let catalog = CatalogCache.shared
-
     private struct MeasurementDraft: Identifiable {
         let id = UUID()
         var name: String = ""
@@ -90,24 +88,13 @@ struct MeasureCategoryCreateView: View {
         }
     }
 
-    @ViewBuilder
     private var gsCategorySection: some View {
-        if !catalog.categories.isEmpty {
-            Section {
-                Picker("Grand Shooting category", selection: Binding(
-                    get: { gsCategoryID ?? -1 },
-                    set: { gsCategoryID = $0 >= 0 ? $0 : nil }
-                )) {
-                    Text("None").tag(-1)
-                    ForEach(catalog.categories.sorted(by: { $0.id < $1.id })) { gc in
-                        Text(gc.smalltext ?? "Category #\(gc.id)").tag(gc.id)
-                    }
-                }
-            } header: {
-                Text("Grand Shooting link")
-            } footer: {
-                Text("Optional. Linking this category to a Grand Shooting one lets the app cross-check the link at startup.")
-            }
+        Section {
+            GSCategoryLinkRow(selection: $gsCategoryID)
+        } header: {
+            Text("Grand Shooting link")
+        } footer: {
+            Text("Optional. Linking this category to a Grand Shooting one lets the app cross-check the link at startup.")
         }
     }
 

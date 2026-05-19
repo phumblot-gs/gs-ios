@@ -26,6 +26,7 @@ struct MeasureCategoryEditView: View {
         Form {
             previewSection
             identitySection
+            gsCategorySection
             measurementsSection
             dangerSection
         }
@@ -82,6 +83,16 @@ struct MeasureCategoryEditView: View {
             .textInputAutocapitalization(.never)
         } header: {
             Text("Identity")
+        }
+    }
+
+    private var gsCategorySection: some View {
+        Section {
+            GSCategoryLinkRow(selection: $category.gsCategoryID)
+        } header: {
+            Text("Grand Shooting link")
+        } footer: {
+            Text("Optional. Linking this category to a Grand Shooting one lets the app cross-check the link at startup.")
         }
     }
 
