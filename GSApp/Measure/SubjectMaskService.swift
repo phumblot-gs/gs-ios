@@ -31,6 +31,53 @@ struct SubjectMaskService: Sendable {
         case visionFailed(any Swift.Error)
     }
 
+    /// Walks the mask's alpha channel and returns a tight bounding box
+    /// in normalized coordinates (origin top-left, range 0...1). The mask
+    /// is typically 256x192 — small enough to iterate by hand without
+    /// noticeable overhead.
+    private static func boundingBox(of mask: CGImage) -> CGRect {
+        let width = mask.width
+        let height = mask.height
+        guard let context = CGContext(
+            data: nil,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: width,
+            space: CGColorSpaceCreateDeviceGray(),
+            bitmapInfo: CGImageAlphaInfo.none.rawValue
+        ) else {
+            return CGRect(x: 0, y: 0, width: 1, height: 1)
+        }
+        context.draw(mask, in: CGRect(x: 0, y: 0, width: width, height: height))
+        guard let data = context.data else {
+            return CGRect(x: 0, y: 0, width: 1, height: 1)
+        }
+        let pixels = data.bindMemory(to: UInt8.self, capacity: width * height)
+        var minX = width, minY = height, maxX = 0, maxY = 0
+        for y in 0..<height {
+            for x in 0..<width {
+                if pixels[y * width + x] > 128 {
+                    if x < minX { minX = x }
+                    if y < minY { minY = y }
+                    if x > maxX { maxX = x }
+                    if y > maxY { maxY = y }
+                }
+            }
+        }
+        guard minX <= maxX, minY <= maxY else {
+            return CGRect(x: 0, y: 0, width: 0, height: 0)
+        }
+        let w = CGFloat(width)
+        let h = CGFloat(height)
+        return CGRect(
+            x: CGFloat(minX) / w,
+            y: CGFloat(minY) / h,
+            width: CGFloat(maxX - minX + 1) / w,
+            height: CGFloat(maxY - minY + 1) / h
+        )
+    }
+
     /// Asynchronously detect every foreground subject in `image`.
     /// Returns an empty array if Vision found nothing (typical when the
     /// frame is plain wall / empty floor).
@@ -60,7 +107,7 @@ struct SubjectMaskService: Sendable {
                             guard let cgMask = context.createCGImage(maskImage, from: maskImage.extent) else {
                                 continue
                             }
-                            let bb = observation.boundingBox
+                            let bb = boundingBox(of: cgMask)
                             subjects.append(DetectedSubject(
                                 id: index,
                                 mask: cgMask,

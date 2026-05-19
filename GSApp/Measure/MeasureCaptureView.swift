@@ -184,19 +184,42 @@ private struct SubjectMaskOverlay: View {
     let imageSize: CGSize
 
     var body: some View {
+        // Bounding box is in normalized image-space with origin top-left.
+        // Map it onto the area the scaled-to-fit image actually occupies
+        // inside the parent ZStack (not the full frame).
+        let rect = renderedRect(in: frameSize, imageSize: imageSize)
         Rectangle()
             .strokeBorder(subject.included ? Color.green : Color.red, lineWidth: 3)
             .background(
                 (subject.included ? Color.green : Color.red).opacity(0.18)
             )
             .frame(
-                width: subject.boundingBox.width * frameSize.width,
-                height: subject.boundingBox.height * frameSize.height
+                width: subject.boundingBox.width * rect.width,
+                height: subject.boundingBox.height * rect.height
             )
             .position(
-                x: (subject.boundingBox.midX) * frameSize.width,
-                y: (1 - subject.boundingBox.midY) * frameSize.height
+                x: rect.minX + subject.boundingBox.midX * rect.width,
+                y: rect.minY + subject.boundingBox.midY * rect.height
             )
+    }
+
+    private func renderedRect(in viewSize: CGSize, imageSize: CGSize) -> CGRect {
+        guard imageSize.width > 0, imageSize.height > 0 else {
+            return CGRect(origin: .zero, size: viewSize)
+        }
+        let imageAspect = imageSize.width / imageSize.height
+        let viewAspect = viewSize.width / viewSize.height
+        let renderedSize: CGSize
+        if imageAspect > viewAspect {
+            renderedSize = CGSize(width: viewSize.width, height: viewSize.width / imageAspect)
+        } else {
+            renderedSize = CGSize(width: viewSize.height * imageAspect, height: viewSize.height)
+        }
+        let origin = CGPoint(
+            x: (viewSize.width - renderedSize.width) / 2,
+            y: (viewSize.height - renderedSize.height) / 2
+        )
+        return CGRect(origin: origin, size: renderedSize)
     }
 }
 #endif
