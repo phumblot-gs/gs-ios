@@ -36,8 +36,10 @@ final class MeasureFlowCoordinator: NSObject, ObservableObject {
     var onLock: ((SIMD3<Float>) -> Void)?
 
     struct ReticleState: Equatable {
+        enum Surface: Equatable { case offTarget, onSubject, onEdge }
         let worldPosition: SIMD3<Float>
-        let stability: Float          // 0...1
+        let surface: Surface
+        let stability: Float          // 0…1; 0 when surface == .offTarget
     }
 
     // MARK: - Internals
@@ -46,6 +48,12 @@ final class MeasureFlowCoordinator: NSObject, ObservableObject {
     private let ciContext = CIContext()
     private let stability = MeasureStabilityTracker()
     private var isTrackingReticle = false
+
+    // Mask-based target gating. Set by the placing overlay so the
+    // reticle only progresses when reprojected onto the kept subject.
+    private var referenceFrame: CapturedFrame?
+    private var maskGrid: SubjectMaskGrid = .empty
+    private var currentSurface: ReticleState.Surface = .offTarget
 
     // The 3D disc rendered on the surface to confirm where the next
     // point will land. Anchored to the world; updated each frame.
@@ -87,6 +95,7 @@ final class MeasureFlowCoordinator: NSObject, ObservableObject {
 
     func startReticle() {
         isTrackingReticle = true
+        currentSurface = .offTarget
         stability.reset()
         reticleDisc?.isEnabled = true
     }
@@ -94,7 +103,18 @@ final class MeasureFlowCoordinator: NSObject, ObservableObject {
     func stopReticle() {
         isTrackingReticle = false
         reticleState = nil
+        currentSurface = .offTarget
         reticleDisc?.isEnabled = false
+    }
+
+    /// Hand the coordinator the reference photo + a rasterized mask of
+    /// the kept subjects. While set, the reticle only progresses on
+    /// pixels that reproject inside the mask; pixels near the mask
+    /// boundary use a tighter stability profile so the lock hooks
+    /// faster onto product edges.
+    func setTarget(referenceFrame: CapturedFrame, maskGrid: SubjectMaskGrid) {
+        self.referenceFrame = referenceFrame
+        self.maskGrid = maskGrid
     }
 
     private func installReticleEntity(in arView: ARView) {
@@ -109,14 +129,27 @@ final class MeasureFlowCoordinator: NSObject, ObservableObject {
 
     private func makeReticleDisc() -> ModelEntity {
         // Thin disc lying in the XZ plane (Y is up in RealityKit). We
-        // override its transform each frame to match the surface
-        // normal.
+        // override its transform + tint each frame.
         let radius: Float = 0.012   // 1.2 cm
         let mesh = MeshResource.generatePlane(width: radius * 2, depth: radius * 2, cornerRadius: radius)
-        var material = UnlitMaterial(color: .white)
-        material.color = .init(tint: UIColor.white.withAlphaComponent(0.85))
-        let entity = ModelEntity(mesh: mesh, materials: [material])
-        return entity
+        return ModelEntity(mesh: mesh, materials: [Self.material(for: .white)])
+    }
+
+    /// Cache one material per tint colour we use so we're not
+    /// allocating fresh `UnlitMaterial` instances on every frame.
+    private static let materialCache: [String: UnlitMaterial] = {
+        let colors: [UIColor] = [.white, .systemYellow, .systemRed]
+        var dict: [String: UnlitMaterial] = [:]
+        for color in colors {
+            var mat = UnlitMaterial(color: color.withAlphaComponent(0.85))
+            mat.color = .init(tint: color.withAlphaComponent(0.85))
+            dict[color.description] = mat
+        }
+        return dict
+    }()
+
+    private static func material(for color: UIColor) -> UnlitMaterial {
+        materialCache[color.description] ?? UnlitMaterial(color: color)
     }
 
     // MARK: - Per-frame processing
@@ -124,16 +157,36 @@ final class MeasureFlowCoordinator: NSObject, ObservableObject {
     fileprivate func handleFrame(_ frame: ARFrame) {
         guard isTrackingReticle, let arView else { return }
         guard let raw = projectScreenCenter(of: arView, in: frame) else {
+            transitionSurface(to: .offTarget)
             reticleState = nil
             reticleDisc?.isEnabled = false
             return
         }
 
+        let surface = classifySurface(world: raw.world)
+        transitionSurface(to: surface)
+
+        switch surface {
+        case .offTarget:
+            // Reticle is on a depthful surface but not on the kept
+            // subject — keep the 3D disc visible (red) so the user
+            // sees where they're aiming, but freeze the stability ring.
+            updateReticleTransform(world: raw.world, normal: raw.normal, color: .systemRed)
+            reticleDisc?.isEnabled = true
+            reticleState = ReticleState(worldPosition: raw.world, surface: .offTarget, stability: 0)
+            return
+        case .onSubject:
+            stability.setProfile(.subject)
+        case .onEdge:
+            stability.setProfile(.edge)
+        }
+
         let (score, locked) = stability.observe(position: raw.world)
         let displayedPos = stability.averagedPosition ?? raw.world
-        reticleState = ReticleState(worldPosition: displayedPos, stability: score)
-        updateReticleTransform(world: displayedPos, normal: raw.normal)
+        let color: UIColor = surface == .onEdge ? .systemYellow : .white
+        updateReticleTransform(world: displayedPos, normal: raw.normal, color: color)
         reticleDisc?.isEnabled = true
+        reticleState = ReticleState(worldPosition: displayedPos, surface: surface, stability: score)
 
         if locked {
             AudioServicesPlaySystemSound(lockSoundID)
@@ -142,7 +195,41 @@ final class MeasureFlowCoordinator: NSObject, ObservableObject {
         }
     }
 
-    private func updateReticleTransform(world: SIMD3<Float>, normal: SIMD3<Float>) {
+    /// Reproject `world` onto the reference photo (portrait normalized
+    /// coords) and sample the rasterized subject mask to decide the
+    /// surface category. Falls back to `.onSubject` when no mask was
+    /// provided (e.g. no kept subjects).
+    private func classifySurface(world: SIMD3<Float>) -> ReticleState.Surface {
+        guard let referenceFrame, !maskGrid.isEmpty else { return .onSubject }
+        guard let normalized = MeasureReprojection.projectToNormalized(
+            worldPoint: world,
+            frame: referenceFrame
+        ) else {
+            return .offTarget
+        }
+        switch maskGrid.sample(normalizedImagePoint: normalized) {
+        case .off:     return .offTarget
+        case .subject: return .onSubject
+        case .edge:    return .onEdge
+        }
+    }
+
+    private func transitionSurface(to next: ReticleState.Surface) {
+        guard next != currentSurface else { return }
+        // Surface change → reset the stability so partial progress
+        // from a previous spot doesn't carry over.
+        stability.reset()
+        // Light haptic when hooking onto the subject from off-target;
+        // tighter "selection changed" when crossing onto an edge.
+        if currentSurface == .offTarget && next != .offTarget {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        } else if next == .onEdge {
+            UISelectionFeedbackGenerator().selectionChanged()
+        }
+        currentSurface = next
+    }
+
+    private func updateReticleTransform(world: SIMD3<Float>, normal: SIMD3<Float>, color: UIColor) {
         guard let disc = reticleDisc else { return }
         // Build an orthonormal basis whose Y axis = surface normal.
         let n = simd_normalize(normal)
@@ -153,6 +240,7 @@ final class MeasureFlowCoordinator: NSObject, ObservableObject {
         let basis = simd_float3x3(columns: (xAxis, n, zAxis))
         let rotation = simd_quatf(basis)
         disc.transform = Transform(scale: .one, rotation: rotation, translation: world)
+        disc.model?.materials = [Self.material(for: color)]
     }
 
     /// Sample the depth at the screen center and project to world coords.

@@ -171,6 +171,7 @@ struct MeasureFlowView: View {
                     coordinator: coordinator,
                     category: category,
                     referenceFrame: capturedFrame,
+                    includedSubjects: subjects,
                     captures: $captures,
                     onCancel: { retakeFromPlacement() },
                     onValidated: { step = .summary }

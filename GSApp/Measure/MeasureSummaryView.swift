@@ -12,7 +12,7 @@ import GSCore
 /// posts the values via `PUT /reference/:id/extra`.
 struct MeasureSummaryView: View {
     let settings: DevSettings
-    let category: MeasureCategory
+    @Bindable var category: MeasureCategory
     let referenceFrame: CapturedFrame
     let includedSubjects: [DetectedSubject]
     let captures: [MeasurementCapture]
@@ -27,6 +27,7 @@ struct MeasureSummaryView: View {
     var body: some View {
         Form {
             previewSection
+            gsLinkSection
             measurementsSection
             saveSection
             if let savedReferenceRef {
@@ -87,6 +88,16 @@ struct MeasureSummaryView: View {
             Text("Reference photo")
         } footer: {
             Text("Segments are reprojected onto the original photo from the LiDAR world coordinates captured during placement.")
+        }
+    }
+
+    private var gsLinkSection: some View {
+        Section {
+            GSCategoryLinkRow(selection: $category.gsCategoryID)
+        } header: {
+            Text("Grand Shooting link")
+        } footer: {
+            Text("Pick the Grand Shooting catalog category these measurements belong to. The link is saved on the local category for future captures.")
         }
     }
 

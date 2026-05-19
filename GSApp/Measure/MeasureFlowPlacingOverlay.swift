@@ -20,6 +20,7 @@ struct MeasureFlowPlacingOverlay: View {
     @ObservedObject var coordinator: MeasureFlowCoordinator
     let category: MeasureCategory
     let referenceFrame: CapturedFrame
+    let includedSubjects: [DetectedSubject]
     @Binding var captures: [MeasurementCapture]
     let onCancel: () -> Void
     let onValidated: () -> Void
@@ -35,6 +36,7 @@ struct MeasureFlowPlacingOverlay: View {
             topBar
             Spacer()
             MeasureLiveReticleHUD(
+                surface: hudSurface,
                 stability: coordinator.reticleState?.stability ?? 0,
                 pulse: pulseLock
             )
@@ -42,6 +44,11 @@ struct MeasureFlowPlacingOverlay: View {
             bottomPanel
         }
         .onAppear {
+            let grid = SubjectMaskGridBuilder.build(
+                subjects: includedSubjects,
+                imageSize: referenceFrame.image.size
+            )
+            coordinator.setTarget(referenceFrame: referenceFrame, maskGrid: grid)
             coordinator.onLock = handleLock(world:)
             coordinator.startReticle()
             advanceToFirstIncomplete()
@@ -49,6 +56,15 @@ struct MeasureFlowPlacingOverlay: View {
         .onDisappear {
             coordinator.stopReticle()
             coordinator.onLock = nil
+        }
+    }
+
+    private var hudSurface: MeasureLiveReticleHUD.Surface {
+        guard let state = coordinator.reticleState else { return .noSurface }
+        switch state.surface {
+        case .offTarget: return .offTarget
+        case .onSubject: return .onSubject
+        case .onEdge:    return .onEdge
         }
     }
 
