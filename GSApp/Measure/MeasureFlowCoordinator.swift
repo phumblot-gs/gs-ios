@@ -224,6 +224,25 @@ final class MeasureFlowCoordinator: NSObject, ObservableObject {
         reticleDisc?.isEnabled = false
     }
 
+    /// Manually force-lock the current reticle position. Triggered by
+    /// tap-anywhere-on-screen so the user can commit a point without
+    /// waiting for the stability ring to top up — the act of tapping
+    /// the screen jolts the device just enough to make the
+    /// auto-lock's variance check fail, which is what bit the user.
+    /// We use the stability tracker's averaged window position so the
+    /// captured point reflects the steady aim from ~300 ms before the
+    /// tap, not the tap-induced jitter.
+    func forceLockAtCurrentPosition() {
+        guard isTrackingReticle,
+              let current = reticleState,
+              current.surface != .offTarget else { return }
+        let position = stability.averagedPosition ?? current.worldPosition
+        AudioServicesPlaySystemSound(lockSoundID)
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        onLock?(position)
+        stability.reset()
+    }
+
     /// Hand the coordinator the reference photo + a rasterized mask of
     /// the kept subjects. While set, the reticle only progresses on
     /// pixels that reproject inside the mask; pixels near the mask

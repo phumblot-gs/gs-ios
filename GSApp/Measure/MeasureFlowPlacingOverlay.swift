@@ -46,6 +46,22 @@ struct MeasureFlowPlacingOverlay: View {
         // so the X button and the bottom panel stay clear of the
         // Dynamic Island and home indicator.
         ZStack {
+            // Catch taps anywhere in the AR view area to manually
+            // commit the current world point — the auto-lock relies
+            // on the stability tracker, but tapping any UI button
+            // shakes the device just enough to fail the variance
+            // check. Listening on the full-screen background means
+            // the user can tap anywhere away from the controls
+            // without precision, with their other hand if needed.
+            // The forceLock guard rejects the tap when the reticle
+            // is off the subject, so accidental taps don't capture
+            // bogus points.
+            Color.clear
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    coordinator.forceLockAtCurrentPosition()
+                }
+
             MeasureLiveReticleHUD(
                 surface: hudSurface,
                 stability: coordinator.reticleState?.stability ?? 0,
@@ -181,7 +197,7 @@ struct MeasureFlowPlacingOverlay: View {
                     Text(current.templateName)
                         .font(.headline)
                     if placed < needed {
-                        Text("Point \(placed + 1) of \(needed) — hold the device still on the target.")
+                        Text("Point \(placed + 1) of \(needed) — hold steady, or tap anywhere to lock.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     } else {

@@ -2186,6 +2186,16 @@
           }
         }
       }
+    },
+    "Point %lld of %lld — hold steady, or tap anywhere to lock." : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Point %1$lld sur %2$lld — tiens immobile, ou touche l'écran pour figer."
+          }
+        }
+      }
     }
   },
   "version" : "1.1"

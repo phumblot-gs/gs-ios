@@ -27,23 +27,27 @@ final class MeasureStabilityTracker {
         let lockScore: Float                 // 0…1 — combined score that counts as "ready"
         let lockHoldFrames: Int              // consecutive ready frames before commit
 
-        /// Default subject profile — generous enough that natural hand
-        /// hold reaches 100 % within ~0.4 s of pointing.
+        /// Default subject profile — generous enough that a typical
+        /// handheld hold reaches the lock threshold within ~0.5 s
+        /// without the user needing to brace against anything. Earlier
+        /// values topped out at ~75 % stability when held naturally;
+        /// the looser ceilings recover the missing headroom.
         static let subject = Profile(
             windowSamples: 18,
-            positionVarianceCeiling: 2.5e-5,   // ~5 mm RMS
-            rotationRateCeiling: 0.55,         // ~31 °/s
-            lockScore: 0.82,
-            lockHoldFrames: 10
+            positionVarianceCeiling: 6e-5,     // ~7.7 mm RMS
+            rotationRateCeiling: 0.8,          // ~46 °/s
+            lockScore: 0.65,
+            lockHoldFrames: 5
         )
         /// Edge profile — tighter variance (we want a clean grip), but
-        /// commits a third faster so the user feels the snap.
+        /// commits faster so the user feels the snap when hooking onto
+        /// the product's border.
         static let edge = Profile(
             windowSamples: 14,
-            positionVarianceCeiling: 1.2e-5,   // ~3.5 mm RMS
-            rotationRateCeiling: 0.45,
-            lockScore: 0.75,
-            lockHoldFrames: 6
+            positionVarianceCeiling: 3e-5,     // ~5.5 mm RMS
+            rotationRateCeiling: 0.6,
+            lockScore: 0.6,
+            lockHoldFrames: 3
         )
     }
 
