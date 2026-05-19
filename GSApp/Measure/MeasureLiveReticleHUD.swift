@@ -46,15 +46,15 @@ struct MeasureLiveReticleHUD: View {
             }
 
             Group {
-                Rectangle().fill(.white).frame(width: 1.5, height: 14)
-                Rectangle().fill(.white).frame(width: 14, height: 1.5)
+                Rectangle().fill(crosshairColor).frame(width: 1.5, height: 14)
+                Rectangle().fill(crosshairColor).frame(width: 14, height: 1.5)
             }
-            .shadow(color: .black.opacity(0.35), radius: 1)
+            .shadow(color: crosshairShadow, radius: 1)
 
             Circle()
                 .fill(pulse ? Color.green : centerDotColor)
                 .frame(width: 6, height: 6)
-                .shadow(color: .black.opacity(0.35), radius: 1)
+                .shadow(color: crosshairShadow, radius: 1)
         }
         .allowsHitTesting(false)
     }
@@ -63,10 +63,26 @@ struct MeasureLiveReticleHUD: View {
         surface == .onSubject || surface == .onEdge
     }
 
+    /// Cross-hatch + centre-dot colour. Black when the disc behind it
+    /// is white (`.onSubject`) so the user keeps a clear sight on the
+    /// product edge they're aiming at; white in every other state
+    /// because the disc is then red or yellow (off-target / edge) and
+    /// the camera feed is the main contrast reference.
+    private var crosshairColor: Color {
+        surface == .onSubject ? .black : .white
+    }
+
+    /// Opposite-tone shadow so the cross stays visible on textured
+    /// backgrounds: white halo for the black cross on the white disc,
+    /// black halo elsewhere.
+    private var crosshairShadow: Color {
+        surface == .onSubject ? .white.opacity(0.45) : .black.opacity(0.35)
+    }
+
     private var centerDotColor: Color {
         switch surface {
         case .onEdge:     return .orange
-        case .onSubject:  return .white
+        case .onSubject:  return .black
         case .offTarget, .noSurface: return .white.opacity(0.5)
         }
     }

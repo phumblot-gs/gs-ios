@@ -31,68 +31,66 @@ struct MeasureFlowPlacingOverlay: View {
     @State private var maskGrid: SubjectMaskGrid = .empty
     @State private var maskDebugImage: UIImage?
     @State private var showReprojectionDebug = false
+    @State private var topSafeArea: CGFloat = 0
+    @State private var bottomSafeArea: CGFloat = 0
 
     private let pointsPerMeasurement = 2
 
     var body: some View {
-        // The reticle must sit at the geometric centre of the live AR
-        // view, which fills the full screen (via .ignoresSafeArea on
-        // ARLiveView). We therefore extend this overlay into the
-        // safe area too so the ZStack centre coincides with the
-        // screen centre. The top bar and bottom panel use a
-        // GeometryReader to read the system safe area insets and pad
-        // back in — `.safeAreaPadding` didn't work reliably under
-        // `.ignoresSafeArea`, leaving the X button under the Dynamic
-        // Island.
-        GeometryReader { proxy in
-            let topInset = proxy.safeAreaInsets.top
-            let bottomInset = proxy.safeAreaInsets.bottom
-            ZStack {
-                // Tap anywhere in the AR view to force-lock the
-                // current point. Touching a button still shakes the
-                // device but force-lock uses the averaged window
-                // position so the captured point reflects steady aim
-                // from before the tap.
-                Color.clear
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        coordinator.forceLockAtCurrentPosition()
-                    }
-
-                MeasureLiveReticleHUD(
-                    surface: hudSurface,
-                    stability: coordinator.reticleState?.stability ?? 0,
-                    pulse: pulseLock
-                )
-
-                VStack(spacing: 0) {
-                    topBar
-                        .padding(.top, topInset)
-                    Spacer()
-                    bottomPanel
-                        .padding(.bottom, bottomInset)
+        // The reticle sits at the geometric centre of the screen, so
+        // the outer ZStack ignores the safe area to span the full
+        // viewport. We read the actual safe area insets from the
+        // key window at appear time (SwiftUI's GeometryProxy reports
+        // zeros inside `.ignoresSafeArea`) and use them to push the
+        // top bar and bottom panel down to the same row as the close
+        // buttons on the rest of the app's screens.
+        ZStack {
+            // Tap anywhere in the AR view to force-lock the current
+            // point. Touching a button still shakes the device but
+            // force-lock uses the averaged window position so the
+            // captured point reflects steady aim from before the tap.
+            Color.clear
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    coordinator.forceLockAtCurrentPosition()
                 }
 
-                if showReprojectionDebug {
-                    VStack {
-                        HStack {
-                            MeasureReprojectionDebugOverlay(
-                                referenceFrame: referenceFrame,
-                                maskImage: maskDebugImage,
-                                worldPosition: coordinator.reticleState?.worldPosition
-                            )
-                            Spacer()
-                        }
-                        .padding(.top, topInset + 56)   // clear the X button row
+            MeasureLiveReticleHUD(
+                surface: hudSurface,
+                stability: coordinator.reticleState?.stability ?? 0,
+                pulse: pulseLock
+            )
+
+            VStack(spacing: 0) {
+                topBar
+                    .padding(.top, topSafeArea + 8)
+                Spacer()
+                bottomPanel
+                    .padding(.bottom, bottomSafeArea)
+            }
+
+            if showReprojectionDebug {
+                VStack {
+                    HStack {
+                        MeasureReprojectionDebugOverlay(
+                            referenceFrame: referenceFrame,
+                            maskImage: maskDebugImage,
+                            worldPosition: coordinator.reticleState?.worldPosition
+                        )
                         Spacer()
                     }
-                    .padding(.leading, 12)
-                    .allowsHitTesting(false)
+                    .padding(.top, topSafeArea + 80)   // clear the X button row
+                    Spacer()
                 }
+                .padding(.leading, 12)
+                .allowsHitTesting(false)
             }
         }
         .ignoresSafeArea()
         .onAppear {
+            let insets = Self.keyWindowSafeAreaInsets()
+            topSafeArea = insets.top
+            bottomSafeArea = insets.bottom
             let grid = SubjectMaskGridBuilder.build(
                 subjects: includedSubjects,
                 imageSize: referenceFrame.image.size
@@ -108,6 +106,15 @@ struct MeasureFlowPlacingOverlay: View {
             coordinator.stopReticle()
             coordinator.onLock = nil
         }
+    }
+
+    @MainActor
+    private static func keyWindowSafeAreaInsets() -> UIEdgeInsets {
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+            .first(where: { $0.isKeyWindow })?
+            .safeAreaInsets ?? .zero
     }
 
     private var hudSurface: MeasureLiveReticleHUD.Surface {

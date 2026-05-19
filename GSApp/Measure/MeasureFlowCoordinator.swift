@@ -179,15 +179,17 @@ final class MeasureFlowCoordinator: NSObject, ObservableObject {
 
     /// Cache one material per tint colour we use so we're not
     /// allocating fresh `UnlitMaterial` instances on every frame.
-    /// 0.4 alpha keeps the disc visible enough to confirm the
-    /// reticle's surface state without obscuring the underlying
-    /// product edges the user is trying to aim at.
+    /// Setting an alpha component on the color tint alone doesn't
+    /// trigger blending in RealityKit; we have to explicitly opt into
+    /// `.transparent(opacity:)` for the disc to actually let the
+    /// camera feed show through.
     private static let materialCache: [String: UnlitMaterial] = {
         let colors: [UIColor] = [.white, .systemYellow, .systemRed]
         var dict: [String: UnlitMaterial] = [:]
         for color in colors {
-            var mat = UnlitMaterial(color: color.withAlphaComponent(0.4))
-            mat.color = .init(tint: color.withAlphaComponent(0.4))
+            var mat = UnlitMaterial(color: color)
+            mat.color = .init(tint: color)
+            mat.blending = .transparent(opacity: .init(floatLiteral: 0.4))
             dict[color.description] = mat
         }
         return dict
