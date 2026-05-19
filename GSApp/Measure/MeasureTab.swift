@@ -75,17 +75,38 @@ struct MeasureCategoryListView: View {
         }
         .fullScreenCover(isPresented: $showCapture) {
             NavigationStack {
-                MeasureCaptureView(settings: settings) { _, _ in
-                    // Phase 3 will route into category selection here.
-                    showCapture = false
+                MeasureCaptureView(settings: settings) { frame, subjects in
+                    captureResult = CaptureResult(frame: frame, subjects: subjects)
                 }
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) {
                         Button("Cancel") { showCapture = false }
                     }
                 }
+                .navigationDestination(item: $captureResult) { result in
+                    MeasureCategoryPickerView(
+                        settings: settings,
+                        frame: result.frame,
+                        includedSubjects: result.subjects
+                    ) { _, _ in
+                        // Phase 4 lands here.
+                        showCapture = false
+                        captureResult = nil
+                    }
+                }
             }
         }
+    }
+
+    @State private var captureResult: CaptureResult? = nil
+
+    private struct CaptureResult: Hashable, Identifiable {
+        let id = UUID()
+        let frame: CapturedFrame
+        let subjects: [DetectedSubject]
+
+        static func == (lhs: CaptureResult, rhs: CaptureResult) -> Bool { lhs.id == rhs.id }
+        func hash(into hasher: inout Hasher) { hasher.combine(id) }
     }
 }
 #endif
