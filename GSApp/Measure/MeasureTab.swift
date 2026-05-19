@@ -88,10 +88,20 @@ struct MeasureCategoryListView: View {
                         settings: settings,
                         frame: result.frame,
                         includedSubjects: result.subjects
-                    ) { _, _ in
-                        // Phase 4 lands here.
+                    ) { category, frame in
+                        selectedCategory = SelectedCategory(category: category, frame: frame)
+                    }
+                }
+                .navigationDestination(item: $selectedCategory) { selection in
+                    MeasurePointPlacementView(
+                        settings: settings,
+                        category: selection.category,
+                        frame: selection.frame
+                    ) { _ in
+                        // Phase 5 lands here.
                         showCapture = false
                         captureResult = nil
+                        selectedCategory = nil
                     }
                 }
             }
@@ -99,6 +109,7 @@ struct MeasureCategoryListView: View {
     }
 
     @State private var captureResult: CaptureResult? = nil
+    @State private var selectedCategory: SelectedCategory? = nil
 
     private struct CaptureResult: Hashable, Identifiable {
         let id = UUID()
@@ -106,6 +117,15 @@ struct MeasureCategoryListView: View {
         let subjects: [DetectedSubject]
 
         static func == (lhs: CaptureResult, rhs: CaptureResult) -> Bool { lhs.id == rhs.id }
+        func hash(into hasher: inout Hasher) { hasher.combine(id) }
+    }
+
+    private struct SelectedCategory: Hashable, Identifiable {
+        let id = UUID()
+        let category: MeasureCategory
+        let frame: CapturedFrame
+
+        static func == (lhs: SelectedCategory, rhs: SelectedCategory) -> Bool { lhs.id == rhs.id }
         func hash(into hasher: inout Hasher) { hasher.combine(id) }
     }
 }
