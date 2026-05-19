@@ -100,11 +100,16 @@ struct MeasureFlowPlacingOverlay: View {
             coordinator.setTarget(referenceFrame: referenceFrame, maskGrid: grid)
             coordinator.onLock = handleLock(world:)
             coordinator.startReticle()
+            coordinator.syncMeasurementOverlay(captures: captures)
             advanceToFirstIncomplete()
         }
         .onDisappear {
             coordinator.stopReticle()
             coordinator.onLock = nil
+            coordinator.syncMeasurementOverlay(captures: [])
+        }
+        .onChange(of: captures) { _, newValue in
+            coordinator.syncMeasurementOverlay(captures: newValue)
         }
     }
 

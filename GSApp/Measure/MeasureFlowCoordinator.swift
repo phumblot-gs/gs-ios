@@ -68,6 +68,13 @@ final class MeasureFlowCoordinator: NSObject, ObservableObject {
     private var reticleAnchor: AnchorEntity?
     private var reticleDisc: ModelEntity?
 
+    // 3D overlay for points already locked in the current flow.
+    // One AnchorEntity holding spheres at each locked point and thin
+    // cylinders connecting consecutive points of the same measurement.
+    // World-anchored so they stay glued to the product as the user
+    // moves around to place the next point.
+    private var measurementOverlayAnchor: AnchorEntity?
+
     private let lockSoundID: SystemSoundID = 1113   // "Begin Recording"
 
     // MARK: - Lifecycle
@@ -128,6 +135,79 @@ final class MeasureFlowCoordinator: NSObject, ObservableObject {
         reticleState = nil
         currentSurface = .offTarget
         reticleDisc?.isEnabled = false
+    }
+
+    /// Rebuild the 3D overlay of already-locked measurement points and
+    /// segments to match the current captures. Called every time the
+    /// placing view's captures array changes — append, undo, redo. We
+    /// recreate the whole entity tree each time rather than diffing;
+    /// the count is tiny (a few spheres + cylinders) so the overhead
+    /// is negligible.
+    func syncMeasurementOverlay(captures: [MeasurementCapture]) {
+        guard let arView else { return }
+        measurementOverlayAnchor?.removeFromParent()
+        measurementOverlayAnchor = nil
+
+        let anchor = AnchorEntity(world: .zero)
+        for (idx, capture) in captures.enumerated() {
+            let material = Self.measurementMaterial(at: idx)
+            for point in capture.worldPoints {
+                anchor.addChild(Self.makePointMarker(at: point, material: material))
+            }
+            guard capture.worldPoints.count > 1 else { continue }
+            for i in 0..<(capture.worldPoints.count - 1) {
+                let segment = Self.makeSegmentEntity(
+                    from: capture.worldPoints[i],
+                    to: capture.worldPoints[i + 1],
+                    material: material
+                )
+                anchor.addChild(segment)
+            }
+        }
+        arView.scene.addAnchor(anchor)
+        measurementOverlayAnchor = anchor
+    }
+
+    private static let measurementColors: [UIColor] = [
+        .systemGreen,
+        .systemCyan,
+        .systemPink,
+        .systemOrange,
+        .systemPurple
+    ]
+
+    private static func measurementMaterial(at index: Int) -> UnlitMaterial {
+        let color = measurementColors[index % measurementColors.count]
+        var mat = UnlitMaterial()
+        mat.color = .init(tint: color)
+        mat.blending = .transparent(opacity: .init(floatLiteral: 0.9))
+        return mat
+    }
+
+    private static func makePointMarker(at world: SIMD3<Float>, material: UnlitMaterial) -> ModelEntity {
+        let mesh = MeshResource.generateSphere(radius: 0.006)
+        let entity = ModelEntity(mesh: mesh, materials: [material])
+        entity.transform = Transform(translation: world)
+        return entity
+    }
+
+    private static func makeSegmentEntity(
+        from a: SIMD3<Float>,
+        to b: SIMD3<Float>,
+        material: UnlitMaterial
+    ) -> ModelEntity {
+        let length = simd_distance(a, b)
+        let midpoint = (a + b) / 2
+        let mesh = MeshResource.generateCylinder(height: length, radius: 0.0025)
+        let entity = ModelEntity(mesh: mesh, materials: [material])
+        // Cylinder mesh is generated along the Y axis. Rotate so it
+        // points from `a` to `b`; `simd_quatf(from:to:)` builds the
+        // shortest rotation between two unit vectors.
+        let direction = simd_normalize(b - a)
+        let up = SIMD3<Float>(0, 1, 0)
+        let rotation = simd_quatf(from: up, to: direction)
+        entity.transform = Transform(scale: .one, rotation: rotation, translation: midpoint)
+        return entity
     }
 
     /// Manually force-lock the current reticle position. Triggered by

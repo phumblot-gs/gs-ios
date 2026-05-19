@@ -193,7 +193,11 @@ struct MeasureFlowView: View {
                     referenceFrame: capturedFrame,
                     includedSubjects: subjects,
                     captures: $captures,
-                    onCancel: { retakeFromPlacement() },
+                    // X dismisses the whole flow back to whoever
+                    // launched it (reference detail or measures tab).
+                    // Not the picker step — landing on a category
+                    // list the user wasn't navigating to is confusing.
+                    onCancel: { onDone() },
                     onValidated: { step = .summary }
                 )
             }
@@ -261,12 +265,6 @@ struct MeasureFlowView: View {
         captures = []
         detectionError = nil
         step = .capturing
-    }
-
-    private func retakeFromPlacement() {
-        coordinator.stopReticle()
-        captures = []
-        step = .picking
     }
 
     private func startPlacement(for category: MeasureCategory) {
