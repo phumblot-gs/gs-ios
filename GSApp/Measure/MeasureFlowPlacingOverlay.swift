@@ -101,7 +101,20 @@ struct MeasureFlowPlacingOverlay: View {
                 .padding(.vertical, 6)
                 .background(.black.opacity(0.5), in: Capsule())
             Spacer()
-            Color.clear.frame(width: 36, height: 36)
+            // Debug: toggle the LiDAR mesh overlay. Useful for
+            // checking that the reticle hits the actual reconstructed
+            // surface, not empty space behind it.
+            Button {
+                coordinator.meshOverlayEnabled.toggle()
+            } label: {
+                Image(systemName: coordinator.meshOverlayEnabled
+                      ? "square.grid.3x3.fill"
+                      : "square.grid.3x3")
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(coordinator.meshOverlayEnabled ? .yellow : .white)
+                    .padding(10)
+                    .background(.black.opacity(0.5), in: Circle())
+            }
         }
         .padding(.horizontal, 16)
         .padding(.top, 8)

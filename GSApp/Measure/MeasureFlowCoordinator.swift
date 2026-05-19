@@ -35,6 +35,14 @@ final class MeasureFlowCoordinator: NSObject, ObservableObject {
     /// consume. Reset between measurements.
     var onLock: ((SIMD3<Float>) -> Void)?
 
+    /// Debug toggle: when on, ARView renders the reconstructed LiDAR
+    /// mesh as a wireframe on top of the camera feed. Useful for
+    /// diagnosing whether the reticle hits the surface ARKit actually
+    /// sees vs. drifting in space.
+    @Published var meshOverlayEnabled: Bool = false {
+        didSet { applyDebugOverlay() }
+    }
+
     struct ReticleState: Equatable {
         enum Surface: Equatable { case offTarget, onSubject, onEdge }
         let worldPosition: SIMD3<Float>
@@ -69,6 +77,16 @@ final class MeasureFlowCoordinator: NSObject, ObservableObject {
         arView.session.delegate = self
         arView.session.delegateQueue = .main
         installReticleEntity(in: arView)
+        applyDebugOverlay()
+    }
+
+    private func applyDebugOverlay() {
+        guard let arView else { return }
+        if meshOverlayEnabled {
+            arView.debugOptions.insert(.showSceneUnderstanding)
+        } else {
+            arView.debugOptions.remove(.showSceneUnderstanding)
+        }
     }
 
     // MARK: - Capture
