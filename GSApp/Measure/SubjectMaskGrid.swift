@@ -24,6 +24,45 @@ struct SubjectMaskGrid {
 
     var isEmpty: Bool { onSubject.isEmpty }
 
+    /// Render the grid as a translucent RGBA UIImage for debugging:
+    /// green where the surface classifies as `.subject`, orange where
+    /// it's `.edge`, transparent elsewhere. Used by the placement
+    /// debug overlay to show what the mask check actually sees.
+    func renderAsImage() -> UIImage? {
+        guard !isEmpty else { return nil }
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        for i in 0..<(width * height) {
+            if nearEdge[i] {
+                pixels[i * 4 + 0] = 255   // R
+                pixels[i * 4 + 1] = 165   // G
+                pixels[i * 4 + 2] = 0     // B
+                pixels[i * 4 + 3] = 180   // A
+            } else if onSubject[i] {
+                pixels[i * 4 + 0] = 0     // R
+                pixels[i * 4 + 1] = 220   // G
+                pixels[i * 4 + 2] = 100   // B
+                pixels[i * 4 + 3] = 160   // A
+            }
+            // off-subject pixels stay at (0, 0, 0, 0) — transparent
+        }
+        let provider = CGDataProvider(data: Data(pixels) as CFData)
+        guard let provider,
+              let cgImage = CGImage(
+                width: width,
+                height: height,
+                bitsPerComponent: 8,
+                bitsPerPixel: 32,
+                bytesPerRow: width * 4,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
+                provider: provider,
+                decode: nil,
+                shouldInterpolate: false,
+                intent: .defaultIntent
+              ) else { return nil }
+        return UIImage(cgImage: cgImage)
+    }
+
     /// Sample the grid at a normalized image-space point (origin
     /// top-left, [0, 1]²). Out-of-range returns `.off` rather than
     /// clamping — we don't want to consider points outside the image

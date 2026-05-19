@@ -28,6 +28,9 @@ struct MeasureFlowPlacingOverlay: View {
     @State private var currentIndex: Int = 0
     @State private var pulseLock = false
     @State private var pulseTimer: Timer?
+    @State private var maskGrid: SubjectMaskGrid = .empty
+    @State private var maskDebugImage: UIImage?
+    @State private var showReprojectionDebug = false
 
     private let pointsPerMeasurement = 2
 
@@ -55,6 +58,24 @@ struct MeasureFlowPlacingOverlay: View {
                 bottomPanel
             }
             .safeAreaPadding(.vertical)
+
+            if showReprojectionDebug {
+                VStack {
+                    HStack {
+                        MeasureReprojectionDebugOverlay(
+                            referenceFrame: referenceFrame,
+                            maskImage: maskDebugImage,
+                            worldPosition: coordinator.reticleState?.worldPosition
+                        )
+                        Spacer()
+                    }
+                    Spacer()
+                }
+                .safeAreaPadding(.vertical)
+                .padding(.leading, 12)
+                .padding(.top, 56)   // clear the X button
+                .allowsHitTesting(false)
+            }
         }
         .ignoresSafeArea()
         .onAppear {
@@ -62,6 +83,8 @@ struct MeasureFlowPlacingOverlay: View {
                 subjects: includedSubjects,
                 imageSize: referenceFrame.image.size
             )
+            maskGrid = grid
+            maskDebugImage = grid.renderAsImage()
             coordinator.setTarget(referenceFrame: referenceFrame, maskGrid: grid)
             coordinator.onLock = handleLock(world:)
             coordinator.startReticle()
@@ -101,19 +124,32 @@ struct MeasureFlowPlacingOverlay: View {
                 .padding(.vertical, 6)
                 .background(.black.opacity(0.5), in: Capsule())
             Spacer()
-            // Debug: toggle the LiDAR mesh overlay. Useful for
-            // checking that the reticle hits the actual reconstructed
-            // surface, not empty space behind it.
-            Button {
-                coordinator.meshOverlayEnabled.toggle()
-            } label: {
-                Image(systemName: coordinator.meshOverlayEnabled
-                      ? "square.grid.3x3.fill"
-                      : "square.grid.3x3")
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(coordinator.meshOverlayEnabled ? .yellow : .white)
-                    .padding(10)
-                    .background(.black.opacity(0.5), in: Circle())
+            HStack(spacing: 8) {
+                // Debug: toggle the reprojection thumbnail (reference
+                // photo + mask + reprojected world point).
+                Button {
+                    showReprojectionDebug.toggle()
+                } label: {
+                    Image(systemName: showReprojectionDebug
+                          ? "viewfinder.circle.fill"
+                          : "viewfinder.circle")
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(showReprojectionDebug ? .yellow : .white)
+                        .padding(10)
+                        .background(.black.opacity(0.5), in: Circle())
+                }
+                // Debug: toggle the LiDAR mesh overlay.
+                Button {
+                    coordinator.meshOverlayEnabled.toggle()
+                } label: {
+                    Image(systemName: coordinator.meshOverlayEnabled
+                          ? "square.grid.3x3.fill"
+                          : "square.grid.3x3")
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(coordinator.meshOverlayEnabled ? .yellow : .white)
+                        .padding(10)
+                        .background(.black.opacity(0.5), in: Circle())
+                }
             }
         }
         .padding(.horizontal, 16)
