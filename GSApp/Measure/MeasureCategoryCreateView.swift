@@ -19,8 +19,11 @@ struct MeasureCategoryCreateView: View {
 
     @State private var name: String = ""
     @State private var code: String = ""
+    @State private var gsCategoryID: Int?
     @State private var measurements: [MeasurementDraft] = [MeasurementDraft.blank]
     @State private var isSaving = false
+
+    private let catalog = CatalogCache.shared
 
     private struct MeasurementDraft: Identifiable {
         let id = UUID()
@@ -33,6 +36,7 @@ struct MeasureCategoryCreateView: View {
         Form {
             previewSection
             nameSection
+            gsCategorySection
             measurementsSection
         }
         .navigationTitle("New category")
@@ -86,6 +90,27 @@ struct MeasureCategoryCreateView: View {
         }
     }
 
+    @ViewBuilder
+    private var gsCategorySection: some View {
+        if !catalog.categories.isEmpty {
+            Section {
+                Picker("Grand Shooting category", selection: Binding(
+                    get: { gsCategoryID ?? -1 },
+                    set: { gsCategoryID = $0 >= 0 ? $0 : nil }
+                )) {
+                    Text("None").tag(-1)
+                    ForEach(catalog.categories.sorted(by: { $0.id < $1.id })) { gc in
+                        Text(gc.smalltext ?? "Category #\(gc.id)").tag(gc.id)
+                    }
+                }
+            } header: {
+                Text("Grand Shooting link")
+            } footer: {
+                Text("Optional. Linking this category to a Grand Shooting one lets the app cross-check the link at startup.")
+            }
+        }
+    }
+
     private var measurementsSection: some View {
         Section {
             ForEach($measurements) { $measurement in
@@ -115,6 +140,7 @@ struct MeasureCategoryCreateView: View {
         let category = MeasureCategory(
             name: name.trimmingCharacters(in: .whitespaces),
             code: trimmedCode.isEmpty ? nil : trimmedCode,
+            gsCategoryID: gsCategoryID,
             imageEmbedding: newEmbedding,
             exampleImageData: capturedFrame.image.jpegData(compressionQuality: 0.8)
         )

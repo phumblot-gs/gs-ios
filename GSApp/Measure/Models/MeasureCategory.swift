@@ -12,6 +12,11 @@ final class MeasureCategory {
     /// system's codification (e.g. an internal ERP code). Free-form
     /// string; not validated.
     var code: String?
+    /// Optional link to a Grand Shooting catalog `category_id`. When set,
+    /// the GS category list is the source of truth — at app launch we
+    /// validate the link against the freshly-pulled catalog and clear
+    /// dangling ids (with a heads-up alert).
+    var gsCategoryID: Int?
     var createdAt: Date
     /// Serialized `VNFeaturePrintObservation` data — used for nearest-
     /// neighbor suggestions on the next capture. Nil when no example
@@ -28,11 +33,13 @@ final class MeasureCategory {
     init(
         name: String,
         code: String? = nil,
+        gsCategoryID: Int? = nil,
         imageEmbedding: Data? = nil,
         exampleImageData: Data? = nil
     ) {
         self.name = name
         self.code = code
+        self.gsCategoryID = gsCategoryID
         self.createdAt = .now
         self.imageEmbedding = imageEmbedding
         self.exampleImageData = exampleImageData

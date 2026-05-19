@@ -50,6 +50,9 @@ struct RootView: View {
     @Bindable var settings: DevSettings
     @Bindable var catalog: CatalogCache
 
+    @Environment(\.modelContext) private var modelContext
+    @State private var orphanReport: OrphanReport?
+
     var body: some View {
         TabView {
             ScanTab(settings: settings)
@@ -70,5 +73,52 @@ struct RootView: View {
             )
             .padding(.top, 4)
         }
+        // After each catalog refresh we double-check that every
+        // `MeasureCategory.gsCategoryID` still resolves to a known GS
+        // category. Dangling links get listed in an alert and cleared
+        // when the user dismisses it.
+        .task(id: catalog.lastRefreshAt) {
+            guard catalog.lastRefreshAt != nil, !catalog.categories.isEmpty else { return }
+            let orphans = MeasureOrphanChecker.findOrphans(modelContext: modelContext, catalog: catalog)
+            if !orphans.isEmpty {
+                orphanReport = OrphanReport(orphans: orphans)
+            }
+        }
+        .alert(
+            "Linked Grand Shooting categories no longer exist",
+            isPresented: Binding(
+                get: { orphanReport != nil },
+                set: { if !$0 { orphanReport = nil } }
+            ),
+            actions: {
+                Button("OK") {
+                    if let report = orphanReport {
+                        MeasureOrphanChecker.clearLinks(on: report.orphans, modelContext: modelContext)
+                    }
+                    orphanReport = nil
+                }
+            },
+            message: { Text(orphanReport?.message ?? "") }
+        )
+    }
+}
+
+private struct OrphanReport: Equatable {
+    let orphans: [MeasureCategory]
+
+    static func == (lhs: OrphanReport, rhs: OrphanReport) -> Bool {
+        lhs.orphans.map(\.persistentModelID) == rhs.orphans.map(\.persistentModelID)
+    }
+
+    var message: String {
+        let names = orphans.prefix(5).map { entry in
+            "\(entry.name) (was #\(entry.gsCategoryID.map(String.init) ?? "?"))"
+        }
+        var msg = names.joined(separator: "\n")
+        if orphans.count > 5 {
+            msg += "\n… and \(orphans.count - 5) more"
+        }
+        msg += "\n\nTheir Grand Shooting link will be cleared. You can re-link them from the category edit screen."
+        return msg
     }
 }
