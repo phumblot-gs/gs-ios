@@ -45,6 +45,42 @@ struct MeasureCategoryListView: View {
     @Query(sort: \MeasureCategory.createdAt, order: .reverse) private var categories: [MeasureCategory]
     @State private var showCapture = false
 
+    @ViewBuilder
+    private func categoryRow(_ category: MeasureCategory) -> some View {
+        HStack(spacing: 12) {
+            thumbnail(for: category)
+                .frame(width: 44, height: 44)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(category.name).font(.headline)
+                HStack(spacing: 6) {
+                    Text("\(category.templates.count) measurements")
+                    if let code = category.code, !code.isEmpty {
+                        Text("· \(code)")
+                            .font(.caption.monospaced())
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    @ViewBuilder
+    private func thumbnail(for category: MeasureCategory) -> some View {
+        if let data = category.exampleImageData, let image = UIImage(data: data) {
+            Image(uiImage: image).resizable().scaledToFill()
+        } else {
+            ZStack {
+                Color.clear
+                Image(systemName: "ruler")
+                    .foregroundStyle(.secondary)
+            }
+            .background(.quaternary)
+        }
+    }
+
     var body: some View {
         Group {
             if categories.isEmpty {
@@ -55,11 +91,10 @@ struct MeasureCategoryListView: View {
                 }
             } else {
                 List(categories) { category in
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(category.name).font(.headline)
-                        Text("\(category.templates.count) measurements")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                    NavigationLink {
+                        MeasureCategoryEditView(category: category)
+                    } label: {
+                        categoryRow(category)
                     }
                 }
             }
