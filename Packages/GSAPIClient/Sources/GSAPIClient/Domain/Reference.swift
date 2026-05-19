@@ -23,6 +23,7 @@ public struct Reference: Sendable, Hashable, Identifiable, Codable {
     public let online: String?
     public let productRef: String?
     public let productSmalltext: String?
+    public let extra: ReferenceExtra?
 
     public init(
         id: Int? = nil,
@@ -44,7 +45,8 @@ public struct Reference: Sendable, Hashable, Identifiable, Codable {
         tags: [String]? = nil,
         online: String? = nil,
         productRef: String? = nil,
-        productSmalltext: String? = nil
+        productSmalltext: String? = nil,
+        extra: ReferenceExtra? = nil
     ) {
         self.id = id
         self.ref = ref
@@ -66,6 +68,7 @@ public struct Reference: Sendable, Hashable, Identifiable, Codable {
         self.online = online
         self.productRef = productRef
         self.productSmalltext = productSmalltext
+        self.extra = extra
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -89,6 +92,7 @@ public struct Reference: Sendable, Hashable, Identifiable, Codable {
         case online
         case productRef = "product_ref"
         case productSmalltext = "product_smalltext"
+        case extra
     }
 
     /// Best human label, falling back through smalltext → ref.

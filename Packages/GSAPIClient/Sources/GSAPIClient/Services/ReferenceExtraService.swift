@@ -9,17 +9,9 @@ import GSCore
 public struct ReferenceExtraService: Sendable {
 
     /// One measurement value: a numeric distance plus its unit string
-    /// (e.g. `"cm"`). Encoded as the inner shape the GS team specified:
-    /// `{ "value": <Double>, "unit": <String> }`.
-    public struct MeasureValue: Codable, Sendable, Hashable {
-        public let value: Double
-        public let unit: String
-
-        public init(value: Double, unit: String) {
-            self.value = value
-            self.unit = unit
-        }
-    }
+    /// (e.g. `"cm"`). Same shape on the way in and out, so the writer
+    /// shares the reader's type defined on `ReferenceExtra`.
+    public typealias MeasureValue = ReferenceExtra.MeasureValue
 
     private let http: GSHTTPClient
 

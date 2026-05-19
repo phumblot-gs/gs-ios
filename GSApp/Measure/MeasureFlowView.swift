@@ -1,5 +1,6 @@
 #if os(iOS)
 import SwiftUI
+import SwiftData
 import GSAPIClient
 
 /// Container view orchestrating the whole measure flow on a single
@@ -18,8 +19,15 @@ import GSAPIClient
 ///   5. `.summary`   — cutout photo + reprojected segments + save.
 struct MeasureFlowView: View {
     let settings: DevSettings
+    /// Optional bound reference. When set, the flow auto-attaches the
+    /// captured measurements to this reference at validation (no
+    /// scanner sheet), and tries to pre-select the local category by
+    /// matching `reference.categoryID` against
+    /// `MeasureCategory.gsCategoryID`.
+    let attachedTo: Reference?
     let onDone: @MainActor () -> Void
 
+    @Environment(\.modelContext) private var modelContext
     @StateObject private var coordinator = MeasureFlowCoordinator()
     @State private var step: Step = .capturing
 
@@ -126,7 +134,7 @@ struct MeasureFlowView: View {
                         onRetake: { retake() },
                         onContinue: {
                             subjects = subjects.filter(\.included)
-                            step = .picking
+                            advancePastEditing()
                         }
                     )
                     .ignoresSafeArea()
@@ -138,9 +146,21 @@ struct MeasureFlowView: View {
 
     // MARK: - Step 3: Picking category
 
+    @ViewBuilder
     private var pickingOverlay: some View {
-        Group {
-            if let capturedFrame {
+        if let capturedFrame {
+            if attachedTo != nil {
+                NavigationStack {
+                    MeasureCategorySearchPickerView(
+                        onSelected: { pickedCategory in
+                            category = pickedCategory
+                            startPlacement(for: pickedCategory)
+                        },
+                        onCancel: { retake() }
+                    )
+                }
+                .background(Color(.systemBackground).ignoresSafeArea())
+            } else {
                 NavigationStack {
                     MeasureCategoryPickerView(
                         settings: settings,
@@ -192,6 +212,7 @@ struct MeasureFlowView: View {
                         referenceFrame: capturedFrame,
                         includedSubjects: subjects,
                         captures: captures,
+                        attachedTo: attachedTo,
                         onDone: { onDone() }
                     )
                     .toolbar {
@@ -253,6 +274,31 @@ struct MeasureFlowView: View {
             .sorted(by: { $0.order < $1.order })
             .map { MeasurementCapture(templateName: $0.name, order: $0.order, worldPoints: []) }
         step = .placing
+    }
+
+    /// After the editing step, decide whether to surface the category
+    /// picker or go straight to placement. Reference-bound mode skips
+    /// the picker when the reference's GS category resolves to exactly
+    /// one local MeasureCategory.
+    private func advancePastEditing() {
+        if let auto = autoMatchedCategory() {
+            category = auto
+            startPlacement(for: auto)
+        } else {
+            step = .picking
+        }
+    }
+
+    private func autoMatchedCategory() -> MeasureCategory? {
+        guard let reference = attachedTo, let gsCategoryID = reference.categoryID else { return nil }
+        let descriptor = FetchDescriptor<MeasureCategory>(
+            predicate: #Predicate { $0.gsCategoryID == gsCategoryID }
+        )
+        guard let matches = try? modelContext.fetch(descriptor) else { return nil }
+        // If several locals link to the same GS category, take the
+        // most recently created — newer schemas typically reflect the
+        // latest measurement requirements.
+        return matches.sorted(by: { $0.createdAt > $1.createdAt }).first
     }
 }
 

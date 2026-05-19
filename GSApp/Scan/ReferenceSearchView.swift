@@ -76,8 +76,11 @@ struct ReferenceSearchView: View {
     private func refreshForCurrentQuery() async {
         let trimmed = debouncedQuery.trimmingCharacters(in: .whitespaces)
         let service = ReferenceLookupService(environment: settings.currentEnvironment)
+        // Wrap the value with `*` wildcards so the GS API performs a
+        // substring match instead of expecting an exact value — the
+        // user shouldn't have to type the full smalltext.
         let queryDict: [String: String] = trimmed.isEmpty ? [:] : [
-            "smalltext": trimmed
+            "smalltext": "*\(trimmed)*"
         ]
         let newLoader = PaginatedLoader<Reference> { offset in
             try await service.searchPage(query: queryDict, offset: offset)

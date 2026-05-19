@@ -2076,6 +2076,106 @@
           }
         }
       }
+    },
+    "Take measurements" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Prendre les mesures"
+          }
+        }
+      }
+    },
+    "Retake measurements" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reprendre les mesures"
+          }
+        }
+      }
+    },
+    "No measurements yet" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aucune mesure pour l'instant"
+          }
+        }
+      }
+    },
+    "Save measurements" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enregistrer les mesures"
+          }
+        }
+      }
+    },
+    "Will save these measurements as `extra.measures` on %@." : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ces mesures seront enregistrées dans `extra.measures` sur %@."
+          }
+        }
+      }
+    },
+    "Reference" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Référence"
+          }
+        }
+      }
+    },
+    "Measurements need a LiDAR device." : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Les mesures nécessitent un appareil LiDAR."
+          }
+        }
+      }
+    },
+    "Choose a measure category" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choisis une catégorie Mesure"
+          }
+        }
+      }
+    },
+    "No measure category yet" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aucune catégorie Mesure"
+          }
+        }
+      }
+    },
+    "Open the Measures tab and create a category that matches this product first." : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ouvre l'onglet Mesures et crée d'abord une catégorie qui correspond à ce produit."
+          }
+        }
+      }
     }
   },
   "version" : "1.1"

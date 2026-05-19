@@ -131,7 +131,7 @@ struct MeasureCategoryListView: View {
             }
         }
         .fullScreenCover(isPresented: $showFlow) {
-            MeasureFlowView(settings: settings) {
+            MeasureFlowView(settings: settings, attachedTo: nil) {
                 showFlow = false
             }
         }

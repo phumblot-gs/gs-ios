@@ -16,6 +16,10 @@ struct MeasureSummaryView: View {
     let referenceFrame: CapturedFrame
     let includedSubjects: [DetectedSubject]
     let captures: [MeasurementCapture]
+    /// When set, the save step is bound to this reference: a single
+    /// "Save" button on the form, no scanner sheet. The detail screen
+    /// that opened this flow already knows which reference we're on.
+    let attachedTo: Reference?
     let onDone: @MainActor () -> Void
 
     @State private var cutoutImage: UIImage?
@@ -124,19 +128,38 @@ struct MeasureSummaryView: View {
     @ViewBuilder
     private var saveSection: some View {
         if savedReferenceRef == nil {
-            Section {
-                Button {
-                    resolveSheetVisible = true
-                } label: {
-                    if saving {
-                        HStack { ProgressView(); Text("Saving…") }
-                    } else {
-                        Label("Attach to a reference", systemImage: "link.badge.plus")
+            if let attachedTo {
+                Section {
+                    Button {
+                        Task { await save(toReference: attachedTo) }
+                    } label: {
+                        if saving {
+                            HStack { ProgressView(); Text("Saving…") }
+                        } else {
+                            Label("Save measurements", systemImage: "checkmark.seal.fill")
+                        }
                     }
+                    .disabled(saving)
+                } header: {
+                    Text("Reference")
+                } footer: {
+                    Text("Will save these measurements as `extra.measures` on \(attachedTo.ref).")
                 }
-                .disabled(saving)
-            } footer: {
-                Text("Scan or pick a reference to save these measurements as `extra.measures` on Grand Shooting.")
+            } else {
+                Section {
+                    Button {
+                        resolveSheetVisible = true
+                    } label: {
+                        if saving {
+                            HStack { ProgressView(); Text("Saving…") }
+                        } else {
+                            Label("Attach to a reference", systemImage: "link.badge.plus")
+                        }
+                    }
+                    .disabled(saving)
+                } footer: {
+                    Text("Scan or pick a reference to save these measurements as `extra.measures` on Grand Shooting.")
+                }
             }
         }
     }

@@ -29,6 +29,7 @@ struct ReferenceDetailView: View {
     @State private var picturesError: (any Error)?
     @State private var statusSheetVisible = false
     @State private var statusUpdating = false
+    @State private var showMeasureFlow = false
 
     private var sourceReferences: [ReferenceStock] {
         switch source {
@@ -59,6 +60,7 @@ struct ReferenceDetailView: View {
                 if !stockItems.isEmpty {
                     stockItemSection
                 }
+                measuresSection
                 shotListSection
             }
             .padding()
@@ -72,6 +74,14 @@ struct ReferenceDetailView: View {
         }
         .sheet(isPresented: $statusSheetVisible) {
             statusPicker
+        }
+        .fullScreenCover(isPresented: $showMeasureFlow) {
+            if let reference = currentReferenceStock?.reference {
+                MeasureFlowView(settings: settings, attachedTo: reference) {
+                    showMeasureFlow = false
+                    Task { await refreshReferenceAfterMeasures() }
+                }
+            }
         }
     }
 
@@ -236,6 +246,80 @@ struct ReferenceDetailView: View {
             }
         }
         .presentationDetents([.medium, .large])
+    }
+
+    // MARK: - Measurements
+
+    private var measuresSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("Measurements")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
+            VStack(alignment: .leading, spacing: 10) {
+                let measures = currentReferenceStock?.reference.extra?.measures ?? [:]
+                if measures.isEmpty {
+                    Label("No measurements yet", systemImage: "ruler")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(measures.keys.sorted(), id: \.self) { name in
+                        if let value = measures[name] {
+                            HStack {
+                                Text(name)
+                                Spacer()
+                                Text(formatted(value))
+                                    .font(.subheadline.monospacedDigit())
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+                Button {
+                    showMeasureFlow = true
+                } label: {
+                    Label(
+                        measures.isEmpty ? "Take measurements" : "Retake measurements",
+                        systemImage: measures.isEmpty ? "ruler" : "arrow.counterclockwise"
+                    )
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.regular)
+                .disabled(!GSDeviceSupport.hasLiDAR)
+                if !GSDeviceSupport.hasLiDAR {
+                    Text("Measurements need a LiDAR device.")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            .padding()
+            .background(.background, in: RoundedRectangle(cornerRadius: 12))
+        }
+    }
+
+    private func formatted(_ value: ReferenceExtra.MeasureValue) -> String {
+        String(format: "%.1f %@", value.value, value.unit)
+    }
+
+    @MainActor
+    private func refreshReferenceAfterMeasures() async {
+        guard let ref = currentReferenceStock?.reference.ref else { return }
+        let service = ReferenceLookupService(environment: settings.currentEnvironment)
+        do {
+            let refreshed = try await service.lookup(scannedValue: ref, by: .ref)
+            guard let updated = refreshed.first(where: { $0.ref == ref }) else { return }
+            if references.indices.contains(selectedIndex) {
+                let stock = references[selectedIndex]
+                references[selectedIndex] = ReferenceStock(reference: updated, stockItems: stock.stockItems)
+            }
+        } catch {
+            // Non-fatal: the measurements were saved server-side, the
+            // user just won't see the refreshed list until they pop
+            // back and revisit.
+        }
     }
 
     // MARK: - Shot list
