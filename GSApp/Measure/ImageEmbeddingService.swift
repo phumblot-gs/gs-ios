@@ -1,6 +1,6 @@
 #if os(iOS)
 import UIKit
-import Vision
+@preconcurrency import Vision
 import CoreImage
 import CoreImage.CIFilterBuiltins
 

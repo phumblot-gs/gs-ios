@@ -1,6 +1,6 @@
 #if os(iOS)
 import UIKit
-import Vision
+@preconcurrency import Vision
 
 /// One subject detected by `VNGenerateForegroundInstanceMaskRequest`,
 /// presented to the user as a tappable region they can choose to
