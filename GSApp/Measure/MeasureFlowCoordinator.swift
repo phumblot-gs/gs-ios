@@ -269,11 +269,18 @@ final class MeasureFlowCoordinator: NSObject, ObservableObject {
         guard let depthMap else { return nil }
         let imageWidth = CVPixelBufferGetWidth(frame.capturedImage)
         let imageHeight = CVPixelBufferGetHeight(frame.capturedImage)
-        // ARKit's `capturedImage` is in landscape-right; map the
-        // **portrait** screen center (0.5, 0.5) back to the corresponding
-        // depth-map coordinate. In landscape coords the screen center
-        // remains the image center.
-        let normalizedDepthPoint = CGPoint(x: 0.5, y: 0.5)
+        // ARView aligns the camera's *principal point* (cx, cy) — not
+        // the image's geometric centre — to the screen centre. So the
+        // visible reticle (at screen centre) corresponds to the depth
+        // map pixel at the principal point, not at (0.5, 0.5). The two
+        // differ by a few pixels on the sensor due to manufacturing
+        // tolerances; that small offset was enough to make the depth
+        // raycast land beside small subjects (e.g. a LEGO car), giving
+        // a world point on the surrounding table and forcing the mask
+        // check to read .offTarget.
+        let cxNorm = CGFloat(frame.camera.intrinsics[2, 0]) / CGFloat(imageWidth)
+        let cyNorm = CGFloat(frame.camera.intrinsics[2, 1]) / CGFloat(imageHeight)
+        let normalizedDepthPoint = CGPoint(x: cxNorm, y: cyNorm)
         guard let pCameraLocal = DepthRaycaster.project(
             normalizedPoint: normalizedDepthPoint,
             depthMap: depthMap,
@@ -297,6 +304,7 @@ final class MeasureFlowCoordinator: NSObject, ObservableObject {
         // "facing the camera" if the neighbors are invalid.
         let normalWorld = computeNormal(
             atCenter: pCameraLocal,
+            atNormalizedPoint: normalizedDepthPoint,
             depthMap: depthMap,
             intrinsics: frame.camera.intrinsics,
             imageSize: CGSize(width: imageWidth, height: imageHeight),
@@ -312,6 +320,7 @@ final class MeasureFlowCoordinator: NSObject, ObservableObject {
 
     private func computeNormal(
         atCenter pCenter: SIMD3<Float>,
+        atNormalizedPoint centerNorm: CGPoint,
         depthMap: CVPixelBuffer,
         intrinsics: simd_float3x3,
         imageSize: CGSize,
@@ -319,12 +328,12 @@ final class MeasureFlowCoordinator: NSObject, ObservableObject {
     ) -> SIMD3<Float>? {
         let offset: CGFloat = 0.02
         guard let pRight = DepthRaycaster.project(
-            normalizedPoint: CGPoint(x: 0.5 + offset, y: 0.5),
+            normalizedPoint: CGPoint(x: centerNorm.x + offset, y: centerNorm.y),
             depthMap: depthMap,
             intrinsics: intrinsics,
             imageSize: imageSize
         ), let pDown = DepthRaycaster.project(
-            normalizedPoint: CGPoint(x: 0.5, y: 0.5 + offset),
+            normalizedPoint: CGPoint(x: centerNorm.x, y: centerNorm.y + offset),
             depthMap: depthMap,
             intrinsics: intrinsics,
             imageSize: imageSize
