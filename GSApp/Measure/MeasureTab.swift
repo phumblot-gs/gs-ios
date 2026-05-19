@@ -44,6 +44,18 @@ struct MeasureCategoryListView: View {
 
     @Query(sort: \MeasureCategory.createdAt, order: .reverse) private var categories: [MeasureCategory]
     @State private var showCapture = false
+    @State private var searchText = ""
+
+    private var filteredCategories: [MeasureCategory] {
+        let trimmed = searchText.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return categories }
+        let needle = trimmed.lowercased()
+        return categories.filter { category in
+            if category.name.lowercased().contains(needle) { return true }
+            if let code = category.code, code.lowercased().contains(needle) { return true }
+            return false
+        }
+    }
 
     @ViewBuilder
     private func categoryRow(_ category: MeasureCategory) -> some View {
@@ -90,13 +102,24 @@ struct MeasureCategoryListView: View {
                     Text("Start a measurement to capture an object. The first capture creates a category; subsequent ones are recognised automatically.")
                 }
             } else {
-                List(categories) { category in
-                    NavigationLink {
-                        MeasureCategoryEditView(category: category)
-                    } label: {
-                        categoryRow(category)
+                List {
+                    if filteredCategories.isEmpty {
+                        ContentUnavailableView.search(text: searchText)
+                    } else {
+                        ForEach(filteredCategories) { category in
+                            NavigationLink {
+                                MeasureCategoryEditView(category: category)
+                            } label: {
+                                categoryRow(category)
+                            }
+                        }
                     }
                 }
+                .searchable(
+                    text: $searchText,
+                    placement: .navigationBarDrawer(displayMode: .always),
+                    prompt: "Search by name or code"
+                )
             }
         }
         .toolbar {
