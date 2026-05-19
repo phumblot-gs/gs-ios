@@ -39,18 +39,26 @@ enum MeasureReprojection {
         let uLand = fx * pCv.x / pCv.z + cx
         let vLand = fy * pCv.y / pCv.z + cy
 
-        // ── 4. Landscape pixel → portrait normalized (90° CCW) ─────
-        // For ARKit `.oriented(.right)`:
-        //   portrait_x_norm = v_land / H_land  ←  v_land in [0, H_land]
-        //   portrait_y_norm = 1 - u_land / W_land
-        // The portrait image's width == landscape height, height == landscape width.
+        // ── 4. Landscape pixel → portrait normalized (90° CW) ─────
+        // `CIImage.oriented(.right)` rotates the landscape-right
+        // buffer 90° CW to display upright in portrait. The forward
+        // map for that rotation is:
+        //   portrait_x = landscape_height - v
+        //   portrait_y = u
+        // Verified empirically: the captured photo has the laptop
+        // (far from the photographer, i.e. high u in the landscape
+        // buffer when the device looks down at a table) at the top
+        // of the portrait image — which only matches `yNorm = u/W`.
+        // The previous CCW formula had both axes inverted, hence the
+        // red dot in the debug thumbnail moved opposite to the
+        // reticle.
         let portraitW = Float(frame.image.size.width)
         let portraitH = Float(frame.image.size.height)
         let landscapeH = portraitW
         let landscapeW = portraitH
 
-        let xNorm = vLand / landscapeH
-        let yNorm = 1 - uLand / landscapeW
+        let xNorm = 1 - vLand / landscapeH
+        let yNorm = uLand / landscapeW
         return CGPoint(x: CGFloat(xNorm), y: CGFloat(yNorm))
     }
 }
