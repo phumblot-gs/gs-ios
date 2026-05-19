@@ -36,14 +36,13 @@ struct MeasureTab: View {
 }
 
 #if os(iOS)
-/// Categories list with a "+" CTA opening the capture flow. Phase 3
-/// will turn the destination into a real category picker; for now it
-/// stops after capture.
+/// Categories list — entry point for opening an existing category for
+/// edit or starting a new measure flow.
 struct MeasureCategoryListView: View {
     let settings: DevSettings
 
     @Query(sort: \MeasureCategory.createdAt, order: .reverse) private var categories: [MeasureCategory]
-    @State private var showCapture = false
+    @State private var showFlow = false
     @State private var searchText = ""
 
     private var filteredCategories: [MeasureCategory] {
@@ -125,94 +124,17 @@ struct MeasureCategoryListView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
-                    showCapture = true
+                    showFlow = true
                 } label: {
                     Image(systemName: "plus")
                 }
             }
         }
-        .fullScreenCover(isPresented: $showCapture) {
-            NavigationStack {
-                MeasureCaptureView(settings: settings) { frame, subjects in
-                    captureResult = CaptureResult(frame: frame, subjects: subjects)
-                }
-                .toolbar {
-                    ToolbarItem(placement: .topBarLeading) {
-                        Button("Cancel") { showCapture = false }
-                    }
-                }
-                .navigationDestination(item: $captureResult) { result in
-                    MeasureCategoryPickerView(
-                        settings: settings,
-                        frame: result.frame,
-                        includedSubjects: result.subjects
-                    ) { category, frame in
-                        selectedCategory = SelectedCategory(
-                            category: category,
-                            frame: frame,
-                            subjects: result.subjects
-                        )
-                    }
-                }
-                .navigationDestination(item: $selectedCategory) { selection in
-                    MeasurePointPlacementView(
-                        settings: settings,
-                        category: selection.category,
-                        frame: selection.frame,
-                        includedSubjects: selection.subjects
-                    ) { measurements in
-                        measurementResult = MeasurementResult(
-                            category: selection.category,
-                            measurements: measurements
-                        )
-                    }
-                }
-                .navigationDestination(item: $measurementResult) { result in
-                    MeasureSummaryView(
-                        settings: settings,
-                        category: result.category,
-                        measurements: result.measurements
-                    ) {
-                        showCapture = false
-                        captureResult = nil
-                        selectedCategory = nil
-                        measurementResult = nil
-                    }
-                }
+        .fullScreenCover(isPresented: $showFlow) {
+            MeasureFlowView(settings: settings) {
+                showFlow = false
             }
         }
-    }
-
-    @State private var captureResult: CaptureResult? = nil
-    @State private var selectedCategory: SelectedCategory? = nil
-    @State private var measurementResult: MeasurementResult? = nil
-
-    private struct CaptureResult: Hashable, Identifiable {
-        let id = UUID()
-        let frame: CapturedFrame
-        let subjects: [DetectedSubject]
-
-        static func == (lhs: CaptureResult, rhs: CaptureResult) -> Bool { lhs.id == rhs.id }
-        func hash(into hasher: inout Hasher) { hasher.combine(id) }
-    }
-
-    private struct SelectedCategory: Hashable, Identifiable {
-        let id = UUID()
-        let category: MeasureCategory
-        let frame: CapturedFrame
-        let subjects: [DetectedSubject]
-
-        static func == (lhs: SelectedCategory, rhs: SelectedCategory) -> Bool { lhs.id == rhs.id }
-        func hash(into hasher: inout Hasher) { hasher.combine(id) }
-    }
-
-    private struct MeasurementResult: Hashable, Identifiable {
-        let id = UUID()
-        let category: MeasureCategory
-        let measurements: [String: Float]
-
-        static func == (lhs: MeasurementResult, rhs: MeasurementResult) -> Bool { lhs.id == rhs.id }
-        func hash(into hasher: inout Hasher) { hasher.combine(id) }
     }
 }
 #endif

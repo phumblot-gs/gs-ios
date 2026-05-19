@@ -1,19 +1,24 @@
 #if os(iOS)
 import SwiftUI
+import simd
 import GSScanner
 import GSAPIClient
 import GSCore
 
-/// Final step of the measure flow: review the captured values and attach
-/// them to a Grand Shooting reference via `PUT /reference/:id/extra`.
+/// Final step of the measure flow. Shows the détouré reference photo
+/// (kept subjects on white) with each captured measurement drawn as a
+/// segment between two reprojected endpoints, plus a list of values.
+/// "Attach to a reference" scans / picks a Grand Shooting reference and
+/// posts the values via `PUT /reference/:id/extra`.
 struct MeasureSummaryView: View {
     let settings: DevSettings
     let category: MeasureCategory
-    /// Measurements as `name → distance in meters`. Converted to the
-    /// configured display unit at save time.
-    let measurements: [String: Float]
+    let referenceFrame: CapturedFrame
+    let includedSubjects: [DetectedSubject]
+    let captures: [MeasurementCapture]
     let onDone: @MainActor () -> Void
 
+    @State private var cutoutImage: UIImage?
     @State private var resolveSheetVisible = false
     @State private var saving = false
     @State private var saveError: String?
@@ -21,7 +26,7 @@ struct MeasureSummaryView: View {
 
     var body: some View {
         Form {
-            categorySection
+            previewSection
             measurementsSection
             saveSection
             if let savedReferenceRef {
@@ -41,6 +46,14 @@ struct MeasureSummaryView: View {
         }
         .navigationTitle("Validate")
         .navigationBarTitleDisplayMode(.inline)
+        .task {
+            if cutoutImage == nil {
+                cutoutImage = MeasureSubjectCutout.make(
+                    frame: referenceFrame,
+                    includedSubjects: includedSubjects
+                )
+            }
+        }
         .sheet(isPresented: $resolveSheetVisible) {
             NavigationStack {
                 ReferenceScanForMeasures(settings: settings) { ref in
@@ -53,18 +66,37 @@ struct MeasureSummaryView: View {
 
     // MARK: - Sections
 
-    private var categorySection: some View {
-        Section("Category") {
-            HStack {
-                Image(systemName: "tag.fill").foregroundStyle(.tint)
-                Text(category.name).font(.headline)
+    private var previewSection: some View {
+        Section {
+            ZStack {
+                Image(uiImage: cutoutImage ?? referenceFrame.image)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxHeight: 320)
+
+                GeometryReader { geometry in
+                    let rect = renderedRect(in: geometry.size, imageSize: referenceFrame.image.size)
+                    SegmentsOverlay(
+                        captures: captures,
+                        frame: referenceFrame,
+                        viewRect: rect
+                    )
+                }
             }
+        } header: {
+            Text("Reference photo")
+        } footer: {
+            Text("Segments are reprojected onto the original photo from the LiDAR world coordinates captured during placement.")
         }
     }
 
     private var measurementsSection: some View {
-        Section("Measurements") {
-            ForEach(orderedRows, id: \.name) { row in
+        Section {
+            HStack {
+                Image(systemName: "tag.fill").foregroundStyle(.tint)
+                Text(category.name).font(.headline)
+            }
+            ForEach(orderedRows) { row in
                 HStack {
                     Text(row.name)
                     Spacer()
@@ -73,6 +105,8 @@ struct MeasureSummaryView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+        } header: {
+            Text("Measurements")
         }
     }
 
@@ -96,18 +130,44 @@ struct MeasureSummaryView: View {
         }
     }
 
-    private var orderedRows: [(name: String, meters: Float)] {
-        let order = category.templates.sorted(by: { $0.order < $1.order }).map(\.name)
-        return order.compactMap { name in
-            measurements[name].map { (name: name, meters: $0) }
-        }
+    // MARK: - Data
+
+    private var orderedRows: [Row] {
+        captures
+            .sorted(by: { $0.order < $1.order })
+            .map { Row(id: $0.id, name: $0.templateName, meters: $0.meters) }
     }
 
-    // MARK: - Formatting
+    private struct Row: Identifiable {
+        let id: UUID
+        let name: String
+        let meters: Float
+    }
 
     private func format(meters: Float) -> String {
         let value = settings.measurementUnit.convert(meters: Double(meters))
         return String(format: "%.1f %@", value, settings.measurementUnit.apiSymbol)
+    }
+
+    /// Compute the rect a `scaledToFit` image occupies inside `viewSize`,
+    /// matching the SegmentsOverlay's drawing rect.
+    private func renderedRect(in viewSize: CGSize, imageSize: CGSize) -> CGRect {
+        guard imageSize.width > 0, imageSize.height > 0 else {
+            return CGRect(origin: .zero, size: viewSize)
+        }
+        let imageAspect = imageSize.width / imageSize.height
+        let viewAspect = viewSize.width / viewSize.height
+        let renderedSize: CGSize
+        if imageAspect > viewAspect {
+            renderedSize = CGSize(width: viewSize.width, height: viewSize.width / imageAspect)
+        } else {
+            renderedSize = CGSize(width: viewSize.height * imageAspect, height: viewSize.height)
+        }
+        let origin = CGPoint(
+            x: (viewSize.width - renderedSize.width) / 2,
+            y: (viewSize.height - renderedSize.height) / 2
+        )
+        return CGRect(origin: origin, size: renderedSize)
     }
 
     // MARK: - Save
@@ -124,11 +184,10 @@ struct MeasureSummaryView: View {
 
         var payload: [String: ReferenceExtraService.MeasureValue] = [:]
         let unit = settings.measurementUnit
-        for (name, meters) in measurements {
-            let value = unit.convert(meters: Double(meters))
-            // Round to 0.1 to match the displayed precision.
+        for capture in captures where capture.isComplete {
+            let value = unit.convert(meters: Double(capture.meters))
             let rounded = (value * 10).rounded() / 10
-            payload[name] = .init(value: rounded, unit: unit.apiSymbol)
+            payload[capture.templateName] = .init(value: rounded, unit: unit.apiSymbol)
         }
 
         let service = ReferenceExtraService(environment: settings.currentEnvironment)
@@ -143,10 +202,72 @@ struct MeasureSummaryView: View {
     }
 }
 
+// MARK: - Segments overlay
+
+/// Draws every captured measurement as a green segment with circle
+/// endpoints and a numeric label centered on the segment.
+private struct SegmentsOverlay: View {
+    let captures: [MeasurementCapture]
+    let frame: CapturedFrame
+    let viewRect: CGRect
+
+    var body: some View {
+        ZStack {
+            ForEach(captures) { capture in
+                if capture.worldPoints.count >= 2 {
+                    SegmentView(
+                        worldPoints: capture.worldPoints,
+                        frame: frame,
+                        viewRect: viewRect
+                    )
+                }
+            }
+        }
+    }
+}
+
+private struct SegmentView: View {
+    let worldPoints: [SIMD3<Float>]
+    let frame: CapturedFrame
+    let viewRect: CGRect
+
+    var body: some View {
+        if let projected = projectAll() {
+            ZStack {
+                Path { path in
+                    path.move(to: projected[0])
+                    for p in projected.dropFirst() { path.addLine(to: p) }
+                }
+                .stroke(.green, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+
+                ForEach(projected.indices, id: \.self) { idx in
+                    Circle()
+                        .fill(.green)
+                        .frame(width: 10, height: 10)
+                        .overlay(Circle().stroke(.white, lineWidth: 2))
+                        .position(projected[idx])
+                }
+            }
+        }
+    }
+
+    private func projectAll() -> [CGPoint]? {
+        var pts: [CGPoint] = []
+        for world in worldPoints {
+            guard let n = MeasureReprojection.projectToNormalized(worldPoint: world, frame: frame) else {
+                return nil
+            }
+            pts.append(CGPoint(
+                x: viewRect.minX + n.x * viewRect.width,
+                y: viewRect.minY + n.y * viewRect.height
+            ))
+        }
+        return pts
+    }
+}
+
 // MARK: - Reference selection (embedded scanner + manual entry)
 
-/// Tiny scanner UI used only from the Measure summary screen to grab a
-/// reference to attach the measurements to.
 private struct ReferenceScanForMeasures: View {
     let settings: DevSettings
     let onResolved: @MainActor (Reference) -> Void

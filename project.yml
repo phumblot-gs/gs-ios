@@ -63,6 +63,7 @@ targets:
         UIRequiredDeviceCapabilities:
           - arm64
         NSCameraUsageDescription: GS Mobile uses the camera to scan product barcodes, take photos, and run LiDAR measurements.
+        NSMotionUsageDescription: GS Mobile reads device motion (gyroscope) to detect when you hold the device still and auto-lock measurement points.
         NSPhotoLibraryUsageDescription: GS Mobile can save captured product photos to your library.
         NSPhotoLibraryAddUsageDescription: GS Mobile can save captured product photos and packshots to your library.
         CFBundleURLTypes:
