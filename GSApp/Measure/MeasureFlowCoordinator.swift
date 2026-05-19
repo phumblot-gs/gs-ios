@@ -263,8 +263,15 @@ final class MeasureFlowCoordinator: NSObject, ObservableObject {
             imageSize: CGSize(width: imageWidth, height: imageHeight)
         ) else { return nil }
 
-        // Camera-local → world.
-        let pWorld4 = frame.camera.transform * SIMD4<Float>(pCameraLocal, 1)
+        // DepthRaycaster returns OpenCV-convention coordinates (Y down,
+        // +Z forward), but `camera.transform` is ARKit-convention
+        // (Y up, +Z back toward viewer). Flip Y and Z to convert before
+        // applying the transform — otherwise the world point lands in
+        // a hybrid frame and `MeasureReprojection.projectToNormalized`
+        // sends it "behind the camera", forcing the mask check to
+        // permanently report off-target.
+        let pCameraArkit = SIMD3<Float>(pCameraLocal.x, -pCameraLocal.y, -pCameraLocal.z)
+        let pWorld4 = frame.camera.transform * SIMD4<Float>(pCameraArkit, 1)
         let pWorld = SIMD3<Float>(pWorld4.x, pWorld4.y, pWorld4.z)
 
         // Surface normal: sample two nearby depth pixels and take the
@@ -315,12 +322,15 @@ final class MeasureFlowCoordinator: NSObject, ObservableObject {
         // +Z; the surface normal should have negative Z.
         let nCamFacing = nCamera.z > 0 ? -nCamera : nCamera
 
+        // Same OpenCV → ARKit flip as for positions above so the
+        // rotation lifts the normal into the ARKit world frame.
+        let nArkit = SIMD3<Float>(nCamFacing.x, -nCamFacing.y, -nCamFacing.z)
         let rotation = simd_float3x3(
             SIMD3<Float>(cameraTransform.columns.0.x, cameraTransform.columns.0.y, cameraTransform.columns.0.z),
             SIMD3<Float>(cameraTransform.columns.1.x, cameraTransform.columns.1.y, cameraTransform.columns.1.z),
             SIMD3<Float>(cameraTransform.columns.2.x, cameraTransform.columns.2.y, cameraTransform.columns.2.z)
         )
-        return simd_normalize(rotation * nCamFacing)
+        return simd_normalize(rotation * nArkit)
     }
 }
 
