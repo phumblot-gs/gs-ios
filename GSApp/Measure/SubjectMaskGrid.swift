@@ -41,15 +41,17 @@ struct SubjectMaskGrid {
 
 enum SubjectMaskGridBuilder {
 
-    /// Builds the grid at a coarse resolution (~128 px on the long
-    /// side). Coarse is fine — we only sample one pixel per frame and
-    /// the boundary fudge below smooths out aliasing.
+    /// Builds the grid at ~256 px on the long side. Going coarser
+    /// (e.g. 128) makes the per-cell downsampling smear narrow parts
+    /// of the silhouette below the binarization threshold — a thin
+    /// car body shrinks down to nothing and only the wheels survive
+    /// as `subject`, which is what the user reported.
     static func build(subjects: [DetectedSubject], imageSize: CGSize) -> SubjectMaskGrid {
         guard !subjects.isEmpty,
               imageSize.width > 0, imageSize.height > 0 else { return .empty }
 
         let longest = max(imageSize.width, imageSize.height)
-        let scale = 128 / longest
+        let scale = 256 / longest
         let w = Int(imageSize.width * scale)
         let h = Int(imageSize.height * scale)
         guard w > 0, h > 0,
@@ -85,10 +87,20 @@ enum SubjectMaskGridBuilder {
         var on = [Bool](repeating: false, count: w * h)
         // Memory is already in top-left origin (top-down rows) thanks
         // to CGContext's default layout — read straight through.
+        // Threshold > 64 (≈ 25 % coverage of the patch) rather than
+        // 128 — even at 256 px on the long side, narrow silhouettes
+        // (a car body, a sleeve) average below 128 along their thin
+        // axis and would drop out. 64 keeps the full silhouette while
+        // still rejecting the soft anti-aliased halo Vision adds
+        // around the subject's boundary.
         for i in 0..<(w * h) {
-            on[i] = pixels[i] > 128
+            on[i] = pixels[i] > 64
         }
-        let edges = computeEdges(mask: on, width: w, height: h, radius: 3)
+        // Edge radius scales with the grid: 2.3 % of the long side
+        // (same proportion as the previous 3 px on 128 px) keeps the
+        // edge band physically the same width while doubling the
+        // pixel headroom for stability.
+        let edges = computeEdges(mask: on, width: w, height: h, radius: 6)
         return SubjectMaskGrid(width: w, height: h, onSubject: on, nearEdge: edges)
     }
 
