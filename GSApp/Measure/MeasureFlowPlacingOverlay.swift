@@ -32,16 +32,25 @@ struct MeasureFlowPlacingOverlay: View {
     private let pointsPerMeasurement = 2
 
     var body: some View {
-        VStack {
-            topBar
-            Spacer()
+        // The reticle must sit at the geometric centre of the live AR
+        // view because the depth raycast samples (0.5, 0.5) of the
+        // landscape depth map — that's the camera's optical axis, which
+        // projects to the geometric centre of the screen. A VStack
+        // layout would push the reticle above centre (the bottom panel
+        // is taller than the top bar), causing the user to aim higher
+        // than where the depth is actually sampled.
+        ZStack {
             MeasureLiveReticleHUD(
                 surface: hudSurface,
                 stability: coordinator.reticleState?.stability ?? 0,
                 pulse: pulseLock
             )
-            Spacer()
-            bottomPanel
+
+            VStack {
+                topBar
+                Spacer()
+                bottomPanel
+            }
         }
         .onAppear {
             let grid = SubjectMaskGridBuilder.build(
