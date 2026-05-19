@@ -97,11 +97,23 @@ struct MeasureCategoryListView: View {
                         settings: settings,
                         category: selection.category,
                         frame: selection.frame
-                    ) { _ in
-                        // Phase 5 lands here.
+                    ) { measurements in
+                        measurementResult = MeasurementResult(
+                            category: selection.category,
+                            measurements: measurements
+                        )
+                    }
+                }
+                .navigationDestination(item: $measurementResult) { result in
+                    MeasureSummaryView(
+                        settings: settings,
+                        category: result.category,
+                        measurements: result.measurements
+                    ) {
                         showCapture = false
                         captureResult = nil
                         selectedCategory = nil
+                        measurementResult = nil
                     }
                 }
             }
@@ -110,6 +122,7 @@ struct MeasureCategoryListView: View {
 
     @State private var captureResult: CaptureResult? = nil
     @State private var selectedCategory: SelectedCategory? = nil
+    @State private var measurementResult: MeasurementResult? = nil
 
     private struct CaptureResult: Hashable, Identifiable {
         let id = UUID()
@@ -126,6 +139,15 @@ struct MeasureCategoryListView: View {
         let frame: CapturedFrame
 
         static func == (lhs: SelectedCategory, rhs: SelectedCategory) -> Bool { lhs.id == rhs.id }
+        func hash(into hasher: inout Hasher) { hasher.combine(id) }
+    }
+
+    private struct MeasurementResult: Hashable, Identifiable {
+        let id = UUID()
+        let category: MeasureCategory
+        let measurements: [String: Float]
+
+        static func == (lhs: MeasurementResult, rhs: MeasurementResult) -> Bool { lhs.id == rhs.id }
         func hash(into hasher: inout Hasher) { hasher.combine(id) }
     }
 }
