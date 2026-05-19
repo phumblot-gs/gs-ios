@@ -221,9 +221,9 @@ private struct ReferenceScanForMeasures: View {
         } catch let err as GSHTTPClient.HTTPError {
             feedback.didFailLookup(reason: .transport)
             error = err.userMessage
-        } catch {
+        } catch let other {
             feedback.didFailLookup(reason: .other)
-            error = error.localizedDescription
+            error = other.localizedDescription
         }
     }
 }

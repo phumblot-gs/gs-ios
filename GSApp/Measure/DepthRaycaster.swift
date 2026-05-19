@@ -74,7 +74,10 @@ enum DepthRaycaster {
     }
 }
 
-private extension CGFloat {
+extension CGFloat {
+    /// File-internal helper but exposed within the Measure subsystem so
+    /// `MeasurePointPlacementView` can clamp drag positions to the
+    /// rendered image rect.
     func clamped(to range: ClosedRange<CGFloat>) -> CGFloat {
         Swift.min(Swift.max(self, range.lowerBound), range.upperBound)
     }
