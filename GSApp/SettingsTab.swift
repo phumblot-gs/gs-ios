@@ -20,6 +20,7 @@ struct SettingsTab: View {
                 statusesSection
                 batchTypesSection
                 searchAttributeSection
+                measurementSection
                 languageSection
                 backendSection
                 developmentSection
@@ -181,6 +182,20 @@ struct SettingsTab: View {
             Text("Language")
         } footer: {
             Text("Restart the app for a language change to take full effect.")
+        }
+    }
+
+    private var measurementSection: some View {
+        Section {
+            Picker("Unit", selection: $settings.measurementUnit) {
+                ForEach(DevSettings.MeasurementUnit.allCases, id: \.rawValue) { unit in
+                    Text(unit.displayName).tag(unit)
+                }
+            }
+        } header: {
+            Text("Measurements")
+        } footer: {
+            Text("Unit used when capturing dimensions in the Measures tab and storing them on the reference.")
         }
     }
 

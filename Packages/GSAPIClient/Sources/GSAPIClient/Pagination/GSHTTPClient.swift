@@ -70,6 +70,16 @@ public struct GSHTTPClient: Sendable {
         return try decode(T.self, from: data)
     }
 
+    public func put<Body: Encodable & Sendable, T: Decodable & Sendable>(
+        _ path: String,
+        body: Body,
+        as type: T.Type = T.self
+    ) async throws -> T {
+        let request = try makeRequest(path: path, method: "PUT", query: [:], offset: nil, body: body)
+        let (data, _) = try await perform(request)
+        return try decode(T.self, from: data)
+    }
+
     // MARK: - Paginated calls
 
     /// GET that returns a page of items plus the parsed `PaginationInfo`.

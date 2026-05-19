@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 import GSAPIClient
 import GSCore
 
@@ -37,6 +38,10 @@ struct GSApp: App {
                 AuthDeepLinkHandler.handle(url)
             }
         }
+        // SwiftData container for the Measures feature. Schema kept local
+        // to the app target for now — we'll move it to a backend-synced
+        // store when categories need to be shared across team members.
+        .modelContainer(for: [MeasureCategory.self, MeasurementTemplate.self])
     }
 }
 
@@ -51,8 +56,8 @@ struct RootView: View {
                 .tabItem { Label("Scan", systemImage: "barcode.viewfinder") }
             PhotoTab()
                 .tabItem { Label("Photo", systemImage: "camera") }
-            LiDARTab()
-                .tabItem { Label("LiDAR", systemImage: "cube.transparent") }
+            MeasureTab(settings: settings)
+                .tabItem { Label("Measures", systemImage: "ruler") }
             HistoryTab()
                 .tabItem { Label("History", systemImage: "clock") }
             SettingsTab(authState: authState, settings: settings, catalog: catalog)

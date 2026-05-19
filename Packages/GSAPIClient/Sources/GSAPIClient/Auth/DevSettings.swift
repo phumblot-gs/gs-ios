@@ -40,6 +40,33 @@ public final class DevSettings {
         }
     }
 
+    public enum MeasurementUnit: String, CaseIterable, Sendable, Codable {
+        case centimeters
+        case inches
+
+        public var displayName: String {
+            switch self {
+            case .centimeters: return String(localized: "Centimeters")
+            case .inches: return String(localized: "Inches")
+            }
+        }
+
+        /// API symbol stored in `extra.measures.<name>.unit`.
+        public var apiSymbol: String {
+            switch self {
+            case .centimeters: return "cm"
+            case .inches: return "in"
+            }
+        }
+
+        public func convert(meters: Double) -> Double {
+            switch self {
+            case .centimeters: return meters * 100
+            case .inches: return meters * 39.3700787
+            }
+        }
+    }
+
     public enum LanguagePreference: String, CaseIterable, Sendable, Codable {
         case system
         case en
@@ -135,6 +162,10 @@ public final class DevSettings {
         didSet { UserDefaults.standard.set(languagePreference.rawValue, forKey: Self.languageKey) }
     }
 
+    public var measurementUnit: MeasurementUnit {
+        didSet { UserDefaults.standard.set(measurementUnit.rawValue, forKey: Self.measurementUnitKey) }
+    }
+
     // MARK: - Derived
 
     public var currentEnvironment: GSEnvironment {
@@ -177,6 +208,9 @@ public final class DevSettings {
         let langRaw = UserDefaults.standard.string(forKey: Self.languageKey) ?? "system"
         self.languagePreference = LanguagePreference(rawValue: langRaw) ?? .system
 
+        let unitRaw = UserDefaults.standard.string(forKey: Self.measurementUnitKey) ?? "centimeters"
+        self.measurementUnit = MeasurementUnit(rawValue: unitRaw) ?? .centimeters
+
         // Safety net: force the default-on-register status to be enabled,
         // even if the user previously persisted a list that excluded it.
         // Done at the end of init so every stored property is initialised.
@@ -194,4 +228,5 @@ public final class DevSettings {
     private static let batchTypesKey = "dev.batch.types"
     private static let searchAttributeKey = "dev.search.attribute"
     private static let languageKey = "dev.language.preferred"
+    private static let measurementUnitKey = "dev.measurement.unit"
 }
