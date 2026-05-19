@@ -44,10 +44,10 @@ public struct ReferenceExtraService: Sendable {
 
 // MARK: - Payload shapes
 
-private struct ExtraPayload<Wrapped: Encodable>: Encodable {
+private struct ExtraPayload<Wrapped: Encodable & Sendable>: Encodable, Sendable {
     let extra: Wrapped
 }
 
-private struct MeasuresWrapper: Encodable {
+private struct MeasuresWrapper: Encodable, Sendable {
     let measures: [String: ReferenceExtraService.MeasureValue]
 }
