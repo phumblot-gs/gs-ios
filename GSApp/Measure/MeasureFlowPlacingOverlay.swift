@@ -33,12 +33,15 @@ struct MeasureFlowPlacingOverlay: View {
 
     var body: some View {
         // The reticle must sit at the geometric centre of the live AR
-        // view because the depth raycast samples (0.5, 0.5) of the
-        // landscape depth map — that's the camera's optical axis, which
-        // projects to the geometric centre of the screen. A VStack
-        // layout would push the reticle above centre (the bottom panel
-        // is taller than the top bar), causing the user to aim higher
-        // than where the depth is actually sampled.
+        // view, which fills the full screen (via .ignoresSafeArea on
+        // ARLiveView). The depth raycast samples (0.5, 0.5) of the
+        // landscape depth map — i.e. the camera's optical axis, which
+        // projects to the geometric centre of that full-screen feed.
+        // We therefore make this overlay ignore the safe area too so
+        // the ZStack centre coincides with the screen centre; the
+        // controls inside the VStack opt back in via .safeAreaPadding
+        // so the X button and the bottom panel stay clear of the
+        // Dynamic Island and home indicator.
         ZStack {
             MeasureLiveReticleHUD(
                 surface: hudSurface,
@@ -51,7 +54,9 @@ struct MeasureFlowPlacingOverlay: View {
                 Spacer()
                 bottomPanel
             }
+            .safeAreaPadding(.vertical)
         }
+        .ignoresSafeArea()
         .onAppear {
             let grid = SubjectMaskGridBuilder.build(
                 subjects: includedSubjects,

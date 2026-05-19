@@ -64,8 +64,14 @@ enum SubjectMaskGridBuilder {
               ) else { return .empty }
 
         // Rasterize each subject's mask at its bounding-box location.
-        // Bounding box origin is top-left in normalized image space.
-        // CGContext's coordinate system is bottom-left — convert.
+        // Bounding box origin is top-left in normalized image space;
+        // CGContext drawing coords are bottom-left, so flip the
+        // bounding-box Y when computing the destination rect.
+        // `CGContext.draw(_:in:)` preserves the image's natural
+        // orientation and the bitmap memory is top-down — so a single
+        // straight draw lands the subject at the correct memory rows
+        // (no need for an explicit scaleBy(y: -1), which would put
+        // the mask upside-down in memory).
         context.setFillColor(gray: 0, alpha: 1)
         context.fill(CGRect(x: 0, y: 0, width: w, height: h))
         context.setBlendMode(.lighten)
@@ -77,25 +83,16 @@ enum SubjectMaskGridBuilder {
                 width: box.width * CGFloat(w),
                 height: box.height * CGFloat(h)
             )
-            // CGContext flips Y on draw; mask CGImage is top-left
-            // origin, so we draw inside a flipped sub-context.
-            context.saveGState()
-            context.translateBy(x: rect.minX, y: rect.maxY)
-            context.scaleBy(x: 1, y: -1)
-            context.draw(subject.mask, in: CGRect(origin: .zero, size: rect.size))
-            context.restoreGState()
+            context.draw(subject.mask, in: rect)
         }
 
         guard let buffer = context.data else { return .empty }
         let pixels = buffer.bindMemory(to: UInt8.self, capacity: w * h)
         var on = [Bool](repeating: false, count: w * h)
-        // The CGContext rasterized with Y-up; flip to top-left origin
-        // so the sampling math matches the reprojection output.
-        for y in 0..<h {
-            for x in 0..<w {
-                let raw = pixels[(h - 1 - y) * w + x]
-                on[y * w + x] = raw > 128
-            }
+        // Memory is already in top-left origin (top-down rows) thanks
+        // to CGContext's default layout — read straight through.
+        for i in 0..<(w * h) {
+            on[i] = pixels[i] > 128
         }
         let edges = computeEdges(mask: on, width: w, height: h, radius: 3)
         return SubjectMaskGrid(width: w, height: h, onSubject: on, nearEdge: edges)
