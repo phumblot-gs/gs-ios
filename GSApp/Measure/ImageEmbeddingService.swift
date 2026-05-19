@@ -98,25 +98,4 @@ struct ImageEmbeddingService: Sendable {
     }
 }
 
-// MARK: - Suggestion ranking helper
-
-struct CategorySuggestion: Identifiable, Hashable {
-    let id: PersistentIdentifier
-    let categoryName: String
-    let distance: Float
-    let category: MeasureCategory
-
-    static func == (lhs: CategorySuggestion, rhs: CategorySuggestion) -> Bool {
-        lhs.id == rhs.id && lhs.distance == rhs.distance
-    }
-
-    func hash(into hasher: inout Hasher) {
-        hasher.combine(id)
-        hasher.combine(distance)
-    }
-}
-
-// We can't conform to Identifiable with PersistentIdentifier without
-// importing SwiftData; pulling it in here for the helper.
-import SwiftData
 #endif
