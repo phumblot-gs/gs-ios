@@ -68,6 +68,14 @@ final class MeasureFlowCoordinator: NSObject, ObservableObject {
     private var reticleAnchor: AnchorEntity?
     private var reticleDisc: ModelEntity?
 
+    // Custom LiDAR mesh overlay (debug). One AnchorEntity per
+    // ARMeshAnchor, with a ModelEntity wrapping the reconstructed
+    // surface as semi-transparent yellow triangles. Yellow contrasts
+    // well with both the bright marble counter and the dark car, so
+    // we don't need a per-pixel inverting shader.
+    private var meshOverlayContainers: [UUID: AnchorEntity] = [:]
+    private var meshOverlayEntities: [UUID: ModelEntity] = [:]
+
     private let lockSoundID: SystemSoundID = 1113   // "Begin Recording"
 
     // MARK: - Lifecycle
@@ -81,12 +89,103 @@ final class MeasureFlowCoordinator: NSObject, ObservableObject {
     }
 
     private func applyDebugOverlay() {
+        // Custom mesh overlay handled via the ARSessionDelegate
+        // anchor callbacks below. The toggle bootstraps from the
+        // current session anchors when turning on, and removes every
+        // entity from the scene when turning off.
         guard let arView else { return }
         if meshOverlayEnabled {
-            arView.debugOptions.insert(.showSceneUnderstanding)
+            let anchors = arView.session.currentFrame?.anchors ?? []
+            for anchor in anchors {
+                if let mesh = anchor as? ARMeshAnchor {
+                    upsertMeshOverlay(for: mesh)
+                }
+            }
         } else {
-            arView.debugOptions.remove(.showSceneUnderstanding)
+            teardownMeshOverlay()
         }
+    }
+
+    // MARK: - Custom mesh overlay
+
+    private func upsertMeshOverlay(for anchor: ARMeshAnchor) {
+        guard meshOverlayEnabled, let arView else { return }
+        guard let mesh = makeMeshResource(from: anchor.geometry) else { return }
+
+        if let container = meshOverlayContainers[anchor.identifier],
+           let entity = meshOverlayEntities[anchor.identifier] {
+            container.transform = Transform(matrix: anchor.transform)
+            entity.model?.mesh = mesh
+        } else {
+            let entity = ModelEntity(mesh: mesh, materials: [Self.meshOverlayMaterial])
+            let container = AnchorEntity(world: anchor.transform)
+            container.addChild(entity)
+            arView.scene.addAnchor(container)
+            meshOverlayContainers[anchor.identifier] = container
+            meshOverlayEntities[anchor.identifier] = entity
+        }
+    }
+
+    private func teardownMeshOverlay() {
+        for (_, container) in meshOverlayContainers {
+            container.removeFromParent()
+        }
+        meshOverlayContainers.removeAll()
+        meshOverlayEntities.removeAll()
+    }
+
+    private func removeMeshOverlay(id: UUID) {
+        if let container = meshOverlayContainers.removeValue(forKey: id) {
+            container.removeFromParent()
+        }
+        meshOverlayEntities.removeValue(forKey: id)
+    }
+
+    private static let meshOverlayMaterial: UnlitMaterial = {
+        // Bright yellow at ~45 % alpha — visible on both the marble
+        // counter (light) and the LEGO car (dark). RealityKit handles
+        // alpha blending automatically when the colour has alpha < 1.
+        var mat = UnlitMaterial(color: UIColor.systemYellow.withAlphaComponent(0.45))
+        mat.color = .init(tint: UIColor.systemYellow.withAlphaComponent(0.45))
+        return mat
+    }()
+
+    /// Repackage ARMeshGeometry's vertex / face buffers as a
+    /// RealityKit `MeshResource`. The face index buffer can be 16- or
+    /// 32-bit depending on triangle count, so we widen everything to
+    /// UInt32 before handing it to MeshDescriptor.
+    private func makeMeshResource(from geometry: ARMeshGeometry) -> MeshResource? {
+        var positions = [SIMD3<Float>]()
+        let vertexSource = geometry.vertices
+        positions.reserveCapacity(vertexSource.count)
+        let vertexBase = vertexSource.buffer.contents().advanced(by: vertexSource.offset)
+        for i in 0..<vertexSource.count {
+            let ptr = vertexBase
+                .advanced(by: i * vertexSource.stride)
+                .assumingMemoryBound(to: Float.self)
+            positions.append(SIMD3<Float>(ptr[0], ptr[1], ptr[2]))
+        }
+
+        var indices = [UInt32]()
+        let faceSource = geometry.faces
+        let indexCount = faceSource.count * 3
+        indices.reserveCapacity(indexCount)
+        let faceBase = faceSource.buffer.contents()
+        for i in 0..<indexCount {
+            let ptr = faceBase.advanced(by: i * faceSource.bytesPerIndex)
+            let idx: UInt32
+            if faceSource.bytesPerIndex == 4 {
+                idx = ptr.load(as: UInt32.self)
+            } else {
+                idx = UInt32(ptr.load(as: UInt16.self))
+            }
+            indices.append(idx)
+        }
+
+        var descriptor = MeshDescriptor(name: "lidar")
+        descriptor.positions = MeshBuffers.Positions(positions)
+        descriptor.primitives = .triangles(indices)
+        return try? MeshResource.generate(from: [descriptor])
     }
 
     // MARK: - Capture
@@ -369,6 +468,36 @@ extension MeasureFlowCoordinator: ARSessionDelegate {
         // hop below is just to satisfy the Swift 6 isolation checker.
         MainActor.assumeIsolated {
             self.handleFrame(frame)
+        }
+    }
+
+    nonisolated func session(_ session: ARSession, didAdd anchors: [ARAnchor]) {
+        MainActor.assumeIsolated {
+            guard self.meshOverlayEnabled else { return }
+            for anchor in anchors {
+                if let mesh = anchor as? ARMeshAnchor {
+                    self.upsertMeshOverlay(for: mesh)
+                }
+            }
+        }
+    }
+
+    nonisolated func session(_ session: ARSession, didUpdate anchors: [ARAnchor]) {
+        MainActor.assumeIsolated {
+            guard self.meshOverlayEnabled else { return }
+            for anchor in anchors {
+                if let mesh = anchor as? ARMeshAnchor {
+                    self.upsertMeshOverlay(for: mesh)
+                }
+            }
+        }
+    }
+
+    nonisolated func session(_ session: ARSession, didRemove anchors: [ARAnchor]) {
+        MainActor.assumeIsolated {
+            for anchor in anchors where anchor is ARMeshAnchor {
+                self.removeMeshOverlay(id: anchor.identifier)
+            }
         }
     }
 }
