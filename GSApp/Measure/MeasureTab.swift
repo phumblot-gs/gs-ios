@@ -3,20 +3,24 @@ import SwiftData
 import GSAPIClient
 import GSCore
 
-/// Root of the "Mesures" tab (formerly "LiDAR"). LiDAR-only feature so
-/// we gate the entry behind `GSDeviceSupport.hasLiDAR` — on devices
-/// without LiDAR we show a friendly explanation instead of a broken UI.
+/// Root of the "Mesures" tab. LiDAR-only feature gated through
+/// `GSDeviceSupport.hasLiDAR` — non-LiDAR devices see a friendly
+/// explanation instead of broken UI.
 struct MeasureTab: View {
     let settings: DevSettings
 
     var body: some View {
         NavigationStack {
             Group {
+                #if os(iOS)
                 if GSDeviceSupport.hasLiDAR {
                     MeasureCategoryListView(settings: settings)
                 } else {
                     notSupportedView
                 }
+                #else
+                notSupportedView
+                #endif
             }
             .navigationTitle("Measures")
         }
@@ -31,12 +35,15 @@ struct MeasureTab: View {
     }
 }
 
-/// Placeholder list — phases 2-5 fill this in. For now it just lists the
-/// categories already in SwiftData so we can verify persistence works.
+#if os(iOS)
+/// Categories list with a "+" CTA opening the capture flow. Phase 3
+/// will turn the destination into a real category picker; for now it
+/// stops after capture.
 struct MeasureCategoryListView: View {
     let settings: DevSettings
 
     @Query(sort: \MeasureCategory.createdAt, order: .reverse) private var categories: [MeasureCategory]
+    @State private var showCapture = false
 
     var body: some View {
         Group {
@@ -60,12 +67,25 @@ struct MeasureCategoryListView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
-                    // Phase 2 lands the capture flow here.
+                    showCapture = true
                 } label: {
                     Image(systemName: "plus")
                 }
-                .disabled(true) // re-enabled in Phase 2
+            }
+        }
+        .fullScreenCover(isPresented: $showCapture) {
+            NavigationStack {
+                MeasureCaptureView(settings: settings) { _, _ in
+                    // Phase 3 will route into category selection here.
+                    showCapture = false
+                }
+                .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button("Cancel") { showCapture = false }
+                    }
+                }
             }
         }
     }
 }
+#endif
