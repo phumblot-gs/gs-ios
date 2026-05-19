@@ -4,10 +4,10 @@ import SwiftData
 import GSAPIClient
 
 /// Form to define a brand-new `MeasureCategory` using the captured frame
-/// as the example. The user names the category and declares one or more
-/// `MeasurementTemplate`s — each a name (e.g. "manche") and a number of
-/// points (minimum 2). Points themselves are unlabelled: at capture
-/// time, the user is simply told "Place point N / M".
+/// as the example. The user names the category and lists the
+/// measurements they want to capture for it (e.g. "manche", "buste",
+/// "hauteur"). Each measurement is just a semantic name — the number of
+/// points placed for it is decided at capture time.
 struct MeasureCategoryCreateView: View {
     let settings: DevSettings
     let capturedFrame: CapturedFrame
@@ -18,25 +18,21 @@ struct MeasureCategoryCreateView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var name: String = ""
-    @State private var templates: [TemplateDraft] = [TemplateDraft.blank]
+    @State private var measurements: [MeasurementDraft] = [MeasurementDraft.blank]
     @State private var isSaving = false
 
-    private struct TemplateDraft: Identifiable {
+    private struct MeasurementDraft: Identifiable {
         let id = UUID()
         var name: String = ""
-        var pointCount: Int = 2
 
-        static var blank: TemplateDraft { TemplateDraft() }
+        static var blank: MeasurementDraft { MeasurementDraft() }
     }
 
     var body: some View {
         Form {
             previewSection
             nameSection
-            ForEach($templates) { $template in
-                templateSection($template)
-            }
-            addTemplateSection
+            measurementsSection
         }
         .navigationTitle("New category")
         .navigationBarTitleDisplayMode(.inline)
@@ -57,9 +53,8 @@ struct MeasureCategoryCreateView: View {
 
     private var canSave: Bool {
         guard !name.trimmingCharacters(in: .whitespaces).isEmpty else { return false }
-        let cleanTemplates = templates.filter { !$0.name.trimmingCharacters(in: .whitespaces).isEmpty }
-        guard !cleanTemplates.isEmpty else { return false }
-        return cleanTemplates.allSatisfy { $0.pointCount >= 2 }
+        let valid = measurements.filter { !$0.name.trimmingCharacters(in: .whitespaces).isEmpty }
+        return !valid.isEmpty
     }
 
     // MARK: - Sections
@@ -85,40 +80,24 @@ struct MeasureCategoryCreateView: View {
         }
     }
 
-    private func templateSection(_ binding: Binding<TemplateDraft>) -> some View {
+    private var measurementsSection: some View {
         Section {
-            TextField("Measurement name (e.g. sleeve)", text: binding.name)
-                .autocorrectionDisabled()
-            Stepper(value: binding.pointCount, in: 2...20) {
-                HStack {
-                    Text("Points")
-                    Spacer()
-                    Text("\(binding.wrappedValue.pointCount)")
-                        .font(.subheadline.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                }
+            ForEach($measurements) { $measurement in
+                TextField("Measurement name (e.g. sleeve)", text: $measurement.name)
+                    .autocorrectionDisabled()
+            }
+            .onDelete { offsets in
+                measurements.remove(atOffsets: offsets)
+            }
+            Button {
+                measurements.append(MeasurementDraft.blank)
+            } label: {
+                Label("Add a measurement", systemImage: "plus.circle.fill")
             }
         } header: {
-            Text("Measurement")
+            Text("Measurements")
         } footer: {
-            Text("Distance = sum of the segments between successive points. Minimum 2 points = 1 segment.")
-        }
-    }
-
-    private var addTemplateSection: some View {
-        Section {
-            Button {
-                templates.append(TemplateDraft.blank)
-            } label: {
-                Label("Add another measurement", systemImage: "plus.circle.fill")
-            }
-            if templates.count > 1 {
-                Button(role: .destructive) {
-                    templates.removeLast()
-                } label: {
-                    Label("Remove last measurement", systemImage: "trash")
-                }
-            }
+            Text("List the dimensions you want to capture for this category. At capture time you'll place 2 or more points per measurement; the distance is the sum of the segments.")
         }
     }
 
@@ -133,14 +112,10 @@ struct MeasureCategoryCreateView: View {
         )
         modelContext.insert(category)
         var order = 0
-        for draft in templates {
+        for draft in measurements {
             let cleanName = draft.name.trimmingCharacters(in: .whitespaces)
             guard !cleanName.isEmpty else { continue }
-            let template = MeasurementTemplate(
-                name: cleanName,
-                pointCount: max(2, draft.pointCount),
-                order: order
-            )
+            let template = MeasurementTemplate(name: cleanName, order: order)
             template.category = category
             modelContext.insert(template)
             order += 1

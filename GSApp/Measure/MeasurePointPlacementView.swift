@@ -39,8 +39,12 @@ struct MeasurePointPlacementView: View {
 
     private var allMeasurementsComplete: Bool {
         sortedTemplates.allSatisfy { template in
-            (pointsByTemplate[template.persistentModelID]?.count ?? 0) == template.pointCount
+            (pointsByTemplate[template.persistentModelID]?.count ?? 0) >= 2
         }
+    }
+
+    private var currentTemplateHasEnoughPoints: Bool {
+        currentPoints.count >= 2
     }
 
     var body: some View {
@@ -114,21 +118,22 @@ struct MeasurePointPlacementView: View {
     private var controls: some View {
         VStack(alignment: .leading, spacing: 12) {
             if let template = currentTemplate {
-                if currentPointIndex < template.pointCount {
-                    Label("\(template.name) — point \(currentPointIndex + 1) of \(template.pointCount)", systemImage: "scope")
-                        .font(.headline)
-                } else {
-                    Label(
-                        "\(template.name) — \(formattedDistance(of: currentPoints))",
-                        systemImage: "checkmark.circle.fill"
-                    )
-                    .foregroundStyle(.green)
-                    .font(.headline)
-                }
+                Label(
+                    currentPoints.count < 2
+                        ? "\(template.name) — \(currentPoints.count) point(s)"
+                        : "\(template.name) — \(formattedDistance(of: currentPoints))",
+                    systemImage: currentTemplateHasEnoughPoints ? "checkmark.circle.fill" : "scope"
+                )
+                .foregroundStyle(currentTemplateHasEnoughPoints ? .green : .primary)
+                .font(.headline)
             }
             if currentPoints.count >= 2 {
-                Text("Live distance: \(formattedDistance(of: currentPoints))")
-                    .font(.subheadline.monospacedDigit())
+                Text("\(currentPoints.count) points — tap the image to add more, drag a point to adjust, or move to the next measurement.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                Text("Tap the image to place points. A measurement needs at least 2.")
+                    .font(.caption)
                     .foregroundStyle(.secondary)
             }
             HStack(spacing: 12) {
@@ -148,7 +153,7 @@ struct MeasurePointPlacementView: View {
                         Label("Next measurement", systemImage: "chevron.right.circle.fill")
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(!isCurrentTemplateComplete)
+                    .disabled(!currentTemplateHasEnoughPoints)
                 } else {
                     Button {
                         validate()
@@ -164,16 +169,10 @@ struct MeasurePointPlacementView: View {
         .background(.thinMaterial)
     }
 
-    private var isCurrentTemplateComplete: Bool {
-        guard let template = currentTemplate else { return false }
-        return currentPoints.count >= template.pointCount
-    }
-
     // MARK: - Tap handling
 
     private func handleTap(at viewLocation: CGPoint, in viewSize: CGSize) {
         guard let template = currentTemplate else { return }
-        guard currentPoints.count < template.pointCount else { return }
         let rect = imageRect(in: viewSize)
         guard rect.contains(viewLocation) else { return }
         let normalized = normalizedPoint(from: viewLocation, viewRect: rect)
@@ -261,7 +260,7 @@ struct MeasurePointPlacementView: View {
         var result: [String: Float] = [:]
         for template in sortedTemplates {
             let points = pointsByTemplate[template.persistentModelID] ?? []
-            guard points.count == template.pointCount else { continue }
+            guard points.count >= 2 else { continue }
             let meters = DepthRaycaster.chainDistance(points.map(\.world))
             result[template.name] = meters
         }
