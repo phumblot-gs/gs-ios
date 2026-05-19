@@ -15,10 +15,15 @@ struct MeasurePointPlacementView: View {
     let settings: DevSettings
     let category: MeasureCategory
     let frame: CapturedFrame
+    /// Subjects the user kept after the capture step; combined with the
+    /// depth map to form the snap target so placed points are guaranteed
+    /// to land on the object.
+    let includedSubjects: [DetectedSubject]
     let onValidated: @MainActor ([String: Float]) -> Void  // name → distance (meters)
 
     @State private var templateIndex: Int = 0
     @State private var pointsByTemplate: [PersistentIdentifier: [PlacedPoint]] = [:]
+    @State private var snapTarget: SnapTarget = .empty
 
     private var sortedTemplates: [MeasurementTemplate] {
         category.templates.sorted { $0.order < $1.order }
@@ -54,6 +59,16 @@ struct MeasurePointPlacementView: View {
         }
         .navigationTitle(category.name)
         .navigationBarTitleDisplayMode(.inline)
+        .task {
+            // Compute the snap target once on appear. Light enough that
+            // we don't bother stashing the result globally — re-derivation
+            // is fine on view recreation.
+            snapTarget = SnapTargetBuilder.build(
+                subjects: includedSubjects,
+                depthMap: frame.depthMap,
+                imageSize: frame.image.size
+            )
+        }
     }
 
     // MARK: - Image + overlay
@@ -175,9 +190,13 @@ struct MeasurePointPlacementView: View {
         guard let template = currentTemplate else { return }
         let rect = imageRect(in: viewSize)
         guard rect.contains(viewLocation) else { return }
-        let normalized = normalizedPoint(from: viewLocation, viewRect: rect)
-        guard let world = projectToWorld(normalized: normalized) else { return }
-        let new = PlacedPoint(normalizedPoint: normalized, world: world)
+        let raw = normalizedPoint(from: viewLocation, viewRect: rect)
+        // Snap onto the LiDAR-and-mask-valid surface so the placed point
+        // is guaranteed to live on the actual object, not on the table
+        // around it or on a depth-less corner.
+        guard let snapped = snapTarget.nearest(to: raw),
+              let world = projectToWorld(normalized: snapped) else { return }
+        let new = PlacedPoint(normalizedPoint: snapped, world: world)
         pointsByTemplate[template.persistentModelID, default: []].append(new)
     }
 
@@ -187,11 +206,12 @@ struct MeasurePointPlacementView: View {
             x: viewLocation.x.clamped(to: viewRect.minX...viewRect.maxX),
             y: viewLocation.y.clamped(to: viewRect.minY...viewRect.maxY)
         )
-        let normalized = normalizedPoint(from: clamped, viewRect: viewRect)
-        guard let world = projectToWorld(normalized: normalized) else { return }
+        let raw = normalizedPoint(from: clamped, viewRect: viewRect)
+        guard let snapped = snapTarget.nearest(to: raw),
+              let world = projectToWorld(normalized: snapped) else { return }
         var list = pointsByTemplate[template.persistentModelID] ?? []
         guard list.indices.contains(pointIndex) else { return }
-        list[pointIndex] = PlacedPoint(normalizedPoint: normalized, world: world)
+        list[pointIndex] = PlacedPoint(normalizedPoint: snapped, world: world)
         pointsByTemplate[template.persistentModelID] = list
     }
 

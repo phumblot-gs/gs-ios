@@ -8,21 +8,31 @@ import SwiftData
 @Model
 final class MeasureCategory {
     var name: String
+    /// Optional identifier used to map the category onto a third-party
+    /// system's codification (e.g. an internal ERP code). Free-form
+    /// string; not validated.
+    var code: String?
     var createdAt: Date
     /// Serialized `VNFeaturePrintObservation` data — used for nearest-
     /// neighbor suggestions on the next capture. Nil when no example
     /// image was retained on creation.
     var imageEmbedding: Data?
     /// Original example image (JPEG-encoded). Stored mostly for the
-    /// category list UI thumbnail and as ground-truth in case we need to
-    /// re-compute the embedding after a Vision model update.
+    /// category list UI thumbnail and as ground-truth in case we need
+    /// to re-compute the embedding after a Vision model update.
     var exampleImageData: Data?
 
     @Relationship(deleteRule: .cascade, inverse: \MeasurementTemplate.category)
     var templates: [MeasurementTemplate] = []
 
-    init(name: String, imageEmbedding: Data? = nil, exampleImageData: Data? = nil) {
+    init(
+        name: String,
+        code: String? = nil,
+        imageEmbedding: Data? = nil,
+        exampleImageData: Data? = nil
+    ) {
         self.name = name
+        self.code = code
         self.createdAt = .now
         self.imageEmbedding = imageEmbedding
         self.exampleImageData = exampleImageData

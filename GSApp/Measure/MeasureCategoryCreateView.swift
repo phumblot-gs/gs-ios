@@ -18,6 +18,7 @@ struct MeasureCategoryCreateView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var name: String = ""
+    @State private var code: String = ""
     @State private var measurements: [MeasurementDraft] = [MeasurementDraft.blank]
     @State private var isSaving = false
 
@@ -75,8 +76,13 @@ struct MeasureCategoryCreateView: View {
         Section {
             TextField("Category name (e.g. Dress, Shirt, Game box)", text: $name)
                 .autocorrectionDisabled()
+            TextField("Code (optional, e.g. ERP / catalog code)", text: $code)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
         } header: {
             Text("Name")
+        } footer: {
+            Text("The code lets you link this category to your internal coding system. It's free-form and optional.")
         }
     }
 
@@ -105,8 +111,10 @@ struct MeasureCategoryCreateView: View {
 
     private func save() {
         isSaving = true
+        let trimmedCode = code.trimmingCharacters(in: .whitespaces)
         let category = MeasureCategory(
             name: name.trimmingCharacters(in: .whitespaces),
+            code: trimmedCode.isEmpty ? nil : trimmedCode,
             imageEmbedding: newEmbedding,
             exampleImageData: capturedFrame.image.jpegData(compressionQuality: 0.8)
         )

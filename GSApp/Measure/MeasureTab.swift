@@ -89,14 +89,19 @@ struct MeasureCategoryListView: View {
                         frame: result.frame,
                         includedSubjects: result.subjects
                     ) { category, frame in
-                        selectedCategory = SelectedCategory(category: category, frame: frame)
+                        selectedCategory = SelectedCategory(
+                            category: category,
+                            frame: frame,
+                            subjects: result.subjects
+                        )
                     }
                 }
                 .navigationDestination(item: $selectedCategory) { selection in
                     MeasurePointPlacementView(
                         settings: settings,
                         category: selection.category,
-                        frame: selection.frame
+                        frame: selection.frame,
+                        includedSubjects: selection.subjects
                     ) { measurements in
                         measurementResult = MeasurementResult(
                             category: selection.category,
@@ -137,6 +142,7 @@ struct MeasureCategoryListView: View {
         let id = UUID()
         let category: MeasureCategory
         let frame: CapturedFrame
+        let subjects: [DetectedSubject]
 
         static func == (lhs: SelectedCategory, rhs: SelectedCategory) -> Bool { lhs.id == rhs.id }
         func hash(into hasher: inout Hasher) { hasher.combine(id) }
