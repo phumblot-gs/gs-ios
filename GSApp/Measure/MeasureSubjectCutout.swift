@@ -22,27 +22,21 @@ enum MeasureSubjectCutout {
         let baseImage = CIImage(cgImage: cgImage)
         let extent = baseImage.extent
 
-        // 1. Union of every subject mask into one CIImage. Each mask is
-        //    drawn at its bounding-box location in normalized image-
-        //    space; we map that into pixel-space first.
+        // Each `subject.mask` is full-image-sized; the silhouette is
+        // already spatially aligned with the base image. We just
+        // compose them via lighten (max) compositing — no per-subject
+        // bounding-box scaling needed (that would squash the
+        // silhouette into the box, the bug we hit in SubjectMaskGrid).
         var unionMask: CIImage? = nil
         for subject in includedSubjects {
-            let maskCG = subject.mask
-            let maskCI = CIImage(cgImage: maskCG)
-            let box = subject.boundingBox    // top-left origin, normalized
-            // Image-space rect of this subject inside the portrait frame.
-            let pixelRect = CGRect(
-                x: box.minX * extent.width,
-                y: (1 - box.maxY) * extent.height,
-                width: box.width * extent.width,
-                height: box.height * extent.height
-            )
-            // Scale + translate the mask to that rect.
-            let scaleX = pixelRect.width / maskCI.extent.width
-            let scaleY = pixelRect.height / maskCI.extent.height
-            let placed = maskCI
-                .transformed(by: CGAffineTransform(scaleX: scaleX, y: scaleY))
-                .transformed(by: CGAffineTransform(translationX: pixelRect.minX, y: pixelRect.minY))
+            var placed = CIImage(cgImage: subject.mask)
+            if placed.extent.size != extent.size {
+                // Defensive fallback in case Vision ever returns a
+                // mask that isn't quite at the source dimensions.
+                let scaleX = extent.width / placed.extent.width
+                let scaleY = extent.height / placed.extent.height
+                placed = placed.transformed(by: CGAffineTransform(scaleX: scaleX, y: scaleY))
+            }
             if let existing = unionMask {
                 let combine = CIFilter.maximumCompositing()
                 combine.inputImage = placed

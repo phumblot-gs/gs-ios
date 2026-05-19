@@ -63,27 +63,21 @@ enum SubjectMaskGridBuilder {
                   bitmapInfo: CGImageAlphaInfo.none.rawValue
               ) else { return .empty }
 
-        // Rasterize each subject's mask at its bounding-box location.
-        // Bounding box origin is top-left in normalized image space;
-        // CGContext drawing coords are bottom-left, so flip the
-        // bounding-box Y when computing the destination rect.
-        // `CGContext.draw(_:in:)` preserves the image's natural
-        // orientation and the bitmap memory is top-down — so a single
-        // straight draw lands the subject at the correct memory rows
-        // (no need for an explicit scaleBy(y: -1), which would put
-        // the mask upside-down in memory).
+        // Each `subject.mask` is full-image-sized (white inside the
+        // silhouette, black elsewhere — see
+        // `generateScaledMaskForImage`). Drawing it at the full grid
+        // rect scales the whole thing down to the grid resolution
+        // while preserving the silhouette's spatial position. The
+        // `boundingBox` on the subject is informational and we don't
+        // need it here — using it as the destination rect would
+        // squash the silhouette by an extra factor, which is the bug
+        // we fixed by moving back to a full-rect draw.
         context.setFillColor(gray: 0, alpha: 1)
         context.fill(CGRect(x: 0, y: 0, width: w, height: h))
         context.setBlendMode(.lighten)
+        let fullRect = CGRect(x: 0, y: 0, width: w, height: h)
         for subject in subjects {
-            let box = subject.boundingBox
-            let rect = CGRect(
-                x: box.minX * CGFloat(w),
-                y: CGFloat(h) - (box.maxY * CGFloat(h)),
-                width: box.width * CGFloat(w),
-                height: box.height * CGFloat(h)
-            )
-            context.draw(subject.mask, in: rect)
+            context.draw(subject.mask, in: fullRect)
         }
 
         guard let buffer = context.data else { return .empty }
