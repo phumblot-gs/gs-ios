@@ -2197,6 +2197,66 @@
           }
         }
       }
+    },
+    "Save category" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enregistrer la catégorie"
+          }
+        }
+      }
+    },
+    "Point %lld — hold steady, or tap anywhere to lock." : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Point %lld — tiens immobile, ou touche l'écran pour figer."
+          }
+        }
+      }
+    },
+    "All measurements captured." : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Toutes les mesures sont capturées."
+          }
+        }
+      }
+    },
+    "%lld point(s)" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld point(s)"
+          }
+        }
+      }
+    },
+    "The captured photo will become the category's illustration after you've taken the test measurements." : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La photo capturée deviendra l'illustration de la catégorie après que tu auras pris les mesures du produit test."
+          }
+        }
+      }
+    },
+    "List the dimensions you want to capture. At the next step you'll place the points for each measurement on the test product — the number of points you place becomes the schema for this category." : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Liste les dimensions à capturer. À l'étape suivante, tu placeras les points de chaque mesure sur le produit test — le nombre de points placés devient le schéma de cette catégorie."
+          }
+        }
+      }
     }
   },
   "version" : "1.1"

@@ -6,24 +6,27 @@ import GSAPIClient
 /// Overlay for the placement step. Sits on top of the live AR view and
 /// drives the user through each measurement: the center reticle locks
 /// when the device is held steady on a surface, and the bottom panel
-/// keeps a running list of captured measurements with per-measurement
-/// "redo" buttons.
+/// shows the captured measurements with their current point count.
 ///
 /// Lock logic:
-///   - Each measurement needs N points (today: 2).
-///   - On lock, the world point is appended to the current measurement.
-///   - When the current measurement reaches the target count, we
-///     auto-advance to the next incomplete measurement.
-///   - "Redo" clears a measurement's points and makes it current.
+///   - On lock, the world point is appended to the *current*
+///     measurement. The user decides how many points to place per
+///     measurement (≥ 2) — there is no auto-advance.
+///   - Tap a measurement chip to switch focus. Existing points on
+///     other measurements are preserved.
+///   - The finalize button at the bottom (label provided by the
+///     caller) is enabled once every measurement has ≥ 2 points.
 struct MeasureFlowPlacingOverlay: View {
     let settings: DevSettings
     @ObservedObject var coordinator: MeasureFlowCoordinator
-    let category: MeasureCategory
+    let categoryName: String
     let referenceFrame: CapturedFrame
     let includedSubjects: [DetectedSubject]
     @Binding var captures: [MeasurementCapture]
+    let finalizeButtonTitle: LocalizedStringKey
+    let finalizeButtonIcon: String
     let onCancel: () -> Void
-    let onValidated: () -> Void
+    let onFinalize: () -> Void
 
     @State private var currentIndex: Int = 0
     @State private var pulseLock = false
@@ -34,7 +37,7 @@ struct MeasureFlowPlacingOverlay: View {
     @State private var topSafeArea: CGFloat = 0
     @State private var bottomSafeArea: CGFloat = 0
 
-    private let pointsPerMeasurement = 2
+    private let minimumPointsPerMeasurement = 2
 
     var body: some View {
         // The reticle sits at the geometric centre of the screen, so
@@ -143,7 +146,7 @@ struct MeasureFlowPlacingOverlay: View {
                     .background(.black.opacity(0.5), in: Circle())
             }
             Spacer()
-            Text(category.name)
+            Text(categoryName)
                 .font(.headline)
                 .foregroundStyle(.white)
                 .padding(.horizontal, 12)
@@ -201,23 +204,27 @@ struct MeasureFlowPlacingOverlay: View {
     private var currentMeasurementBanner: some View {
         if let current = currentMeasurement {
             let placed = current.worldPoints.count
-            let needed = pointsPerMeasurement
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(current.templateName)
                         .font(.headline)
-                    if placed < needed {
-                        Text("Point \(placed + 1) of \(needed) — hold steady, or tap anywhere to lock.")
+                    if placed < minimumPointsPerMeasurement {
+                        Text("Point \(placed + 1) — hold steady, or tap anywhere to lock.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     } else {
-                        Text(formatted(meters: current.meters))
-                            .font(.caption.monospacedDigit())
-                            .foregroundStyle(.green)
+                        HStack(spacing: 6) {
+                            Text(formatted(meters: current.meters))
+                                .font(.caption.monospacedDigit())
+                                .foregroundStyle(.green)
+                            Text("· \(placed) points")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
                 Spacer()
-                if placed >= needed {
+                if placed >= minimumPointsPerMeasurement {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundStyle(.green)
                 }
@@ -225,7 +232,7 @@ struct MeasureFlowPlacingOverlay: View {
         } else {
             HStack {
                 Image(systemName: "checkmark.seal.fill").foregroundStyle(.green)
-                Text("All measurements captured. Validate to review.")
+                Text("All measurements captured.")
                     .font(.subheadline)
             }
         }
@@ -236,7 +243,7 @@ struct MeasureFlowPlacingOverlay: View {
             HStack(spacing: 8) {
                 ForEach(captures.indices, id: \.self) { idx in
                     Button {
-                        redo(at: idx)
+                        selectMeasurement(at: idx)
                     } label: {
                         measurementChip(idx)
                     }
@@ -251,9 +258,9 @@ struct MeasureFlowPlacingOverlay: View {
         let capture = captures[idx]
         let isCurrent = idx == currentIndex
         let placed = capture.worldPoints.count
-        let needed = pointsPerMeasurement
+        let isReady = placed >= minimumPointsPerMeasurement
         return HStack(spacing: 6) {
-            if capture.isComplete {
+            if isReady {
                 Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
             } else if placed > 0 {
                 Image(systemName: "\(placed).circle").foregroundStyle(.orange)
@@ -262,12 +269,12 @@ struct MeasureFlowPlacingOverlay: View {
             }
             VStack(alignment: .leading, spacing: 0) {
                 Text(capture.templateName).font(.caption.weight(.semibold))
-                if capture.isComplete {
+                if isReady {
                     Text(formatted(meters: capture.meters))
                         .font(.caption2.monospacedDigit())
                         .foregroundStyle(.secondary)
                 } else {
-                    Text("\(placed)/\(needed)")
+                    Text("\(placed) point(s)")
                         .font(.caption2.monospacedDigit())
                         .foregroundStyle(.tertiary)
                 }
@@ -297,13 +304,13 @@ struct MeasureFlowPlacingOverlay: View {
             .disabled(!canUndo)
 
             Button {
-                onValidated()
+                onFinalize()
             } label: {
-                Label("Validate", systemImage: "checkmark.circle.fill")
+                Label(finalizeButtonTitle, systemImage: finalizeButtonIcon)
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
-            .disabled(!allComplete)
+            .disabled(!allReady)
         }
         .controlSize(.large)
     }
@@ -318,8 +325,12 @@ struct MeasureFlowPlacingOverlay: View {
         captures.indices.contains(currentIndex) && !captures[currentIndex].worldPoints.isEmpty
     }
 
-    private var allComplete: Bool {
-        !captures.isEmpty && captures.allSatisfy(\.isComplete)
+    /// All measurements have at least the minimum point count (2).
+    /// Variable point counts beyond that are encouraged — the user
+    /// might want 3 or 4 points for a curved measurement.
+    private var allReady: Bool {
+        !captures.isEmpty
+            && captures.allSatisfy { $0.worldPoints.count >= minimumPointsPerMeasurement }
     }
 
     // MARK: - Actions
@@ -328,32 +339,23 @@ struct MeasureFlowPlacingOverlay: View {
         guard captures.indices.contains(currentIndex) else { return }
         captures[currentIndex].worldPoints.append(world)
         triggerLockPulse()
-        if captures[currentIndex].worldPoints.count >= pointsPerMeasurement {
-            advanceToNextIncomplete()
-        }
+        // No auto-advance — the user signals "done with this
+        // measurement" by tapping a different chip. Variable point
+        // counts are first-class.
     }
 
     private func advanceToFirstIncomplete() {
-        if let idx = captures.firstIndex(where: { !$0.isComplete }) {
+        if let idx = captures.firstIndex(where: { $0.worldPoints.count < minimumPointsPerMeasurement }) {
             currentIndex = idx
         }
     }
 
-    private func advanceToNextIncomplete() {
-        let searchFrom = currentIndex + 1
-        if let idx = captures[searchFrom...].firstIndex(where: { !$0.isComplete }) {
-            currentIndex = idx
-        } else if let idx = captures.firstIndex(where: { !$0.isComplete }) {
-            currentIndex = idx
-        } else {
-            // All complete — stay on the last index but reticle stays
-            // active so the user can still trigger a redo manually.
-        }
-        coordinator.startReticle()   // reset the stability tracker
-    }
-
-    private func redo(at idx: Int) {
-        captures[idx].worldPoints = []
+    /// Switches focus to the tapped measurement chip. Crucially does
+    /// NOT clear the destination measurement's points — the user can
+    /// hop between measurements freely and come back to add more.
+    /// To clear, use Undo on the current measurement.
+    private func selectMeasurement(at idx: Int) {
+        guard captures.indices.contains(idx), idx != currentIndex else { return }
         currentIndex = idx
         coordinator.startReticle()
     }

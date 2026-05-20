@@ -1,27 +1,25 @@
 #if os(iOS)
 import SwiftUI
-import SwiftData
 import GSAPIClient
 
-/// Form to define a brand-new `MeasureCategory` using the captured frame
-/// as the example. The user names the category and lists the
-/// measurements they want to capture for it (e.g. "manche", "buste",
-/// "hauteur"). Each measurement is just a semantic name — the number of
-/// points placed for it is decided at capture time.
-struct MeasureCategoryCreateView: View {
-    let settings: DevSettings
+/// In-flow naming step for the category creation pipeline. Collects
+/// name + optional code + optional GS link + a list of measurement
+/// names. Emits a `CategoryDraft` so the calling flow can move to the
+/// placement step, where the user will determine each measurement's
+/// point count by actually placing points on the "test" product.
+///
+/// The category isn't persisted yet — saving happens at the end of
+/// the placement step, when we also know each template's pointCount
+/// and can stamp the illustration onto the category.
+struct MeasureCategoryNamingView: View {
     let capturedFrame: CapturedFrame
-    let newEmbedding: Data?
-    let onCreated: @MainActor (MeasureCategory) -> Void
-
-    @Environment(\.modelContext) private var modelContext
-    @Environment(\.dismiss) private var dismiss
+    let onContinue: @MainActor (CategoryDraft) -> Void
+    let onCancel: @MainActor () -> Void
 
     @State private var name: String = ""
     @State private var code: String = ""
     @State private var gsCategoryID: Int?
     @State private var measurements: [MeasurementDraft] = [MeasurementDraft.blank]
-    @State private var isSaving = false
 
     private struct MeasurementDraft: Identifiable {
         let id = UUID()
@@ -41,20 +39,16 @@ struct MeasureCategoryCreateView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
-                Button("Cancel") { dismiss() }
+                Button("Cancel") { onCancel() }
             }
             ToolbarItem(placement: .topBarTrailing) {
-                if isSaving {
-                    ProgressView()
-                } else {
-                    Button("Create") { save() }
-                        .disabled(!canSave)
-                }
+                Button("Continue") { continueToPlacement() }
+                    .disabled(!canContinue)
             }
         }
     }
 
-    private var canSave: Bool {
+    private var canContinue: Bool {
         guard !name.trimmingCharacters(in: .whitespaces).isEmpty else { return false }
         let valid = measurements.filter { !$0.name.trimmingCharacters(in: .whitespaces).isEmpty }
         return !valid.isEmpty
@@ -70,7 +64,7 @@ struct MeasureCategoryCreateView: View {
                 .frame(maxHeight: 180)
                 .cornerRadius(12)
         } footer: {
-            Text("This image becomes the visual reference for this category. Future captures matching it will suggest this category automatically.")
+            Text("The captured photo will become the category's illustration after you've taken the test measurements.")
         }
     }
 
@@ -94,7 +88,7 @@ struct MeasureCategoryCreateView: View {
         } header: {
             Text("Grand Shooting link")
         } footer: {
-            Text("Optional. Linking this category to a Grand Shooting one lets the app cross-check the link at startup.")
+            Text("Optional. Links this category to a Grand Shooting catalog category so the app can cross-check the link at startup.")
         }
     }
 
@@ -115,39 +109,35 @@ struct MeasureCategoryCreateView: View {
         } header: {
             Text("Measurements")
         } footer: {
-            Text("List the dimensions you want to capture for this category. At capture time you'll place 2 or more points per measurement; the distance is the sum of the segments.")
+            Text("List the dimensions you want to capture. At the next step you'll place the points for each measurement on the test product — the number of points you place becomes the schema for this category.")
         }
     }
 
-    // MARK: - Save
+    // MARK: - Continue
 
-    private func save() {
-        isSaving = true
+    private func continueToPlacement() {
         let trimmedCode = code.trimmingCharacters(in: .whitespaces)
-        let category = MeasureCategory(
+        let names = measurements
+            .map { $0.name.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        let draft = CategoryDraft(
             name: name.trimmingCharacters(in: .whitespaces),
             code: trimmedCode.isEmpty ? nil : trimmedCode,
             gsCategoryID: gsCategoryID,
-            imageEmbedding: newEmbedding,
-            exampleImageData: capturedFrame.image.jpegData(compressionQuality: 0.8)
+            measurementNames: names
         )
-        modelContext.insert(category)
-        var order = 0
-        for draft in measurements {
-            let cleanName = draft.name.trimmingCharacters(in: .whitespaces)
-            guard !cleanName.isEmpty else { continue }
-            let template = MeasurementTemplate(name: cleanName, order: order)
-            template.category = category
-            modelContext.insert(template)
-            order += 1
-        }
-        do {
-            try modelContext.save()
-            onCreated(category)
-        } catch {
-            print("[MeasureCategoryCreateView] save failed: \(error)")
-        }
-        isSaving = false
+        onContinue(draft)
     }
+}
+
+/// In-flight category description awaiting persistence. Created by
+/// `MeasureCategoryNamingView`; consumed by the placement step which
+/// then assembles the actual `MeasureCategory` once each template's
+/// pointCount is known.
+struct CategoryDraft: Sendable {
+    let name: String
+    let code: String?
+    let gsCategoryID: Int?
+    let measurementNames: [String]
 }
 #endif

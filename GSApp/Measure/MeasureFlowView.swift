@@ -8,22 +8,22 @@ import GSAPIClient
 /// step so world coordinates captured during point placement stay
 /// registered with the reference photo's `cameraTransform`.
 ///
-/// Steps:
-///   1. `.capturing` — live AR preview + shutter.
-///   2. `.editing`   — frozen photo with subject masks; user picks
-///                     which object(s) to keep.
-///   3. `.picking`   — choose / create the local category.
-///   4. `.placing`   — live AR with reticle; user aims the device at
-///                     each point and the stability tracker locks
-///                     them automatically.
-///   5. `.summary`   — cutout photo + reprojected segments + save.
+/// Two flow modes depending on `attachedTo`:
+///
+/// **Creation flow** (attachedTo == nil — launched from the Measures
+/// tab "+"):
+///   1. `.capturing` → 2. `.editing` → 3. `.naming` →
+///   4. `.placing` (variable points) → save the new category.
+///
+/// **Reference-bound flow** (attachedTo != nil — launched from a
+/// reference detail page):
+///   1. `.capturing` → 2. `.editing` →
+///   3. auto-match the GS category to a local one, otherwise
+///      `.picking` (search-only) → 4. `.placing` (fixed point
+///      counts from the chosen category) → 5. `.summary` (attach to
+///      the reference).
 struct MeasureFlowView: View {
     let settings: DevSettings
-    /// Optional bound reference. When set, the flow auto-attaches the
-    /// captured measurements to this reference at validation (no
-    /// scanner sheet), and tries to pre-select the local category by
-    /// matching `reference.categoryID` against
-    /// `MeasureCategory.gsCategoryID`.
     let attachedTo: Reference?
     let onDone: @MainActor () -> Void
 
@@ -34,6 +34,7 @@ struct MeasureFlowView: View {
     @State private var capturedFrame: CapturedFrame?
     @State private var subjects: [DetectedSubject] = []
     @State private var category: MeasureCategory?
+    @State private var categoryDraft: CategoryDraft?
     @State private var captures: [MeasurementCapture] = []
 
     @State private var isDetecting = false
@@ -42,9 +43,10 @@ struct MeasureFlowView: View {
     enum Step: Equatable {
         case capturing
         case editing
-        case picking
+        case naming    // creation flow only
+        case picking   // reference-bound flow only
         case placing
-        case summary
+        case summary   // reference-bound flow only
     }
 
     private var showsLive: Bool {
@@ -74,6 +76,7 @@ struct MeasureFlowView: View {
         switch step {
         case .capturing: capturingOverlay
         case .editing:   editingOverlay
+        case .naming:    namingOverlay
         case .picking:   pickingOverlay
         case .placing:   placingOverlay
         case .summary:   summaryOverlay
@@ -144,40 +147,40 @@ struct MeasureFlowView: View {
         }
     }
 
-    // MARK: - Step 3: Picking category
+    // MARK: - Step 3a: Naming (creation flow only)
+
+    @ViewBuilder
+    private var namingOverlay: some View {
+        if let capturedFrame {
+            NavigationStack {
+                MeasureCategoryNamingView(
+                    capturedFrame: capturedFrame,
+                    onContinue: { draft in
+                        categoryDraft = draft
+                        startPlacementForDraft(draft)
+                    },
+                    onCancel: { onDone() }
+                )
+            }
+            .background(Color(.systemBackground).ignoresSafeArea())
+        }
+    }
+
+    // MARK: - Step 3b: Picking (reference-bound flow only)
 
     @ViewBuilder
     private var pickingOverlay: some View {
-        if let capturedFrame {
-            if attachedTo != nil {
-                NavigationStack {
-                    MeasureCategorySearchPickerView(
-                        onSelected: { pickedCategory in
-                            category = pickedCategory
-                            startPlacement(for: pickedCategory)
-                        },
-                        onCancel: { retake() }
-                    )
-                }
-                .background(Color(.systemBackground).ignoresSafeArea())
-            } else {
-                NavigationStack {
-                    MeasureCategoryPickerView(
-                        settings: settings,
-                        frame: capturedFrame,
-                        includedSubjects: subjects
-                    ) { pickedCategory, _ in
+        if capturedFrame != nil {
+            NavigationStack {
+                MeasureCategorySearchPickerView(
+                    onSelected: { pickedCategory in
                         category = pickedCategory
                         startPlacement(for: pickedCategory)
-                    }
-                    .toolbar {
-                        ToolbarItem(placement: .topBarLeading) {
-                            Button("Retake") { retake() }
-                        }
-                    }
-                }
-                .background(Color(.systemBackground).ignoresSafeArea())
+                    },
+                    onCancel: { onDone() }
+                )
             }
+            .background(Color(.systemBackground).ignoresSafeArea())
         }
     }
 
@@ -185,20 +188,28 @@ struct MeasureFlowView: View {
 
     private var placingOverlay: some View {
         Group {
-            if let category, let capturedFrame {
+            if let capturedFrame {
+                let title = category?.name ?? categoryDraft?.name ?? ""
+                let isCreating = categoryDraft != nil
                 MeasureFlowPlacingOverlay(
                     settings: settings,
                     coordinator: coordinator,
-                    category: category,
+                    categoryName: title,
                     referenceFrame: capturedFrame,
                     includedSubjects: subjects,
                     captures: $captures,
+                    finalizeButtonTitle: isCreating ? "Save category" : "Validate",
+                    finalizeButtonIcon: isCreating ? "square.and.arrow.down.fill" : "checkmark.circle.fill",
                     // X dismisses the whole flow back to whoever
                     // launched it (reference detail or measures tab).
-                    // Not the picker step — landing on a category
-                    // list the user wasn't navigating to is confusing.
                     onCancel: { onDone() },
-                    onValidated: { step = .summary }
+                    onFinalize: {
+                        if isCreating {
+                            saveNewCategory()
+                        } else {
+                            step = .summary
+                        }
+                    }
                 )
             }
         }
@@ -262,11 +273,14 @@ struct MeasureFlowView: View {
         capturedFrame = nil
         subjects = []
         category = nil
+        categoryDraft = nil
         captures = []
         detectionError = nil
         step = .capturing
     }
 
+    /// Reference-bound only — uses an EXISTING category's templates
+    /// (including their `pointCount`) to seed the captures.
     private func startPlacement(for category: MeasureCategory) {
         captures = category.templates
             .sorted(by: { $0.order < $1.order })
@@ -274,11 +288,28 @@ struct MeasureFlowView: View {
         step = .placing
     }
 
-    /// After the editing step, decide whether to surface the category
-    /// picker or go straight to placement. Reference-bound mode skips
-    /// the picker when the reference's GS category resolves to exactly
-    /// one local MeasureCategory.
+    /// Creation flow — seeds the captures from the user-entered
+    /// measurement names. `pointCount` for each template is unknown
+    /// at this point; it'll be set on save from the worldPoints count.
+    private func startPlacementForDraft(_ draft: CategoryDraft) {
+        captures = draft.measurementNames.enumerated().map { idx, name in
+            MeasurementCapture(templateName: name, order: idx, worldPoints: [])
+        }
+        category = nil
+        step = .placing
+    }
+
+    /// After the editing step, route based on whether we're in
+    /// creation or reference-bound mode. Creation goes to `.naming`
+    /// to collect category + measurement names. Reference-bound
+    /// tries to auto-match an existing local category from the
+    /// reference's GS category_id; failing that, falls back to a
+    /// search-only picker over existing local categories.
     private func advancePastEditing() {
+        if attachedTo == nil {
+            step = .naming
+            return
+        }
         if let auto = autoMatchedCategory() {
             category = auto
             startPlacement(for: auto)
@@ -297,6 +328,45 @@ struct MeasureFlowView: View {
         // most recently created — newer schemas typically reflect the
         // latest measurement requirements.
         return matches.sorted(by: { $0.createdAt > $1.createdAt }).first
+    }
+
+    /// Save the new category at the end of the creation flow. Builds
+    /// the illustration image (subject cutout + segments) and saves
+    /// it as the category's `exampleImageData`, plus the
+    /// `MeasurementTemplate`s with their pointCount from what the
+    /// user actually placed.
+    private func saveNewCategory() {
+        guard let draft = categoryDraft, let capturedFrame else { return }
+        let cutout = MeasureSubjectCutout.make(frame: capturedFrame, includedSubjects: subjects)
+        let illustration = MeasureIllustration.render(
+            cutout: cutout,
+            frame: capturedFrame,
+            captures: captures
+        )
+        let illustrationData = illustration.jpegData(compressionQuality: 0.8)
+        let newCategory = MeasureCategory(
+            name: draft.name,
+            code: draft.code,
+            gsCategoryID: draft.gsCategoryID,
+            imageEmbedding: nil,
+            exampleImageData: illustrationData
+        )
+        modelContext.insert(newCategory)
+        for (idx, capture) in captures.enumerated() {
+            let template = MeasurementTemplate(
+                name: capture.templateName,
+                order: idx,
+                pointCount: capture.worldPoints.count
+            )
+            template.category = newCategory
+            modelContext.insert(template)
+        }
+        do {
+            try modelContext.save()
+        } catch {
+            print("[MeasureFlowView] save failed: \(error)")
+        }
+        onDone()
     }
 }
 
