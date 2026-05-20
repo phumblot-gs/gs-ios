@@ -206,7 +206,7 @@ final class MeasureFlowCoordinator: NSObject, ObservableObject {
     }
 
     private static func makePointMarker(at world: SIMD3<Float>, material: UnlitMaterial) -> ModelEntity {
-        let mesh = MeshResource.generateSphere(radius: 0.006)
+        let mesh = MeshResource.generateSphere(radius: 0.0035)
         let entity = ModelEntity(mesh: mesh, materials: [material])
         entity.transform = Transform(translation: world)
         return entity
@@ -219,7 +219,7 @@ final class MeasureFlowCoordinator: NSObject, ObservableObject {
     ) -> ModelEntity {
         let length = simd_distance(a, b)
         let midpoint = (a + b) / 2
-        let mesh = MeshResource.generateCylinder(height: length, radius: 0.0025)
+        let mesh = MeshResource.generateCylinder(height: length, radius: 0.001)
         let entity = ModelEntity(mesh: mesh, materials: [material])
         // Cylinder mesh is generated along the Y axis. Rotate so it
         // points from `a` to `b`; `simd_quatf(from:to:)` builds the
