@@ -75,6 +75,18 @@ final class MeasureFlowCoordinator: NSObject, ObservableObject {
     // moves around to place the next point.
     private var measurementOverlayAnchor: AnchorEntity?
 
+    // "Z-guide" placement constraint. When active, the next world
+    // point is projected onto a vertical plane passing through the
+    // anchor with normal = horizontal direction the camera was
+    // facing when the guide was enabled. The reticle then slides
+    // "along the plane", which is the right tool to measure heights
+    // and edges on volumetric products.
+    enum GuideMode { case off, zAxis }
+    @Published private(set) var guideMode: GuideMode = .off
+    private var guideAnchor: SIMD3<Float>?
+    private var guidePlaneNormal: SIMD3<Float>?
+    private var guideLineAnchor: AnchorEntity?
+
     private let lockSoundID: SystemSoundID = 1113   // "Begin Recording"
 
     // MARK: - Lifecycle
@@ -210,6 +222,74 @@ final class MeasureFlowCoordinator: NSObject, ObservableObject {
         return entity
     }
 
+    /// Enable the Z-guide constraint. Captures the current camera's
+    /// horizontal forward direction as the plane normal so the plane
+    /// is roughly facing the user — exactly the "vertical slice in
+    /// front of me" the user wants when measuring heights. Re-call
+    /// this each time the anchor changes (e.g. after a new lock) to
+    /// keep the visual line in sync.
+    func enableZGuide(anchor: SIMD3<Float>) {
+        guard let arView, let frame = arView.session.currentFrame else { return }
+        // ARKit's camera transform stores `back` in column 2; the
+        // forward direction is therefore the negated column 2.
+        let cameraForward = -SIMD3<Float>(
+            frame.camera.transform.columns.2.x,
+            frame.camera.transform.columns.2.y,
+            frame.camera.transform.columns.2.z
+        )
+        var horizontal = SIMD3<Float>(cameraForward.x, 0, cameraForward.z)
+        let len = simd_length(horizontal)
+        // If the camera is pointed straight up/down, the horizontal
+        // component is zero — keep whatever direction we already had.
+        if len > 0.01 {
+            horizontal /= len
+            guidePlaneNormal = horizontal
+        }
+        guideAnchor = anchor
+        guideMode = .zAxis
+        installGuideLine(at: anchor)
+    }
+
+    func disableGuide() {
+        guideMode = .off
+        guideAnchor = nil
+        guidePlaneNormal = nil
+        removeGuideLine()
+    }
+
+    private func installGuideLine(at anchor: SIMD3<Float>) {
+        guard let arView else { return }
+        removeGuideLine()
+        let mesh = MeshResource.generateCylinder(height: 0.6, radius: 0.0015)
+        var mat = UnlitMaterial()
+        mat.color = .init(tint: .systemBlue)
+        mat.blending = .transparent(opacity: .init(floatLiteral: 0.75))
+        let entity = ModelEntity(mesh: mesh, materials: [mat])
+        entity.transform = Transform(translation: anchor)
+        let container = AnchorEntity(world: .zero)
+        container.addChild(entity)
+        arView.scene.addAnchor(container)
+        guideLineAnchor = container
+    }
+
+    private func removeGuideLine() {
+        guideLineAnchor?.removeFromParent()
+        guideLineAnchor = nil
+    }
+
+    /// Apply the Z-guide plane projection if active. The plane passes
+    /// through `guideAnchor` with `guidePlaneNormal` as its (horizontal)
+    /// normal; the projected point is the closest point in that plane
+    /// to the input world position.
+    private func applyGuideConstraint(to world: SIMD3<Float>) -> SIMD3<Float> {
+        guard guideMode == .zAxis,
+              let anchor = guideAnchor,
+              let normal = guidePlaneNormal else { return world }
+        let delta = world - anchor
+        let distanceAlongNormal = simd_dot(delta, normal)
+        return world - distanceAlongNormal * normal
+    }
+
     /// Manually force-lock the current reticle position. Triggered by
     /// tap-anywhere-on-screen so the user can commit a point without
     /// waiting for the stability ring to top up — the act of tapping
@@ -290,7 +370,12 @@ final class MeasureFlowCoordinator: NSObject, ObservableObject {
             return
         }
 
-        let surface = classifySurface(world: raw.world)
+        // Z-guide projection happens before classification and
+        // stability so every downstream step sees the constrained
+        // position. With guide off this is a no-op.
+        let world = applyGuideConstraint(to: raw.world)
+
+        let surface = classifySurface(world: world)
         transitionSurface(to: surface)
 
         switch surface {
@@ -298,9 +383,9 @@ final class MeasureFlowCoordinator: NSObject, ObservableObject {
             // Reticle is on a depthful surface but not on the kept
             // subject — keep the 3D disc visible (red) so the user
             // sees where they're aiming, but freeze the stability ring.
-            updateReticleTransform(world: raw.world, normal: raw.normal, color: .systemRed)
+            updateReticleTransform(world: world, normal: raw.normal, color: .systemRed)
             reticleDisc?.isEnabled = true
-            reticleState = ReticleState(worldPosition: raw.world, surface: .offTarget, stability: 0)
+            reticleState = ReticleState(worldPosition: world, surface: .offTarget, stability: 0)
             return
         case .onSubject:
             stability.setProfile(.subject)
@@ -308,8 +393,8 @@ final class MeasureFlowCoordinator: NSObject, ObservableObject {
             stability.setProfile(.edge)
         }
 
-        let (score, locked) = stability.observe(position: raw.world)
-        let displayedPos = stability.averagedPosition ?? raw.world
+        let (score, locked) = stability.observe(position: world)
+        let displayedPos = stability.averagedPosition ?? world
         let color: UIColor = surface == .onEdge ? .systemYellow : .white
         updateReticleTransform(world: displayedPos, normal: raw.normal, color: color)
         reticleDisc?.isEnabled = true

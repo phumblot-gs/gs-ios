@@ -2259,6 +2259,26 @@
           }
         }
       }
+    },
+    "Enable Z guide" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Activer le guide Z"
+          }
+        }
+      }
+    },
+    "Disable Z guide" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Désactiver le guide Z"
+          }
+        }
+      }
     }
   },
   "version" : "1.1"

@@ -36,6 +36,7 @@ struct MeasureFlowPlacingOverlay: View {
     @State private var showReprojectionDebug = false
     @State private var topSafeArea: CGFloat = 0
     @State private var bottomSafeArea: CGFloat = 0
+    @State private var guideEnabled: Bool = false
 
     private let minimumPointsPerMeasurement = 2
 
@@ -110,6 +111,7 @@ struct MeasureFlowPlacingOverlay: View {
             coordinator.stopReticle()
             coordinator.onLock = nil
             coordinator.syncMeasurementOverlay(captures: [])
+            coordinator.disableGuide()
         }
         .onChange(of: captures) { _, newValue in
             coordinator.syncMeasurementOverlay(captures: newValue)
@@ -204,7 +206,10 @@ struct MeasureFlowPlacingOverlay: View {
     private var currentMeasurementBanner: some View {
         if let current = currentMeasurement {
             let placed = current.worldPoints.count
-            HStack {
+            HStack(spacing: 10) {
+                if placed >= 1 {
+                    guideButton
+                }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(current.templateName)
                         .font(.headline)
@@ -236,6 +241,32 @@ struct MeasureFlowPlacingOverlay: View {
                     .font(.subheadline)
             }
         }
+    }
+
+    /// Toggles the Z-axis guide constraint. The button is only
+    /// surfaced once the current measurement has its first point
+    /// (the guide needs an anchor). When on, the next world point is
+    /// projected onto a vertical plane through the previous point —
+    /// the right tool for height-style measurements on volumetric
+    /// products.
+    private var guideButton: some View {
+        Button {
+            toggleGuide()
+        } label: {
+            Text("Z")
+                .font(.headline.weight(.bold))
+                .frame(width: 34, height: 34)
+                .foregroundStyle(guideEnabled ? .white : .primary)
+                .background(
+                    Circle().fill(
+                        guideEnabled
+                            ? Color.accentColor
+                            : Color.secondary.opacity(0.18)
+                    )
+                )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(guideEnabled ? "Disable Z guide" : "Enable Z guide")
     }
 
     private var measurementsList: some View {
@@ -339,6 +370,10 @@ struct MeasureFlowPlacingOverlay: View {
         guard captures.indices.contains(currentIndex) else { return }
         captures[currentIndex].worldPoints.append(world)
         triggerLockPulse()
+        // Reanchor the guide to the freshly-locked point so the
+        // visual line follows along (and chains of vertical points
+        // stay aligned). With guide off this is a no-op.
+        syncGuideState()
         // No auto-advance — the user signals "done with this
         // measurement" by tapping a different chip. Variable point
         // counts are first-class.
@@ -357,6 +392,9 @@ struct MeasureFlowPlacingOverlay: View {
     private func selectMeasurement(at idx: Int) {
         guard captures.indices.contains(idx), idx != currentIndex else { return }
         currentIndex = idx
+        // Each measurement has its own guide state — reset on switch.
+        guideEnabled = false
+        coordinator.disableGuide()
         coordinator.startReticle()
     }
 
@@ -364,7 +402,30 @@ struct MeasureFlowPlacingOverlay: View {
         guard captures.indices.contains(currentIndex) else { return }
         if !captures[currentIndex].worldPoints.isEmpty {
             captures[currentIndex].worldPoints.removeLast()
+            // Re-anchor on the new last point (or drop the guide if
+            // we just removed the last anchor candidate).
+            if captures[currentIndex].worldPoints.isEmpty {
+                guideEnabled = false
+                coordinator.disableGuide()
+            } else {
+                syncGuideState()
+            }
             coordinator.startReticle()
+        }
+    }
+
+    private func toggleGuide() {
+        guideEnabled.toggle()
+        syncGuideState()
+    }
+
+    private func syncGuideState() {
+        if guideEnabled,
+           let current = currentMeasurement,
+           let last = current.worldPoints.last {
+            coordinator.enableZGuide(anchor: last)
+        } else {
+            coordinator.disableGuide()
         }
     }
 
