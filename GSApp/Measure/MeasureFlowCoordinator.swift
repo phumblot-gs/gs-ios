@@ -87,6 +87,15 @@ final class MeasureFlowCoordinator: NSObject, ObservableObject {
     private var guidePlaneNormal: SIMD3<Float>?
     private var guideLineAnchor: AnchorEntity?
 
+    // Horizontal planes ARKit has detected. Used to snap the descending
+    // reticle to the "support" (the table under the product) when the
+    // Z-guide is on — so the user can drop the second endpoint of a
+    // height measurement directly onto the table without having to
+    // hold the device perfectly still at table level.
+    private var horizontalPlanes: [UUID: ARPlaneAnchor] = [:]
+    private var wasSnappedToSupport = false
+    private let supportSnapDistance: Float = 0.02   // 2 cm
+
     private let lockSoundID: SystemSoundID = 1113   // "Begin Recording"
 
     // MARK: - Lifecycle
@@ -254,6 +263,7 @@ final class MeasureFlowCoordinator: NSObject, ObservableObject {
         guideMode = .off
         guideAnchor = nil
         guidePlaneNormal = nil
+        wasSnappedToSupport = false
         removeGuideLine()
     }
 
@@ -288,6 +298,43 @@ final class MeasureFlowCoordinator: NSObject, ObservableObject {
         let delta = world - anchor
         let distanceAlongNormal = simd_dot(delta, normal)
         return world - distanceAlongNormal * normal
+    }
+
+    /// Highest detected horizontal-plane altitude that's still below
+    /// the Z-guide anchor — the "support" the user wants to snap to
+    /// when measuring heights. Returns nil if no plane has been
+    /// detected yet or none lies below the anchor.
+    private func supportAltitudeBelowAnchor() -> Float? {
+        guard let anchor = guideAnchor else { return nil }
+        var best: Float?
+        for plane in horizontalPlanes.values {
+            let centerWorld = plane.transform * SIMD4<Float>(
+                plane.center.x, plane.center.y, plane.center.z, 1
+            )
+            let altitude = centerWorld.y
+            // The plane must be below the anchor by a margin — a
+            // plane "at" the anchor level is almost certainly the top
+            // face of the product, not the table.
+            if altitude > anchor.y - 0.02 { continue }
+            if best == nil || altitude > best! { best = altitude }
+        }
+        return best
+    }
+
+    /// Snap the guide-constrained world point onto the support
+    /// altitude when it descends into the snap zone. Returns the
+    /// (possibly snapped) world point and whether the snap engaged
+    /// — the caller uses that flag to color the disc and emit a
+    /// haptic on the snap-entry transition.
+    private func applySupportSnap(to world: SIMD3<Float>) -> (world: SIMD3<Float>, snapped: Bool) {
+        guard guideMode == .zAxis,
+              let supportY = supportAltitudeBelowAnchor() else {
+            return (world, false)
+        }
+        if abs(world.y - supportY) <= supportSnapDistance {
+            return (SIMD3<Float>(world.x, supportY, world.z), true)
+        }
+        return (world, false)
     }
 
     /// Manually force-lock the current reticle position. Triggered by
@@ -373,12 +420,29 @@ final class MeasureFlowCoordinator: NSObject, ObservableObject {
         // Z-guide projection happens before classification and
         // stability so every downstream step sees the constrained
         // position. With guide off this is a no-op.
-        let world = applyGuideConstraint(to: raw.world)
+        let projected = applyGuideConstraint(to: raw.world)
+        let snapResult = applySupportSnap(to: projected)
+        let world = snapResult.world
+        let isGuideOn = guideMode == .zAxis
+        let snappedToSupport = snapResult.snapped
+
+        if snappedToSupport != wasSnappedToSupport {
+            if snappedToSupport {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            }
+            wasSnappedToSupport = snappedToSupport
+        }
 
         let surface = classifySurface(world: world)
-        transitionSurface(to: surface)
+        // With Z-guide on, off-subject points are valid placements
+        // (the table below the product is intentionally outside the
+        // reference photo's mask). Treat it as on-subject for the
+        // stability path so the user can lock the lower endpoint of
+        // a height measurement.
+        let effectiveSurface: ReticleState.Surface = (isGuideOn && surface == .offTarget) ? .onSubject : surface
+        transitionSurface(to: effectiveSurface)
 
-        switch surface {
+        switch effectiveSurface {
         case .offTarget:
             // Reticle is on a depthful surface but not on the kept
             // subject — keep the 3D disc visible (red) so the user
@@ -395,10 +459,15 @@ final class MeasureFlowCoordinator: NSObject, ObservableObject {
 
         let (score, locked) = stability.observe(position: world)
         let displayedPos = stability.averagedPosition ?? world
-        let color: UIColor = surface == .onEdge ? .systemYellow : .white
+        let color: UIColor
+        if snappedToSupport {
+            color = .systemBlue
+        } else {
+            color = effectiveSurface == .onEdge ? .systemYellow : .white
+        }
         updateReticleTransform(world: displayedPos, normal: raw.normal, color: color)
         reticleDisc?.isEnabled = true
-        reticleState = ReticleState(worldPosition: displayedPos, surface: surface, stability: score)
+        reticleState = ReticleState(worldPosition: displayedPos, surface: effectiveSurface, stability: score)
 
         if locked {
             AudioServicesPlaySystemSound(lockSoundID)
@@ -563,6 +632,34 @@ extension MeasureFlowCoordinator: ARSessionDelegate {
         // hop below is just to satisfy the Swift 6 isolation checker.
         MainActor.assumeIsolated {
             self.handleFrame(frame)
+        }
+    }
+
+    nonisolated func session(_ session: ARSession, didAdd anchors: [ARAnchor]) {
+        MainActor.assumeIsolated {
+            for anchor in anchors {
+                if let plane = anchor as? ARPlaneAnchor, plane.alignment == .horizontal {
+                    self.horizontalPlanes[plane.identifier] = plane
+                }
+            }
+        }
+    }
+
+    nonisolated func session(_ session: ARSession, didUpdate anchors: [ARAnchor]) {
+        MainActor.assumeIsolated {
+            for anchor in anchors {
+                if let plane = anchor as? ARPlaneAnchor, plane.alignment == .horizontal {
+                    self.horizontalPlanes[plane.identifier] = plane
+                }
+            }
+        }
+    }
+
+    nonisolated func session(_ session: ARSession, didRemove anchors: [ARAnchor]) {
+        MainActor.assumeIsolated {
+            for anchor in anchors {
+                self.horizontalPlanes.removeValue(forKey: anchor.identifier)
+            }
         }
     }
 }

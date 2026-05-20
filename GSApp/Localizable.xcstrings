@@ -676,6 +676,17 @@
         }
       }
     },
+    "Disable Z guide" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Désactiver le guide Z"
+          }
+        }
+      }
+    },
     "Distance = sum of the segments between successive points. Minimum 2 points = 1 segment." : {
       "extractionState" : "stale",
       "localizations" : {
@@ -753,6 +764,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Modifier le batch"
+          }
+        }
+      }
+    },
+    "Enable Z guide" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Activer le guide Z"
           }
         }
       }
@@ -2250,32 +2272,15 @@
         }
       }
     },
+    "Z" : {
+
+    },
     "Zone" : {
       "localizations" : {
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Zone"
-          }
-        }
-      }
-    },
-    "Enable Z guide" : {
-      "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Activer le guide Z"
-          }
-        }
-      }
-    },
-    "Disable Z guide" : {
-      "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Désactiver le guide Z"
           }
         }
       }
