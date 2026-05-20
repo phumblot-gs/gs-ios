@@ -198,7 +198,7 @@ struct MeasureFlowView: View {
                     referenceFrame: capturedFrame,
                     includedSubjects: subjects,
                     captures: $captures,
-                    finalizeButtonTitle: isCreating ? "Save category" : "Validate",
+                    finalizeButtonTitle: isCreating ? "Save" : "Validate",
                     finalizeButtonIcon: isCreating ? "square.and.arrow.down.fill" : "checkmark.circle.fill",
                     // X dismisses the whole flow back to whoever
                     // launched it (reference detail or measures tab).
