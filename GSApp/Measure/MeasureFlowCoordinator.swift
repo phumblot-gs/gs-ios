@@ -256,7 +256,8 @@ final class MeasureFlowCoordinator: NSObject, ObservableObject {
         }
         guideAnchor = anchor
         guideMode = .zAxis
-        installGuideLine(at: anchor)
+        guideLineLastSupportY = .nan   // force re-render with new anchor
+        refreshGuideLine()
     }
 
     func disableGuide() {
@@ -267,24 +268,63 @@ final class MeasureFlowCoordinator: NSObject, ObservableObject {
         removeGuideLine()
     }
 
-    private func installGuideLine(at anchor: SIMD3<Float>) {
-        guard let arView else { return }
-        removeGuideLine()
-        let mesh = MeshResource.generateCylinder(height: 0.6, radius: 0.0015)
-        var mat = UnlitMaterial()
-        mat.color = .init(tint: .systemBlue)
-        mat.blending = .transparent(opacity: .init(floatLiteral: 0.75))
-        let entity = ModelEntity(mesh: mesh, materials: [mat])
-        entity.transform = Transform(translation: anchor)
-        let container = AnchorEntity(world: .zero)
-        container.addChild(entity)
-        arView.scene.addAnchor(container)
-        guideLineAnchor = container
+    private var guideLineEntity: ModelEntity?
+    private var guideLineLastSupportY: Float? = .nan   // sentinel = "never applied"
+
+    /// Render (or update) the guide line as a *half-line* starting at
+    /// the anchor and descending to the support altitude. When the
+    /// support hasn't been detected yet we fall back to a fixed
+    /// 30 cm downward extension. The portion that would lie under
+    /// the table is intentionally not drawn — visually clearer than
+    /// the previous symmetric 60 cm cylinder centred on the anchor.
+    private func refreshGuideLine() {
+        guard guideMode == .zAxis, let anchor = guideAnchor else {
+            removeGuideLine()
+            return
+        }
+        let supportY = supportAltitudeBelowAnchor()
+        // Skip the render when nothing about the geometry has changed
+        // — the entity's transform was already correct.
+        if guideLineEntity != nil && guideLineLastSupportY == supportY { return }
+        guideLineLastSupportY = supportY
+
+        let length: Float
+        let bottomY: Float
+        if let supportY {
+            length = max(0.01, anchor.y - supportY)
+            bottomY = supportY
+        } else {
+            length = 0.30
+            bottomY = anchor.y - length
+        }
+
+        if guideLineEntity == nil {
+            guard let arView else { return }
+            let mesh = MeshResource.generateCylinder(height: 1, radius: 0.0015)
+            var mat = UnlitMaterial()
+            mat.color = .init(tint: .systemBlue)
+            mat.blending = .transparent(opacity: .init(floatLiteral: 0.75))
+            let entity = ModelEntity(mesh: mesh, materials: [mat])
+            let container = AnchorEntity(world: .zero)
+            container.addChild(entity)
+            arView.scene.addAnchor(container)
+            guideLineAnchor = container
+            guideLineEntity = entity
+        }
+
+        let midY = bottomY + length / 2
+        guideLineEntity?.transform = Transform(
+            scale: SIMD3<Float>(1, length, 1),
+            rotation: .init(),
+            translation: SIMD3<Float>(anchor.x, midY, anchor.z)
+        )
     }
 
     private func removeGuideLine() {
         guideLineAnchor?.removeFromParent()
         guideLineAnchor = nil
+        guideLineEntity = nil
+        guideLineLastSupportY = .nan
     }
 
     /// Apply the Z-guide plane projection if active. The plane passes
@@ -425,6 +465,12 @@ final class MeasureFlowCoordinator: NSObject, ObservableObject {
         let world = snapResult.world
         let isGuideOn = guideMode == .zAxis
         let snappedToSupport = snapResult.snapped
+
+        // Refresh the guide line geometry — picks up newly-detected
+        // support planes so the line stops at the table even when
+        // ARKit only resolves the plane after the user enabled the
+        // guide. Internally bails out when nothing has changed.
+        if isGuideOn { refreshGuideLine() }
 
         if snappedToSupport != wasSnappedToSupport {
             if snappedToSupport {
