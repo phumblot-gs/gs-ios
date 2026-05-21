@@ -5,11 +5,13 @@ import GSCore
 import UIKit
 
 /// Capture loop for a single reference. Live camera preview with a
-/// shutter button; tapping it freezes the latest frame on top of the
-/// preview so the user can decide Keep / Retake. Keep resizes the
-/// JPEG to ≤ 1200 px on the long side and uploads it under the
-/// filename `<ref>_<inc>.jpg` to today's production. The inc counter
-/// resets to 1 each time the user enters this view (per session).
+/// shutter; after each shot Vision runs OCR on the still in the
+/// background while the user reviews the result on the annotation
+/// sheet. The user tags any extracted text with one of six tech-view
+/// categories, then taps "Save" — the photo uploads to today's
+/// production under `<ref>_<inc>.jpg`, and the categorised text is
+/// pushed to `extra.tech_views` on the reference. Both calls fire
+/// in parallel and don't block the next shot.
 struct TechViewsCaptureView: View {
     @Bindable var settings: DevSettings
     let reference: Reference
@@ -17,6 +19,10 @@ struct TechViewsCaptureView: View {
 
     @StateObject private var shutter = CameraShutter()
     @State private var pending: PendingShot?
+    @State private var observations: [OCRObservation] = []
+    @State private var assignments: [UUID: TechViewCategory] = [:]
+    @State private var isRunningOCR: Bool = false
+    @State private var ocrTask: Task<Void, Never>?
     @State private var nextInc: Int = 1
     @State private var uploads: [UploadStatus] = []
 
@@ -54,9 +60,18 @@ struct TechViewsCaptureView: View {
             }
 
             if let pending {
-                previewOverlay(pending)
+                TechViewsAnnotationView(
+                    image: pending.image,
+                    observations: observations,
+                    isRunningOCR: isRunningOCR,
+                    assignments: $assignments,
+                    onRetake: { retake() },
+                    onSave: { save(pending: pending) }
+                )
+                .transition(.opacity)
             }
         }
+        .animation(.easeInOut(duration: 0.15), value: pending?.id)
         .navigationBarBackButtonHidden()
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -145,64 +160,88 @@ struct TechViewsCaptureView: View {
         }
     }
 
-    // MARK: - Preview overlay
-
-    private func previewOverlay(_ pending: PendingShot) -> some View {
-        ZStack(alignment: .bottom) {
-            Color.black.ignoresSafeArea()
-            Image(uiImage: pending.image)
-                .resizable()
-                .scaledToFit()
-                .ignoresSafeArea(edges: [.leading, .trailing])
-
-            VStack(spacing: 12) {
-                Spacer()
-                HStack(spacing: 16) {
-                    Button(role: .cancel) {
-                        self.pending = nil
-                    } label: {
-                        Label("Retake", systemImage: "arrow.counterclockwise")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-                    .tint(.white)
-
-                    Button {
-                        keep(pending: pending)
-                    } label: {
-                        Label("Keep", systemImage: "checkmark")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
-                .controlSize(.large)
-                .padding(.horizontal, 16)
-                .padding(.bottom, 24)
-            }
-        }
-    }
-
     // MARK: - Actions
 
     private func handleCapture(photo: CapturedPhoto) {
         guard let image = UIImage(data: photo.imageData) else { return }
+        observations = []
+        assignments = [:]
         pending = PendingShot(image: image, jpegData: photo.imageData)
+        isRunningOCR = true
+        ocrTask?.cancel()
+        ocrTask = Task {
+            do {
+                let result = try await TechViewsOCR.recognize(in: image)
+                if Task.isCancelled { return }
+                await MainActor.run {
+                    observations = result
+                    isRunningOCR = false
+                }
+            } catch {
+                if Task.isCancelled { return }
+                await MainActor.run {
+                    observations = []
+                    isRunningOCR = false
+                }
+            }
+        }
     }
 
-    private func keep(pending: PendingShot) {
+    private func retake() {
+        ocrTask?.cancel()
+        ocrTask = nil
+        pending = nil
+        observations = []
+        assignments = [:]
+        isRunningOCR = false
+    }
+
+    private func save(pending: PendingShot) {
+        // Snapshot the data the upload tasks need before we reset
+        // the pending state — Swift's @State setters are async, and
+        // the UI dismissal shouldn't race the background tasks.
         let inc = nextInc
         nextInc += 1
         let filename = "\(reference.ref)_\(inc).jpg"
         let resized = pending.image.resized(toMaxDimension: 1200)
         guard let uploadData = resized.jpegData(compressionQuality: 0.85) else {
             self.pending = nil
+            observations = []
+            assignments = [:]
             return
         }
+
+        // Aggregate categorised text per category (newline-separated
+        // when several observations land in the same bucket).
+        var fields: [String: String] = [:]
+        for observation in observations {
+            guard let category = assignments[observation.id] else { continue }
+            let trimmed = observation.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            let key = category.rawValue
+            if let existing = fields[key], !existing.isEmpty {
+                fields[key] = existing + "\n" + trimmed
+            } else {
+                fields[key] = trimmed
+            }
+        }
+
         let status = UploadStatus(filename: filename, state: .inFlight)
         uploads.append(status)
         let statusID = status.id
+        let referenceID = reference.id
+
         self.pending = nil
+        observations = []
+        assignments = [:]
+        ocrTask?.cancel()
+        ocrTask = nil
+        isRunningOCR = false
+
         Task { await runUpload(data: uploadData, filename: filename, statusID: statusID) }
+        if !fields.isEmpty, let referenceID {
+            Task { await pushTechViews(referenceID: referenceID, fields: fields) }
+        }
     }
 
     @MainActor
@@ -224,6 +263,21 @@ struct TechViewsCaptureView: View {
     }
 
     @MainActor
+    private func pushTechViews(referenceID: Int, fields: [String: String]) async {
+        do {
+            let service = ReferenceExtraService(environment: settings.currentEnvironment)
+            try await service.updateTechViews(referenceID: referenceID, fields: fields)
+        } catch {
+            // Non-blocking: failure to push categorised text doesn't
+            // affect the photo upload. We surface it through the
+            // existing per-upload error banner instead of a dedicated
+            // channel since the photo + extra usually go together.
+            let message = (error as? GSHTTPClient.HTTPError)?.userMessage ?? error.localizedDescription
+            print("[TechViews] updateTechViews failed: \(message)")
+        }
+    }
+
+    @MainActor
     private func findOrCreateProduction() async throws -> Production {
         guard let shootingMethodID = settings.techViewsShootingMethodID else {
             throw GSHTTPClient.HTTPError.http(status: 400, body: "No shooting method configured.")
@@ -241,9 +295,6 @@ struct TechViewsCaptureView: View {
 // MARK: - UIImage resize helper
 
 private extension UIImage {
-    /// Returns a copy bounded by `maxDimension` on the long side, with
-    /// aspect ratio preserved. Renders via UIGraphicsImageRenderer so
-    /// the output stays in the device-display colour space.
     func resized(toMaxDimension maxDimension: CGFloat) -> UIImage {
         let longest = max(size.width, size.height)
         guard longest > maxDimension else { return self }

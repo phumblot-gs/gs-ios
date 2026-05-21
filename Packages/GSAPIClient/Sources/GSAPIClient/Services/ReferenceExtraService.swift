@@ -32,6 +32,22 @@ public struct ReferenceExtraService: Sendable {
             as: EmptyResponse.self
         )
     }
+
+    /// PUT `/reference/:id/extra` with the `tech_views` slice. Only
+    /// the keys present in `fields` are sent; everything else on
+    /// `extra` (measures, other unmodelled keys) is left untouched by
+    /// the GS merge.
+    public func updateTechViews(
+        referenceID: Int,
+        fields: [String: String]
+    ) async throws {
+        let payload = ExtraPayload(extra: TechViewsWrapper(techViews: fields))
+        let _: EmptyResponse = try await http.put(
+            "/reference/\(referenceID)/extra",
+            body: payload,
+            as: EmptyResponse.self
+        )
+    }
 }
 
 // MARK: - Payload shapes
@@ -42,4 +58,12 @@ private struct ExtraPayload<Wrapped: Encodable & Sendable>: Encodable, Sendable 
 
 private struct MeasuresWrapper: Encodable, Sendable {
     let measures: [String: ReferenceExtraService.MeasureValue]
+}
+
+private struct TechViewsWrapper: Encodable, Sendable {
+    let techViews: [String: String]
+
+    private enum CodingKeys: String, CodingKey {
+        case techViews = "tech_views"
+    }
 }
