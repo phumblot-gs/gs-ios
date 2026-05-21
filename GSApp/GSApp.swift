@@ -57,7 +57,7 @@ struct RootView: View {
         TabView {
             ScanTab(settings: settings)
                 .tabItem { Label("Scan", systemImage: "barcode.viewfinder") }
-            PhotoTab()
+            PhotoTab(settings: settings)
                 .tabItem { Label("Photo", systemImage: "camera") }
             MeasureTab(settings: settings)
                 .tabItem { Label("Measures", systemImage: "ruler") }

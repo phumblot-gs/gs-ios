@@ -2284,6 +2284,86 @@
           }
         }
       }
+    },
+    "Technical views" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vues techniques"
+          }
+        }
+      }
+    },
+    "Shooting method" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Méthode de shooting"
+          }
+        }
+      }
+    },
+    "Loading shooting methods…" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chargement des méthodes de shooting…"
+          }
+        }
+      }
+    },
+    "Refresh list" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rafraîchir la liste"
+          }
+        }
+      }
+    },
+    "Retry" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Réessayer"
+          }
+        }
+      }
+    },
+    "Picks the Grand Shooting shooting method the technical-view uploads are scoped to. The Photo tab is disabled until a method is selected." : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sélectionne la méthode de shooting Grand Shooting sur laquelle les vues techniques seront chargées. L'onglet Photo est désactivé tant qu'aucune méthode n'est choisie."
+          }
+        }
+      }
+    },
+    "Shooting method not set" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Méthode de shooting non configurée"
+          }
+        }
+      }
+    },
+    "Pick a shooting method in Settings → Technical views to enable technical-view uploads." : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choisis une méthode de shooting dans Réglages → Vues techniques pour activer le chargement des vues techniques."
+          }
+        }
+      }
     }
   },
   "version" : "1.1"

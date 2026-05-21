@@ -166,6 +166,32 @@ public final class DevSettings {
         didSet { UserDefaults.standard.set(measurementUnit.rawValue, forKey: Self.measurementUnitKey) }
     }
 
+    // MARK: - Technical views
+
+    /// Shooting method the technical-views uploads are scoped to.
+    /// Required: the Photo tab is gated on this being non-nil.
+    public var techViewsShootingMethodID: Int? {
+        didSet {
+            if let id = techViewsShootingMethodID {
+                UserDefaults.standard.set(id, forKey: Self.techViewsShootingMethodIDKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: Self.techViewsShootingMethodIDKey)
+            }
+        }
+    }
+
+    /// Display name cached alongside the ID so Settings can render
+    /// the current selection without re-hitting `/shootingmethod`.
+    public var techViewsShootingMethodName: String? {
+        didSet {
+            if let name = techViewsShootingMethodName {
+                UserDefaults.standard.set(name, forKey: Self.techViewsShootingMethodNameKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: Self.techViewsShootingMethodNameKey)
+            }
+        }
+    }
+
     // MARK: - Derived
 
     public var currentEnvironment: GSEnvironment {
@@ -211,6 +237,14 @@ public final class DevSettings {
         let unitRaw = UserDefaults.standard.string(forKey: Self.measurementUnitKey) ?? "centimeters"
         self.measurementUnit = MeasurementUnit(rawValue: unitRaw) ?? .centimeters
 
+        if UserDefaults.standard.object(forKey: Self.techViewsShootingMethodIDKey) != nil {
+            let raw = UserDefaults.standard.integer(forKey: Self.techViewsShootingMethodIDKey)
+            self.techViewsShootingMethodID = raw == 0 ? nil : raw
+        } else {
+            self.techViewsShootingMethodID = nil
+        }
+        self.techViewsShootingMethodName = UserDefaults.standard.string(forKey: Self.techViewsShootingMethodNameKey)
+
         // Safety net: force the default-on-register status to be enabled,
         // even if the user previously persisted a list that excluded it.
         // Done at the end of init so every stored property is initialised.
@@ -229,4 +263,6 @@ public final class DevSettings {
     private static let searchAttributeKey = "dev.search.attribute"
     private static let languageKey = "dev.language.preferred"
     private static let measurementUnitKey = "dev.measurement.unit"
+    private static let techViewsShootingMethodIDKey = "dev.techViews.shootingMethodID"
+    private static let techViewsShootingMethodNameKey = "dev.techViews.shootingMethodName"
 }

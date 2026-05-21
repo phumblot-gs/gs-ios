@@ -11,6 +11,9 @@ struct SettingsTab: View {
     @State private var apiKeyDirty = false
     @State private var savedToastVisible = false
     @State private var isRefreshing = false
+    @State private var shootingMethods: [ShootingMethod] = []
+    @State private var isLoadingShootingMethods = false
+    @State private var shootingMethodsError: String?
 
     var body: some View {
         NavigationStack {
@@ -23,6 +26,7 @@ struct SettingsTab: View {
                 measurementSection
                 languageSection
                 backendSection
+                techViewsSection
                 developmentSection
                 accountSection
             }
@@ -215,6 +219,85 @@ struct SettingsTab: View {
             Text("Backend")
         } footer: {
             Text("Selects which deployed Lambda backend the app talks to.")
+        }
+    }
+
+    // MARK: - Technical views
+
+    private var techViewsSection: some View {
+        Section {
+            if isLoadingShootingMethods && shootingMethods.isEmpty {
+                HStack { ProgressView().controlSize(.small); Text("Loading shooting methods…") }
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            } else if let err = shootingMethodsError, shootingMethods.isEmpty {
+                Label(err, systemImage: "exclamationmark.triangle")
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+                Button("Retry") { Task { await loadShootingMethods() } }
+            } else {
+                Picker("Shooting method", selection: shootingMethodBinding) {
+                    Text("None").tag(Int?.none)
+                    ForEach(shootingMethods) { method in
+                        Text(method.name).tag(Int?.some(method.id))
+                    }
+                }
+                Button {
+                    Task { await loadShootingMethods() }
+                } label: {
+                    HStack {
+                        Label("Refresh list", systemImage: "arrow.clockwise")
+                        Spacer()
+                        if isLoadingShootingMethods { ProgressView().controlSize(.small) }
+                    }
+                }
+                .disabled(isLoadingShootingMethods)
+            }
+        } header: {
+            Text("Technical views")
+        } footer: {
+            Text("Picks the Grand Shooting shooting method the technical-view uploads are scoped to. The Photo tab is disabled until a method is selected.")
+        }
+        .task(id: settings.apiKeyRevision) {
+            if shootingMethods.isEmpty {
+                await loadShootingMethods()
+            }
+        }
+    }
+
+    private var shootingMethodBinding: Binding<Int?> {
+        Binding(
+            get: { settings.techViewsShootingMethodID },
+            set: { newValue in
+                settings.techViewsShootingMethodID = newValue
+                if let id = newValue,
+                   let match = shootingMethods.first(where: { $0.id == id }) {
+                    settings.techViewsShootingMethodName = match.name
+                } else {
+                    settings.techViewsShootingMethodName = nil
+                }
+            }
+        )
+    }
+
+    private func loadShootingMethods() async {
+        isLoadingShootingMethods = true
+        shootingMethodsError = nil
+        defer { isLoadingShootingMethods = false }
+        let service = ShootingMethodService(environment: settings.currentEnvironment)
+        do {
+            let methods = try await service.list()
+            shootingMethods = methods.sorted(by: { $0.name < $1.name })
+            // Keep the cached name in sync if the selected method's
+            // label changed on the server.
+            if let id = settings.techViewsShootingMethodID,
+               let match = methods.first(where: { $0.id == id }) {
+                settings.techViewsShootingMethodName = match.name
+            }
+        } catch let err as GSHTTPClient.HTTPError {
+            shootingMethodsError = err.userMessage
+        } catch {
+            shootingMethodsError = error.localizedDescription
         }
     }
 
