@@ -1029,6 +1029,16 @@
         }
       }
     },
+    "Loading shooting methods…" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chargement des méthodes de shooting…"
+          }
+        }
+      }
+    },
     "Look up" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1461,6 +1471,16 @@
         }
       }
     },
+    "Pick a shooting method in Settings → Technical views to enable technical-view uploads." : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choisis une méthode de shooting dans Réglages → Vues techniques pour activer le chargement des vues techniques."
+          }
+        }
+      }
+    },
     "Pick the Grand Shooting catalog category these measurements belong to. The link is saved on the local category for future captures." : {
       "localizations" : {
         "fr" : {
@@ -1478,6 +1498,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Préparation"
+          }
+        }
+      }
+    },
+    "Picks the Grand Shooting shooting method the technical-view uploads are scoped to. The Photo tab is disabled until a method is selected." : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sélectionne la méthode de shooting Grand Shooting sur laquelle les vues techniques seront chargées. L'onglet Photo est désactivé tant qu'aucune méthode n'est choisie."
           }
         }
       }
@@ -1632,6 +1662,17 @@
         }
       }
     },
+    "Refresh list" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rafraîchir la liste"
+          }
+        }
+      }
+    },
     "Register products" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1684,6 +1725,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Reprendre les mesures"
+          }
+        }
+      }
+    },
+    "Retry" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Réessayer"
           }
         }
       }
@@ -1911,6 +1963,28 @@
         }
       }
     },
+    "Shooting method" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Méthode de shooting"
+          }
+        }
+      }
+    },
+    "Shooting method not set" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Méthode de shooting non configurée"
+          }
+        }
+      }
+    },
     "Sign in" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -2087,6 +2161,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Touche pour voir le détail"
+          }
+        }
+      }
+    },
+    "Technical views" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vues techniques"
           }
         }
       }
@@ -2285,82 +2369,42 @@
         }
       }
     },
-    "Technical views" : {
+    "Scan reference" : {
       "localizations" : {
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Vues techniques"
+            "value" : "Scanner une référence"
           }
         }
       }
     },
-    "Shooting method" : {
+    "Lookup failed" : {
       "localizations" : {
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Méthode de shooting"
+            "value" : "Recherche échouée"
           }
         }
       }
     },
-    "Loading shooting methods…" : {
+    "Shutter" : {
       "localizations" : {
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Chargement des méthodes de shooting…"
+            "value" : "Déclencheur"
           }
         }
       }
     },
-    "Refresh list" : {
+    "Keep" : {
       "localizations" : {
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Rafraîchir la liste"
-          }
-        }
-      }
-    },
-    "Retry" : {
-      "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Réessayer"
-          }
-        }
-      }
-    },
-    "Picks the Grand Shooting shooting method the technical-view uploads are scoped to. The Photo tab is disabled until a method is selected." : {
-      "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sélectionne la méthode de shooting Grand Shooting sur laquelle les vues techniques seront chargées. L'onglet Photo est désactivé tant qu'aucune méthode n'est choisie."
-          }
-        }
-      }
-    },
-    "Shooting method not set" : {
-      "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Méthode de shooting non configurée"
-          }
-        }
-      }
-    },
-    "Pick a shooting method in Settings → Technical views to enable technical-view uploads." : {
-      "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Choisis une méthode de shooting dans Réglages → Vues techniques pour activer le chargement des vues techniques."
+            "value" : "Garder"
           }
         }
       }

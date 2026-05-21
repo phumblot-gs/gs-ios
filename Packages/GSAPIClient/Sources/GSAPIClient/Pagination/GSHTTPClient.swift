@@ -80,6 +80,69 @@ public struct GSHTTPClient: Sendable {
         return try decode(T.self, from: data)
     }
 
+    // MARK: - Multipart upload
+
+    public struct MultipartPart: Sendable {
+        public let name: String
+        public let filename: String?
+        public let contentType: String?
+        public let data: Data
+
+        public init(
+            name: String,
+            filename: String? = nil,
+            contentType: String? = nil,
+            data: Data
+        ) {
+            self.name = name
+            self.filename = filename
+            self.contentType = contentType
+            self.data = data
+        }
+    }
+
+    /// POST a `multipart/form-data` body. Used for photo uploads where
+    /// the file goes in a `file` part next to a few text parts. Shares
+    /// `perform()` (auth header injection + error mapping) with the
+    /// JSON path above.
+    public func postMultipart<T: Decodable & Sendable>(
+        _ path: String,
+        parts: [MultipartPart],
+        as type: T.Type = T.self
+    ) async throws -> T {
+        guard let url = buildURL(path: path, query: [:]) else {
+            throw HTTPError.invalidURL
+        }
+        let boundary = "Boundary-\(UUID().uuidString)"
+        var body = Data()
+        let crlf = "\r\n".data(using: .utf8)!
+        for part in parts {
+            body.append("--\(boundary)\r\n".data(using: .utf8)!)
+            var disposition = "Content-Disposition: form-data; name=\"\(part.name)\""
+            if let filename = part.filename {
+                disposition += "; filename=\"\(filename)\""
+            }
+            disposition += "\r\n"
+            body.append(disposition.data(using: .utf8)!)
+            if let contentType = part.contentType {
+                body.append("Content-Type: \(contentType)\r\n".data(using: .utf8)!)
+            }
+            body.append(crlf)
+            body.append(part.data)
+            body.append(crlf)
+        }
+        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        request.httpBody = body
+
+        let (data, _) = try await perform(request)
+        return try decode(T.self, from: data)
+    }
+
     // MARK: - Paginated calls
 
     /// GET that returns a page of items plus the parsed `PaginationInfo`.
