@@ -29,8 +29,9 @@ public struct ProductionService: Sendable {
 
     /// POST /production with the minimal payload the tech-views flow
     /// needs (smalltext, startdate, timezone, shooting_method_id).
-    /// Returns the freshly-created production with its `root_id` so
-    /// the caller can upload straight away.
+    /// GS responds with the same nested `[[Production]]` shape as the
+    /// list endpoint (a tuple-of-rows of productions, even though we
+    /// only just created one), so we flatten and pick the first.
     public func create(
         shootingMethodID: Int,
         smalltext: String,
@@ -44,7 +45,18 @@ public struct ProductionService: Sendable {
             timezone: timezone,
             shootingMethodID: shootingMethodID
         )
-        return try await http.post("/production", body: payload, as: Production.self)
+        let nested: [[Production]] = try await http.post(
+            "/production",
+            body: payload,
+            as: [[Production]].self
+        )
+        guard let production = nested.flatMap({ $0 }).first else {
+            throw GSHTTPClient.HTTPError.http(
+                status: 500,
+                body: "Production create returned an empty response."
+            )
+        }
+        return production
     }
 
     /// Find-or-create: returns the first production for the given

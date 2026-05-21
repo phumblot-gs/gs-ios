@@ -929,6 +929,17 @@
         }
       }
     },
+    "Keep" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Garder"
+          }
+        }
+      }
+    },
     "Label" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1078,6 +1089,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Recherche…"
+          }
+        }
+      }
+    },
+    "Lookup failed" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recherche échouée"
           }
         }
       }
@@ -1862,6 +1884,17 @@
         }
       }
     },
+    "Scan reference" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Scanner une référence"
+          }
+        }
+      }
+    },
     "Search by name or code" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1981,6 +2014,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Méthode de shooting non configurée"
+          }
+        }
+      }
+    },
+    "Shutter" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Déclencheur"
           }
         }
       }
@@ -2365,46 +2409,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Zone"
-          }
-        }
-      }
-    },
-    "Scan reference" : {
-      "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Scanner une référence"
-          }
-        }
-      }
-    },
-    "Lookup failed" : {
-      "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Recherche échouée"
-          }
-        }
-      }
-    },
-    "Shutter" : {
-      "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Déclencheur"
-          }
-        }
-      }
-    },
-    "Keep" : {
-      "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Garder"
           }
         }
       }
