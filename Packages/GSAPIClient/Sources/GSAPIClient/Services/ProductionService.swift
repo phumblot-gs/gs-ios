@@ -11,17 +11,17 @@ public struct ProductionService: Sendable {
         self.http = GSHTTPClient(environment: environment)
     }
 
-    /// GET /production?shooting_method_id=…&startdate=YYYY-MM-DD.
-    /// GS returns an array-of-arrays (productions grouped by some
-    /// server-side bucket); flatten before handing back.
-    public func list(shootingMethodID: Int, date: Date) async throws -> [Production] {
-        let dateString = Self.dayFormatter.string(from: date)
+    /// GET /production?shooting_method_id=…. GS returns an
+    /// array-of-arrays (productions grouped by some server-side
+    /// bucket); flatten before handing back. We deliberately don't
+    /// pass `startdate` as a query filter — empirically GS doesn't
+    /// match productions on a date-only value, so we filter
+    /// client-side in `findOrCreateToday` instead. Cheaper to
+    /// download the (small) list than risk creating duplicates.
+    public func list(shootingMethodID: Int) async throws -> [Production] {
         let nested = try await http.get(
             "/production",
-            query: [
-                "shooting_method_id": String(shootingMethodID),
-                "startdate": dateString
-            ],
+            query: ["shooting_method_id": String(shootingMethodID)],
             as: [[Production]].self
         )
         return nested.flatMap { $0 }
@@ -59,16 +59,21 @@ public struct ProductionService: Sendable {
         return production
     }
 
-    /// Find-or-create: returns the first production for the given
-    /// shooting method on `date`, creating one when GS reports none.
+    /// Find-or-create: returns the first production matching the
+    /// shooting method whose `startdate` falls on `date` (local
+    /// timezone), creating one when none exists. Filtering by date
+    /// is client-side — see `list(shootingMethodID:)` for the why.
     public func findOrCreateToday(
         shootingMethodID: Int,
         smalltext: String = "TECH VIEWS",
         date: Date = .now,
         timezone: String = TimeZone.current.identifier
     ) async throws -> Production {
-        let existing = try await list(shootingMethodID: shootingMethodID, date: date)
-        if let production = existing.first { return production }
+        let all = try await list(shootingMethodID: shootingMethodID)
+        let todayPrefix = Self.dayFormatter.string(from: date)
+        if let production = all.first(where: { ($0.startdate ?? "").hasPrefix(todayPrefix) }) {
+            return production
+        }
         return try await create(
             shootingMethodID: shootingMethodID,
             smalltext: smalltext,
