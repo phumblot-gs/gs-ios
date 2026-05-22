@@ -43,7 +43,8 @@ enum TechViewsOCR {
                         )
                     }
                     let merged = mergeKeyValueLines(raw)
-                    let deduped = removeLinguisticDuplicates(merged)
+                    let normalized = normalizeMultilingual(merged)
+                    let deduped = removeLinguisticDuplicates(normalized)
                     continuation.resume(returning: deduped)
                 } catch {
                     continuation.resume(throwing: error)
@@ -99,6 +100,82 @@ enum TechViewsOCR {
         if first.isNumber { return true }
         if text.contains("%") { return true }
         return false
+    }
+
+    // MARK: - Within-line multilingual normalisation
+
+    /// On a single visual line Vision often surfaces the same word
+    /// repeated in several languages — "wool lana", "acrilico
+    /// acrykio", "NYLON NYLON". This pass tokenises each observation
+    /// (handling stuck-together cases like "58%acrilico"), maps known
+    /// textile terms to their English canonical, then drops any token
+    /// whose canonical has already been emitted on the line.
+    private static func normalizeMultilingual(_ observations: [OCRObservation]) -> [OCRObservation] {
+        observations.map { obs in
+            let cleaned = normalizeLine(obs.text)
+            guard cleaned != obs.text else { return obs }
+            return OCRObservation(text: cleaned, confidence: obs.confidence, boundingBox: obs.boundingBox)
+        }
+    }
+
+    private static func normalizeLine(_ text: String) -> String {
+        let tokens = tokenize(text)
+        guard !tokens.isEmpty else { return text }
+        var seen: Set<String> = []
+        var output: [String] = []
+        for token in tokens {
+            let canonical = TechViewsDictionary.canonical(of: token)
+            let key = canonical ?? token.lowercased()
+            guard seen.insert(key).inserted else { continue }
+            output.append(canonical ?? token)
+        }
+        return output.joined(separator: " ")
+    }
+
+    /// Splits a string into label-friendly tokens: runs of letters,
+    /// runs of digits (with an optional trailing % attached), and
+    /// other non-whitespace runs as their own atoms. Crucially it
+    /// breaks letter/digit transitions, so "58%acrilico" yields
+    /// ["58%", "acrilico"] even when the OCR glues them.
+    private static func tokenize(_ text: String) -> [String] {
+        enum Kind { case none, letter, digit, other }
+        var tokens: [String] = []
+        var current = ""
+        var lastKind: Kind = .none
+
+        func flush() {
+            if !current.isEmpty {
+                tokens.append(current)
+                current = ""
+            }
+        }
+
+        for char in text {
+            if char.isWhitespace {
+                flush()
+                lastKind = .none
+                continue
+            }
+            let kind: Kind
+            if char.isLetter {
+                kind = .letter
+            } else if char.isNumber {
+                kind = .digit
+            } else if char == "%" && lastKind == .digit {
+                // Treat trailing % as part of the preceding number run.
+                current.append(char)
+                continue
+            } else {
+                kind = .other
+            }
+            if lastKind != .none && lastKind != kind {
+                flush()
+            }
+            current.append(char)
+            lastKind = kind
+        }
+        flush()
+        return tokens
     }
 
     // MARK: - Linguistic deduplication
@@ -166,6 +243,13 @@ enum TechViewsOCR {
             // Number tokens always count — they're rarely translated.
             if word.first?.isNumber == true {
                 tokens.insert(word)
+                continue
+            }
+            // Known textile terms collapse to their English canonical,
+            // so French "coton" and Italian "cotone" yield the same
+            // salient token across observations.
+            if let canonical = TechViewsDictionary.canonical(of: word) {
+                tokens.insert(canonical)
                 continue
             }
             // Long words (≥ 4 letters) get lowercased to align across
