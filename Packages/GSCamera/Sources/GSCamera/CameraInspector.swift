@@ -41,22 +41,46 @@ public enum CameraInspector {
 
     /// Enumerates every physical back camera the device exposes,
     /// in ascending native-focal order (ultra-wide → wide → tele).
+    ///
+    /// Backed by a `DispatchOnce`-style cache: the lenses don't
+    /// change while the app is running, and calling
+    /// `AVCaptureDevice.default(...)` (or even
+    /// `DiscoverySession`) on every SwiftUI body re-evaluation
+    /// triggers a noisy `(Fig) signalled err=-12710` log from
+    /// CoreMedia. We resolve once, on the first request, and
+    /// hand back the cached array forever after.
     public static func availableBackLenses() -> [LensInfo] {
-        let candidates: [(AVCaptureDevice.DeviceType, String)] = [
-            (.builtInUltraWideCamera, "Ultra-wide"),
-            (.builtInWideAngleCamera, "Wide"),
-            (.builtInTelephotoCamera, "Telephoto")
+        Self.cachedLenses
+    }
+
+    private static let cachedLenses: [LensInfo] = computeAvailableBackLenses()
+
+    private static func computeAvailableBackLenses() -> [LensInfo] {
+        // `DiscoverySession` is the modern enumeration API and
+        // avoids the per-call CoreMedia warning that
+        // `AVCaptureDevice.default(_:for:position:)` produces
+        // when polled repeatedly.
+        let names: [AVCaptureDevice.DeviceType: String] = [
+            .builtInUltraWideCamera: "Ultra-wide",
+            .builtInWideAngleCamera: "Wide",
+            .builtInTelephotoCamera: "Telephoto"
         ]
-        return candidates.compactMap { type, name in
-            guard let device = AVCaptureDevice.default(type, for: .video, position: .back) else { return nil }
-            let focal = focalLength35mm(forFOV: Double(device.activeFormat.videoFieldOfView))
-            return LensInfo(
-                deviceTypeRawValue: type.rawValue,
-                nativeFocalLength35mm: focal,
-                displayName: name
-            )
-        }
-        .sorted { $0.nativeFocalLength35mm < $1.nativeFocalLength35mm }
+        let session = AVCaptureDevice.DiscoverySession(
+            deviceTypes: Array(names.keys),
+            mediaType: .video,
+            position: .back
+        )
+        return session.devices
+            .compactMap { device -> LensInfo? in
+                guard let displayName = names[device.deviceType] else { return nil }
+                let focal = focalLength35mm(forFOV: Double(device.activeFormat.videoFieldOfView))
+                return LensInfo(
+                    deviceTypeRawValue: device.deviceType.rawValue,
+                    nativeFocalLength35mm: focal,
+                    displayName: displayName
+                )
+            }
+            .sorted { $0.nativeFocalLength35mm < $1.nativeFocalLength35mm }
     }
 
     /// Picks the lens whose native focal is ≤ target and closest
