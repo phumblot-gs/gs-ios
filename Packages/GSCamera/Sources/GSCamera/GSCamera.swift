@@ -222,16 +222,22 @@ public struct CameraView: UIViewControllerRepresentable {
 // MARK: - UIViewController
 
 public final class CameraSessionController: UIViewController {
+    // AVCaptureSession / AVCapturePhotoOutput / AVCaptureDeviceInput
+    // are touched exclusively from `sessionQueue`, which is a serial
+    // dispatch queue dedicated to capture work. They can't live as
+    // MainActor-isolated state without forcing every closure into a
+    // hop. Opting them out of actor isolation here lets the queue
+    // serialise access on our behalf.
+    nonisolated(unsafe) private let session = AVCaptureSession()
+    nonisolated(unsafe) private let photoOutput = AVCapturePhotoOutput()
+    nonisolated(unsafe) private var captureDelegate: CaptureDelegate?
+    nonisolated(unsafe) private var activeInput: AVCaptureDeviceInput?
+
     private let logger = GSLogger(category: "GSCamera")
     private let onCapture: @MainActor (CapturedPhoto) -> Void
     private weak var shutter: CameraShutter?
-
-    private let session = AVCaptureSession()
-    private let photoOutput = AVCapturePhotoOutput()
     private let sessionQueue = DispatchQueue(label: "com.grand-shooting.camera.session")
     private var previewLayer: AVCaptureVideoPreviewLayer?
-    private var captureDelegate: CaptureDelegate?
-    private var activeInput: AVCaptureDeviceInput?
     private var configuration: CameraConfiguration
 
     fileprivate init(
@@ -303,27 +309,31 @@ public final class CameraSessionController: UIViewController {
         }
         let capabilities = CameraCapabilities(hasUltraWide: Self.detectUltraWide())
         shutter?.update(capabilities: capabilities)
+        let snapshot = configuration
         sessionQueue.async { [weak self] in
-            self?.configureSession()
+            self?.configureSession(with: snapshot)
             self?.session.startRunning()
         }
     }
 
-    private static func detectUltraWide() -> Bool {
+    nonisolated private static func detectUltraWide() -> Bool {
         AVCaptureDevice.default(.builtInUltraWideCamera, for: .video, position: .back) != nil
     }
 
-    private func configureSession() {
+    nonisolated private func configureSession(with configuration: CameraConfiguration) {
         session.beginConfiguration()
         defer { session.commitConfiguration() }
         session.sessionPreset = .photo
 
-        guard let device = preferredDevice(for: configuration.mode) else {
+        guard let device = Self.preferredDevice(for: configuration.mode) else {
             logger.error("No back camera available")
             return
         }
-        if !attachInput(for: device) { return }
-        configureDevice(device, for: configuration)
+        guard let input = Self.attachInput(for: device, to: session, logger: logger) else {
+            return
+        }
+        activeInput = input
+        Self.configureDevice(device, for: configuration, logger: logger)
 
         guard session.canAddOutput(photoOutput) else {
             logger.error("Cannot add photo output")
@@ -339,27 +349,34 @@ public final class CameraSessionController: UIViewController {
     /// device when needed and re-applies focus / exposure / WB so
     /// the new behaviour takes effect on the next frame.
     fileprivate func apply(configuration: CameraConfiguration) {
+        self.configuration = configuration
+        let snapshot = configuration
         sessionQueue.async { [weak self] in
-            guard let self else { return }
-            let oldDevice = self.activeInput?.device
-            let needsDeviceSwap = oldDevice?.deviceType != self.preferredDevice(for: configuration.mode)?.deviceType
-            self.configuration = configuration
-            self.session.beginConfiguration()
-            defer { self.session.commitConfiguration() }
-            if needsDeviceSwap, let newDevice = self.preferredDevice(for: configuration.mode) {
-                if let existing = self.activeInput {
-                    self.session.removeInput(existing)
-                    self.activeInput = nil
-                }
-                _ = self.attachInput(for: newDevice)
-                self.configureDevice(newDevice, for: configuration)
-            } else if let device = self.activeInput?.device {
-                self.configureDevice(device, for: configuration)
-            }
+            self?.reconfigure(with: snapshot)
         }
     }
 
-    private func preferredDevice(for mode: CaptureMode) -> AVCaptureDevice? {
+    nonisolated private func reconfigure(with configuration: CameraConfiguration) {
+        let oldDeviceType = activeInput?.device.deviceType
+        let newDevice = Self.preferredDevice(for: configuration.mode)
+        let needsSwap = oldDeviceType != newDevice?.deviceType
+        session.beginConfiguration()
+        defer { session.commitConfiguration() }
+        if needsSwap, let newDevice {
+            if let existing = activeInput {
+                session.removeInput(existing)
+                activeInput = nil
+            }
+            if let input = Self.attachInput(for: newDevice, to: session, logger: logger) {
+                activeInput = input
+            }
+            Self.configureDevice(newDevice, for: configuration, logger: logger)
+        } else if let device = activeInput?.device {
+            Self.configureDevice(device, for: configuration, logger: logger)
+        }
+    }
+
+    nonisolated private static func preferredDevice(for mode: CaptureMode) -> AVCaptureDevice? {
         switch mode {
         case .presentation:
             return AVCaptureDevice.default(
@@ -383,26 +400,29 @@ public final class CameraSessionController: UIViewController {
         }
     }
 
-    @discardableResult
-    private func attachInput(for device: AVCaptureDevice) -> Bool {
+    nonisolated private static func attachInput(
+        for device: AVCaptureDevice,
+        to session: AVCaptureSession,
+        logger: GSLogger
+    ) -> AVCaptureDeviceInput? {
         do {
             let input = try AVCaptureDeviceInput(device: device)
             guard session.canAddInput(input) else {
                 logger.error("Cannot add camera input for \(device.localizedName)")
-                return false
+                return nil
             }
             session.addInput(input)
-            activeInput = input
-            return true
+            return input
         } catch {
             logger.error("Camera input init failed: \(error)")
-            return false
+            return nil
         }
     }
 
-    private func configureDevice(
+    nonisolated private static func configureDevice(
         _ device: AVCaptureDevice,
-        for configuration: CameraConfiguration
+        for configuration: CameraConfiguration,
+        logger: GSLogger
     ) {
         do {
             try device.lockForConfiguration()
@@ -416,7 +436,7 @@ public final class CameraSessionController: UIViewController {
                 if device.isExposureModeSupported(.continuousAutoExposure) {
                     device.exposureMode = .continuousAutoExposure
                 }
-                applyWhiteBalance(configuration.whiteBalance, on: device)
+                Self.applyWhiteBalance(configuration.whiteBalance, on: device)
 
             case .ocr:
                 if device.isFocusPointOfInterestSupported {
@@ -441,7 +461,10 @@ public final class CameraSessionController: UIViewController {
         }
     }
 
-    private func applyWhiteBalance(_ wb: PresentationWhiteBalance, on device: AVCaptureDevice) {
+    nonisolated private static func applyWhiteBalance(
+        _ wb: PresentationWhiteBalance,
+        on device: AVCaptureDevice
+    ) {
         if let temperature = wb.temperature,
            device.isLockingWhiteBalanceWithCustomDeviceGainsSupported {
             let tempTint = AVCaptureDevice.WhiteBalanceTemperatureAndTintValues(
@@ -449,7 +472,7 @@ public final class CameraSessionController: UIViewController {
                 tint: 0
             )
             let rawGains = device.deviceWhiteBalanceGains(for: tempTint)
-            let gains = Self.normalisedGains(rawGains, on: device)
+            let gains = normalisedGains(rawGains, on: device)
             device.setWhiteBalanceModeLocked(with: gains)
         } else if device.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance) {
             device.whiteBalanceMode = .continuousAutoWhiteBalance
@@ -459,7 +482,7 @@ public final class CameraSessionController: UIViewController {
     /// `setWhiteBalanceModeLockedWithDeviceWhiteBalanceGains`
     /// requires each channel to be ≥ 1 and ≤ `maxWhiteBalanceGain`.
     /// Clamp so a far-end temperature doesn't trip the assertion.
-    private static func normalisedGains(
+    nonisolated private static func normalisedGains(
         _ gains: AVCaptureDevice.WhiteBalanceGains,
         on device: AVCaptureDevice
     ) -> AVCaptureDevice.WhiteBalanceGains {
