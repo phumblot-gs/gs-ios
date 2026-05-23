@@ -75,6 +75,14 @@ struct TechViewsCaptureView: View {
                 mode = .presentation
             }
         }
+        return configuration(for: mode)
+    }
+
+    /// Builds the full `CameraConfiguration` for a given mode by
+    /// pulling every relevant knob from `DevSettings`. Used both
+    /// to seed the initial view and to push fresh configs through
+    /// `shutter.applySettings(_:)` when the user toggles modes.
+    private func configuration(for mode: CaptureMode) -> CameraConfiguration {
         let wb = PresentationWhiteBalance(rawValue: settings.techViewsWhiteBalanceRaw) ?? .auto
         let profile = PresentationColorProfile(rawValue: settings.techViewsColorProfileRaw) ?? .none
         let space = PresentationColorSpace(rawValue: settings.techViewsColorSpaceRaw) ?? .sRGB
@@ -82,8 +90,40 @@ struct TechViewsCaptureView: View {
             mode: mode,
             whiteBalance: wb,
             colorProfile: profile,
-            colorSpace: space
+            colorSpace: space,
+            targetFocalLength35mm: focalLength(for: mode)
         )
+    }
+
+    /// Maps a capture mode to its user-configured focal length
+    /// (35mm equivalent). Used both when the camera view is first
+    /// instantiated and when the user toggles modes mid-session.
+    private func focalLength(for mode: CaptureMode) -> Int {
+        switch mode {
+        case .presentation: return settings.techViewsPresentationFocal
+        case .detail: return settings.techViewsDetailFocal
+        case .ocr: return settings.techViewsOCRFocal
+        }
+    }
+
+    /// True when the currently-active mode's focal target requires
+    /// a digital zoom > 4× on the device's available lenses.
+    /// Drives the "qualité dégradée" toast at the top of the
+    /// capture overlay.
+    private var heavyZoomWarning: String? {
+        let target = focalLength(for: shutter.mode)
+        let lenses = CameraInspector.availableBackLenses()
+        guard let choice = CameraInspector.bestLens(forTargetFocal35mm: target, in: lenses) else {
+            return nil
+        }
+        if choice.isTargetUnreachable {
+            return "Cible \(target) mm impossible sur ce matériel — \(choice.lens.displayName) à \(choice.lens.nativeFocalLength35mm) mm appliqué."
+        }
+        if choice.requiresHeavyDigitalZoom {
+            let zoom = String(format: "%.1f×", choice.zoomFactor)
+            return "\(target) mm = crop numérique \(zoom). Qualité réduite."
+        }
+        return nil
     }
 
     var body: some View {
@@ -95,6 +135,16 @@ struct TechViewsCaptureView: View {
 
             VStack {
                 topBar
+                if pending == nil, let warning = heavyZoomWarning {
+                    Label(warning, systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(Color.orange.opacity(0.9), in: Capsule())
+                        .padding(.top, 4)
+                        .transition(.opacity)
+                }
                 Spacer()
                 if pending == nil {
                     bottomControls
@@ -218,7 +268,11 @@ struct TechViewsCaptureView: View {
         let current = shutter.mode
         let next = current.nextInRotation
         return Button {
-            shutter.switchMode(to: next)
+            // Push the full configuration (including the focal
+            // length picked for the new mode) so the session can
+            // swap to the right physical lens + apply the right
+            // digital zoom in one go.
+            shutter.applySettings(configuration(for: next))
             if settings.techViewsCapturePersistence == .rememberLast {
                 settings.techViewsLastCaptureModeRaw = next.rawValue
             }

@@ -213,6 +213,28 @@ public final class DevSettings {
         didSet { UserDefaults.standard.set(techViewsColorSpaceRaw, forKey: Self.colorSpaceKey) }
     }
 
+    /// 35mm-equivalent focal length for Presentation captures.
+    /// 70 mm is a moderately compressed portrait/product focal
+    /// — neutral perspective, no wide-angle distortion.
+    public var techViewsPresentationFocal: Int {
+        didSet { UserDefaults.standard.set(techViewsPresentationFocal, forKey: Self.presentationFocalKey) }
+    }
+
+    /// 35mm-equivalent focal length for Detail captures. 100 mm
+    /// gives a typical macro / portrait-detail compression while
+    /// keeping the iPhone's close-focus capability.
+    public var techViewsDetailFocal: Int {
+        didSet { UserDefaults.standard.set(techViewsDetailFocal, forKey: Self.detailFocalKey) }
+    }
+
+    /// 35mm-equivalent focal length for OCR captures. Defaults to
+    /// 13 mm so the lens selection lands on the ultra-wide sensor
+    /// when available — its ~2 cm minimum focus is what lets the
+    /// user read tiny labels right up close.
+    public var techViewsOCRFocal: Int {
+        didSet { UserDefaults.standard.set(techViewsOCRFocal, forKey: Self.ocrFocalKey) }
+    }
+
     /// Shooting method the technical-views uploads are scoped to.
     /// Required: the Photo tab is gated on this being non-nil.
     public var techViewsShootingMethodID: Int? {
@@ -298,6 +320,13 @@ public final class DevSettings {
         self.techViewsColorProfileRaw = UserDefaults.standard.string(forKey: Self.colorProfileKey) ?? "none"
         self.techViewsColorSpaceRaw = UserDefaults.standard.string(forKey: Self.colorSpaceKey) ?? "sRGB"
 
+        let presentationFocal = UserDefaults.standard.integer(forKey: Self.presentationFocalKey)
+        self.techViewsPresentationFocal = presentationFocal == 0 ? 70 : presentationFocal
+        let detailFocal = UserDefaults.standard.integer(forKey: Self.detailFocalKey)
+        self.techViewsDetailFocal = detailFocal == 0 ? 100 : detailFocal
+        let ocrFocal = UserDefaults.standard.integer(forKey: Self.ocrFocalKey)
+        self.techViewsOCRFocal = ocrFocal == 0 ? 13 : ocrFocal
+
         // Safety net: force the default-on-register status to be enabled,
         // even if the user previously persisted a list that excluded it.
         // Done at the end of init so every stored property is initialised.
@@ -323,4 +352,7 @@ public final class DevSettings {
     private static let whiteBalanceKey = "dev.techViews.whiteBalance"
     private static let colorProfileKey = "dev.techViews.colorProfile"
     private static let colorSpaceKey = "dev.techViews.colorSpace"
+    private static let presentationFocalKey = "dev.techViews.focal.presentation"
+    private static let detailFocalKey = "dev.techViews.focal.detail"
+    private static let ocrFocalKey = "dev.techViews.focal.ocr"
 }

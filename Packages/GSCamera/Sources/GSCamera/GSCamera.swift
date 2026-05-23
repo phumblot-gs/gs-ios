@@ -169,17 +169,25 @@ public struct CameraConfiguration: Sendable {
     public var whiteBalance: PresentationWhiteBalance
     public var colorProfile: PresentationColorProfile
     public var colorSpace: PresentationColorSpace
+    /// Target focal length in 35mm-equivalent millimetres. The
+    /// session picks the physical lens whose native equivalent is
+    /// ≤ this value (closest match) and applies a digital zoom of
+    /// `target / native` to reach the request. Defaults to 50 mm
+    /// — the "normal" focal length close to human eye perspective.
+    public var targetFocalLength35mm: Int
 
     public init(
         mode: CaptureMode = .presentation,
         whiteBalance: PresentationWhiteBalance = .auto,
         colorProfile: PresentationColorProfile = .none,
-        colorSpace: PresentationColorSpace = .sRGB
+        colorSpace: PresentationColorSpace = .sRGB,
+        targetFocalLength35mm: Int = 50
     ) {
         self.mode = mode
         self.whiteBalance = whiteBalance
         self.colorProfile = colorProfile
         self.colorSpace = colorSpace
+        self.targetFocalLength35mm = targetFocalLength35mm
     }
 }
 
@@ -400,8 +408,8 @@ public final class CameraSessionController: UIViewController {
         let capabilities = CameraCapabilities(hasUltraWide: Self.detectUltraWide())
         shutter?.update(capabilities: capabilities)
         let snapshot = configuration
-        if let device = Self.preferredDevice(for: snapshot.mode) {
-            installRotationCoordinator(for: device)
+        if let resolved = Self.preferredDeviceAndZoom(for: snapshot) {
+            installRotationCoordinator(for: resolved.device)
         }
         sessionQueue.async { [weak self] in
             self?.configureSession(with: snapshot)
@@ -491,15 +499,16 @@ public final class CameraSessionController: UIViewController {
         defer { session.commitConfiguration() }
         session.sessionPreset = .photo
 
-        guard let device = Self.preferredDevice(for: configuration.mode) else {
+        guard let resolved = Self.preferredDeviceAndZoom(for: configuration) else {
             logger.error("No back camera available")
             return
         }
-        guard let input = Self.attachInput(for: device, to: session, logger: logger) else {
+        guard let input = Self.attachInput(for: resolved.device, to: session, logger: logger) else {
             return
         }
         activeInput = input
-        Self.configureDevice(device, for: configuration, logger: logger)
+        Self.configureDevice(resolved.device, for: configuration, logger: logger)
+        Self.applyZoom(resolved.zoomFactor, on: resolved.device, logger: logger)
 
         guard session.canAddOutput(photoOutput) else {
             logger.error("Cannot add photo output")
@@ -507,7 +516,7 @@ public final class CameraSessionController: UIViewController {
         }
         session.addOutput(photoOutput)
         photoOutput.maxPhotoQualityPrioritization = .quality
-        logger.info("Camera session ready in \(configuration.mode.rawValue) mode")
+        logger.info("Camera session ready: \(configuration.mode.rawValue), target \(configuration.targetFocalLength35mm)mm via \(resolved.device.localizedName) × \(String(format: "%.2f", resolved.zoomFactor))")
     }
 
     /// Reconfigure the session for a new capture configuration —
@@ -517,8 +526,8 @@ public final class CameraSessionController: UIViewController {
     fileprivate func apply(configuration: CameraConfiguration) {
         self.configuration = configuration
         let snapshot = configuration
-        if let device = Self.preferredDevice(for: snapshot.mode) {
-            installRotationCoordinator(for: device)
+        if let resolved = Self.preferredDeviceAndZoom(for: snapshot) {
+            installRotationCoordinator(for: resolved.device)
         }
         sessionQueue.async { [weak self] in
             self?.reconfigure(with: snapshot)
@@ -532,11 +541,12 @@ public final class CameraSessionController: UIViewController {
 
     nonisolated private func reconfigure(with configuration: CameraConfiguration) {
         let oldDeviceType = activeInput?.device.deviceType
-        let newDevice = Self.preferredDevice(for: configuration.mode)
-        let needsSwap = oldDeviceType != newDevice?.deviceType
+        guard let resolved = Self.preferredDeviceAndZoom(for: configuration) else { return }
+        let newDevice = resolved.device
+        let needsSwap = oldDeviceType != newDevice.deviceType
         session.beginConfiguration()
         defer { session.commitConfiguration() }
-        if needsSwap, let newDevice {
+        if needsSwap {
             if let existing = activeInput {
                 session.removeInput(existing)
                 activeInput = nil
@@ -545,36 +555,30 @@ public final class CameraSessionController: UIViewController {
                 activeInput = input
             }
             Self.configureDevice(newDevice, for: configuration, logger: logger)
+            Self.applyZoom(resolved.zoomFactor, on: newDevice, logger: logger)
         } else if let device = activeInput?.device {
             Self.configureDevice(device, for: configuration, logger: logger)
+            // Same physical lens but the focal target may have
+            // moved — re-apply zoom so the change takes effect.
+            Self.applyZoom(resolved.zoomFactor, on: device, logger: logger)
         }
     }
 
-    nonisolated private static func preferredDevice(for mode: CaptureMode) -> AVCaptureDevice? {
-        switch mode {
-        case .presentation:
-            return AVCaptureDevice.default(
-                .builtInWideAngleCamera,
-                for: .video,
-                position: .back
-            )
-        case .detail, .ocr:
-            // Both detail and OCR want the close-focus capability
-            // of the ultra-wide sensor; fall back to wide-angle on
-            // devices where the ultra-wide isn't present.
-            if let ultra = AVCaptureDevice.default(
-                .builtInUltraWideCamera,
-                for: .video,
-                position: .back
-            ) {
-                return ultra
-            }
-            return AVCaptureDevice.default(
-                .builtInWideAngleCamera,
-                for: .video,
-                position: .back
-            )
-        }
+    /// Resolves the configuration's `targetFocalLength35mm` to a
+    /// physical capture device + digital zoom factor. Returns nil
+    /// only when the iPhone has zero back cameras (i.e. never on
+    /// real hardware).
+    nonisolated private static func preferredDeviceAndZoom(
+        for configuration: CameraConfiguration
+    ) -> (device: AVCaptureDevice, zoomFactor: Double)? {
+        let lenses = CameraInspector.availableBackLenses()
+        guard let choice = CameraInspector.bestLens(
+            forTargetFocal35mm: configuration.targetFocalLength35mm,
+            in: lenses
+        ) else { return nil }
+        let type = AVCaptureDevice.DeviceType(rawValue: choice.lens.deviceTypeRawValue)
+        guard let device = AVCaptureDevice.default(type, for: .video, position: .back) else { return nil }
+        return (device, choice.zoomFactor)
     }
 
     nonisolated private static func attachInput(
@@ -635,6 +639,27 @@ public final class CameraSessionController: UIViewController {
             }
         } catch {
             logger.error("Device configuration failed: \(error)")
+        }
+    }
+
+    /// Sets the device's `videoZoomFactor` to the digital zoom
+    /// computed by `CameraInspector.bestLens`. Clamped to the
+    /// device's supported range so we never crash on an
+    /// out-of-bounds value.
+    nonisolated private static func applyZoom(
+        _ zoomFactor: Double,
+        on device: AVCaptureDevice,
+        logger: GSLogger
+    ) {
+        do {
+            try device.lockForConfiguration()
+            defer { device.unlockForConfiguration() }
+            let minZoom = Double(device.minAvailableVideoZoomFactor)
+            let maxZoom = Double(device.maxAvailableVideoZoomFactor)
+            let clamped = min(max(zoomFactor, minZoom), maxZoom)
+            device.videoZoomFactor = CGFloat(clamped)
+        } catch {
+            logger.error("Failed to lock device for zoom configuration: \(error)")
         }
     }
 
