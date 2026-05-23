@@ -24,42 +24,31 @@ struct PictoLabelPicker: View {
     @FocusState private var keyboardActive: Bool
 
     var body: some View {
-        NavigationStack {
+        TechViewEditorShell(
+            title: "Pictogram label",
+            onCancel: onDismiss,
+            dismissKeyboard: {
+                keyboardActive = false
+                resignAllResponders()
+            },
+            primaryAction: {
+                Button {
+                    withAnimation { showAddForm.toggle() }
+                } label: {
+                    Label(
+                        showAddForm ? "Hide" : "New",
+                        systemImage: showAddForm ? "minus.circle" : "plus.circle"
+                    )
+                    .labelStyle(.titleAndIcon)
+                }
+            }
+        ) {
             VStack(spacing: 0) {
                 if showAddForm {
                     addForm
                     Divider()
                 }
                 listSection
-            }
-            .navigationTitle("Pictogram label")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { onDismiss() }
-                }
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        withAnimation { showAddForm.toggle() }
-                    } label: {
-                        Label(showAddForm ? "Hide" : "New", systemImage: showAddForm ? "minus.circle" : "plus.circle")
-                            .labelStyle(.titleAndIcon)
-                    }
-                }
-                ToolbarItemGroup(placement: .keyboard) {
-                    Spacer()
-                    Button {
-                        keyboardActive = false
-                        UIApplication.shared.sendAction(
-                            #selector(UIResponder.resignFirstResponder),
-                            to: nil, from: nil, for: nil
-                        )
-                    } label: {
-                        Label("Hide keyboard", systemImage: "keyboard.chevron.compact.down")
-                            .labelStyle(.titleAndIcon)
-                            .font(.body.weight(.medium))
-                    }
-                }
             }
         }
     }

@@ -2,14 +2,13 @@ import SwiftUI
 import UIKit
 
 /// Bottom-sheet style annotation surface shown after a photo is
-/// taken. Each OCR observation gets an inline, full-width editable
-/// TextField (corrections are kept until save) plus a category
-/// picker and a Delete button that removes the row outright. Picto
-/// candidates follow the same two-state UX: tap the label area to
-/// open `PictoLabelPicker`, then the labelled row exposes a
-/// category picker and Delete button. A keyboard accessory bar
-/// adds a "Done" button so the user can dismiss the keyboard if a
-/// field was tapped by accident.
+/// taken. Each OCR observation and each pictogram candidate is
+/// rendered as a tappable summary row: tapping opens a dedicated
+/// editor sheet that holds the user's full attention — text +
+/// category + delete for OCR via `OCRObservationEditor`, label +
+/// learning for pictograms via `PictoLabelPicker`. Both sheets
+/// share `TechViewEditorShell`, so the UX rhythm (Cancel,
+/// keyboard dismiss, presentation detents) is identical.
 struct TechViewsAnnotationView: View {
     let image: UIImage
     let observations: [OCRObservation]
@@ -24,10 +23,15 @@ struct TechViewsAnnotationView: View {
     let onSave: () -> Void
 
     @State private var pickerTarget: PickerTarget?
-    @FocusState private var focusedOCR: UUID?
+    @State private var ocrEditTarget: OCREditTarget?
 
     private struct PickerTarget: Identifiable {
         let id: UUID
+    }
+
+    private struct OCREditTarget: Identifiable {
+        let id: UUID
+        let observation: OCRObservation
     }
 
     private var visibleObservations: [OCRObservation] {
@@ -50,17 +54,15 @@ struct TechViewsAnnotationView: View {
             )
             .presentationDetents([.medium, .large])
         }
-        .toolbar {
-            ToolbarItemGroup(placement: .keyboard) {
-                Spacer()
-                Button {
-                    focusedOCR = nil
-                } label: {
-                    Label("Hide keyboard", systemImage: "keyboard.chevron.compact.down")
-                        .labelStyle(.titleAndIcon)
-                        .font(.body.weight(.medium))
-                }
-            }
+        .sheet(item: $ocrEditTarget) { target in
+            OCRObservationEditor(
+                observation: target.observation,
+                sourceImage: image,
+                ocrEdits: $ocrEdits,
+                assignments: $assignments,
+                hiddenOCRIDs: $hiddenOCRIDs,
+                onDismiss: { ocrEditTarget = nil }
+            )
         }
     }
 
@@ -108,52 +110,47 @@ struct TechViewsAnnotationView: View {
     }
 
     private func observationRow(_ obs: OCRObservation) -> some View {
-        let textBinding = Binding<String>(
-            get: { ocrEdits[obs.id] ?? obs.text },
-            set: { ocrEdits[obs.id] = $0 }
-        )
-        let categoryBinding = Binding<TechViewCategory?>(
-            get: { assignments[obs.id] },
-            set: { newValue in
-                if let newValue {
-                    assignments[obs.id] = newValue
-                } else {
-                    assignments.removeValue(forKey: obs.id)
+        let text = ocrEdits[obs.id] ?? obs.text
+        let category = assignments[obs.id]
+        return Button {
+            ocrEditTarget = OCREditTarget(id: obs.id, observation: obs)
+        } label: {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(text)
+                        .font(.subheadline)
+                        .foregroundStyle(.white)
+                        .multilineTextAlignment(.leading)
+                        .lineLimit(3)
+                    HStack(spacing: 8) {
+                        Text("\(Int(obs.confidence * 100))%")
+                            .font(.caption2.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                        if let category {
+                            Label(category.displayName, systemImage: category.symbolName)
+                                .labelStyle(.titleAndIcon)
+                                .font(.caption)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 3)
+                                .background(Color.accentColor.opacity(0.25), in: Capsule())
+                                .foregroundStyle(.white)
+                        } else {
+                            Text("Tap to categorise")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                 }
-            }
-        )
-        return VStack(alignment: .leading, spacing: 10) {
-            TextField("Text", text: textBinding, axis: .vertical)
-                .focused($focusedOCR, equals: obs.id)
-                .font(.subheadline)
-                .foregroundStyle(.white)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .lineLimit(1...5)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
-                .background(.black.opacity(0.35), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-            HStack(spacing: 10) {
-                Text("\(Int(obs.confidence * 100))%")
-                    .font(.caption2.monospacedDigit())
+                Spacer(minLength: 4)
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
-                Spacer(minLength: 0)
-                categoryMenu(selection: categoryBinding)
-                deleteButton {
-                    deleteObservation(obs.id)
-                }
             }
+            .padding(12)
+            .background(Color.black.opacity(0.25), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .contentShape(Rectangle())
         }
-        .padding(12)
-        .background(Color.black.opacity(0.25), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-    }
-
-    private func deleteObservation(_ id: UUID) {
-        if focusedOCR == id { focusedOCR = nil }
-        hiddenOCRIDs.insert(id)
-        assignments.removeValue(forKey: id)
-        ocrEdits.removeValue(forKey: id)
+        .buttonStyle(.plain)
     }
 
     // MARK: - Picto section
@@ -258,9 +255,9 @@ struct TechViewsAnnotationView: View {
             }
         )
         return HStack(spacing: 10) {
-            categoryMenu(selection: categoryBinding)
+            TechViewCategoryControl(selection: categoryBinding)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            deleteButton {
+            TechViewDeleteButton {
                 pictoAnnotations.removeValue(forKey: candidate.id)
             }
         }
@@ -301,48 +298,6 @@ struct TechViewsAnnotationView: View {
             .font(.footnote)
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func categoryMenu(selection: Binding<TechViewCategory?>) -> some View {
-        Menu {
-            ForEach(TechViewCategory.allCases) { category in
-                Button {
-                    selection.wrappedValue = category
-                } label: {
-                    Label(category.displayName, systemImage: category.symbolName)
-                }
-            }
-        } label: {
-            if let category = selection.wrappedValue {
-                Label(category.displayName, systemImage: category.symbolName)
-                    .labelStyle(.titleAndIcon)
-                    .font(.subheadline)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(Color.accentColor.opacity(0.22), in: Capsule())
-                    .foregroundStyle(.white)
-            } else {
-                Label("Category", systemImage: "tag")
-                    .labelStyle(.titleAndIcon)
-                    .font(.subheadline)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(Color.secondary.opacity(0.22), in: Capsule())
-                    .foregroundStyle(.secondary)
-            }
-        }
-    }
-
-    private func deleteButton(_ action: @escaping () -> Void) -> some View {
-        Button(role: .destructive, action: action) {
-            Label("Delete", systemImage: "trash")
-                .labelStyle(.titleAndIcon)
-                .font(.subheadline)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-        }
-        .buttonStyle(.bordered)
-        .tint(.red)
     }
 
     private var footer: some View {
