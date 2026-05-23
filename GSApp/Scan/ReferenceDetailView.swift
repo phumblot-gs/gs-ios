@@ -28,6 +28,7 @@ struct ReferenceDetailView: View {
     @State private var statusSheetVisible = false
     @State private var statusUpdating = false
     @State private var showMeasureFlow = false
+    @State private var showTechViewsCapture = false
     /// Inline error surfaced by a user-triggered action that
     /// failed (currently only the status change). Different
     /// channel from the on-load status banners so we don't
@@ -93,6 +94,7 @@ struct ReferenceDetailView: View {
                     stockItemSection
                 }
                 measuresSection
+                techViewsSection
                 shotListSection
             }
             .padding()
@@ -139,6 +141,22 @@ struct ReferenceDetailView: View {
                     showMeasureFlow = false
                     Task { await refreshReferenceAfterMeasures() }
                 }
+            }
+        }
+        .fullScreenCover(isPresented: $showTechViewsCapture) {
+            if let reference = currentReferenceStock?.reference {
+                TechViewsCaptureView(
+                    settings: settings,
+                    reference: reference,
+                    onExit: {
+                        showTechViewsCapture = false
+                        // The capture flow pushed fresh
+                        // `extra.tech_views` to GS — pull the
+                        // reference back so the section reflects
+                        // what was just saved.
+                        Task { await refreshReferenceAfterMeasures() }
+                    }
+                )
             }
         }
     }
@@ -360,6 +378,85 @@ struct ReferenceDetailView: View {
 
     private func formatted(_ value: ReferenceExtra.MeasureValue) -> String {
         String(format: "%.1f %@", value.value, value.unit)
+    }
+
+    // MARK: - Tech views
+
+    /// Mirrors the categories in `TechViewCategory` against the
+    /// `extra.tech_views` blob on the reference. Only categories
+    /// with a non-empty value get a row.
+    private var techViewEntries: [(category: TechViewCategory, value: String)] {
+        guard let tv = currentReferenceStock?.reference.extra?.techViews else { return [] }
+        let pairs: [(TechViewCategory, String?)] = [
+            (.provenance,   tv.provenance),
+            (.composition,  tv.composition),
+            (.care,         tv.care),
+            (.standards,    tv.standards),
+            (.restrictions, tv.restrictions),
+            (.notes,        tv.notes)
+        ]
+        return pairs.compactMap { category, raw in
+            guard let value = raw?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !value.isEmpty else { return nil }
+            return (category, value)
+        }
+    }
+
+    private var hasShootingMethod: Bool {
+        settings.techViewsShootingMethodID != nil
+    }
+
+    private var techViewsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("Tech views")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
+            VStack(alignment: .leading, spacing: 12) {
+                let entries = techViewEntries
+                if entries.isEmpty {
+                    Label("No tech views yet", systemImage: "doc.text.viewfinder")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(entries, id: \.category) { entry in
+                        techViewRow(entry.category, value: entry.value)
+                    }
+                }
+                Button {
+                    showTechViewsCapture = true
+                } label: {
+                    Label(
+                        entries.isEmpty ? "Capture tech views" : "Add more tech views",
+                        systemImage: entries.isEmpty ? "camera.viewfinder" : "plus"
+                    )
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.regular)
+                .disabled(!hasShootingMethod)
+                if !hasShootingMethod {
+                    Text("Configure a shooting method in Settings → Grand Shooting before capturing tech views.")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            .padding()
+            .background(.background, in: RoundedRectangle(cornerRadius: 12))
+        }
+    }
+
+    private func techViewRow(_ category: TechViewCategory, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Label(category.displayName, systemImage: category.symbolName)
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.subheadline)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 
     @MainActor
