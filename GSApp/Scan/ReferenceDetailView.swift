@@ -29,6 +29,17 @@ struct ReferenceDetailView: View {
     @State private var statusUpdating = false
     @State private var showMeasureFlow = false
     @State private var showTechViewsCapture = false
+    @State private var showMetadataEditor = false
+    /// Per-category draft text used by the Metadata editor sheet,
+    /// keyed by `TechViewCategory.rawValue`. Seeded from the
+    /// reference's current values when the sheet opens.
+    @State private var metadataDrafts: [String: String] = [:]
+    @State private var metadataSaving = false
+    @State private var metadataSaveError: String?
+
+    @State private var techViewPictures: [Picture] = []
+    @State private var techViewsLoadStatus: LoadStatus = .loaded
+    @State private var techViewsRetryTask: Task<Void, Never>?
     /// Inline error surfaced by a user-triggered action that
     /// failed (currently only the status change). Different
     /// channel from the on-load status banners so we don't
@@ -94,6 +105,7 @@ struct ReferenceDetailView: View {
                     stockItemSection
                 }
                 measuresSection
+                metadataSection
                 techViewsSection
                 shotListSection
             }
@@ -105,11 +117,13 @@ struct ReferenceDetailView: View {
         .refreshable {
             async let stock: Void = refreshStock(triggeredByUser: true)
             async let pics: Void = loadPictures(triggeredByUser: true)
-            _ = await (stock, pics)
+            async let tech: Void = loadTechViews(triggeredByUser: true)
+            _ = await (stock, pics, tech)
         }
         .task {
             if references.isEmpty { references = sourceReferences }
             await loadPictures(triggeredByUser: false)
+            await loadTechViews(triggeredByUser: false)
             // If the upstream /stock GET failed during the scan,
             // surface the banner and schedule one auto-retry after
             // 5 s. The retry is cancellable — pull-to-refresh while
@@ -122,6 +136,7 @@ struct ReferenceDetailView: View {
         .onDisappear {
             stockRetryTask?.cancel()
             picturesRetryTask?.cancel()
+            techViewsRetryTask?.cancel()
         }
         .alert(
             "Status update failed",
@@ -151,13 +166,20 @@ struct ReferenceDetailView: View {
                     onExit: {
                         showTechViewsCapture = false
                         // The capture flow pushed fresh
-                        // `extra.tech_views` to GS — pull the
-                        // reference back so the section reflects
-                        // what was just saved.
-                        Task { await refreshReferenceAfterMeasures() }
+                        // `extra.tech_views` to GS AND uploaded
+                        // new tech-view pictures — refresh both
+                        // the reference (for the Metadata block)
+                        // and the picture gallery.
+                        Task {
+                            await refreshReferenceAfterMeasures()
+                            await loadTechViews(triggeredByUser: true)
+                        }
                     }
                 )
             }
+        }
+        .sheet(isPresented: $showMetadataEditor) {
+            metadataEditorSheet
         }
     }
 
@@ -380,12 +402,12 @@ struct ReferenceDetailView: View {
         String(format: "%.1f %@", value.value, value.unit)
     }
 
-    // MARK: - Tech views
+    // MARK: - Metadata (extra.tech_views structured text)
 
     /// Mirrors the categories in `TechViewCategory` against the
     /// `extra.tech_views` blob on the reference. Only categories
-    /// with a non-empty value get a row.
-    private var techViewEntries: [(category: TechViewCategory, value: String)] {
+    /// with a non-empty value get a row. Used by `metadataSection`.
+    private var metadataEntries: [(category: TechViewCategory, value: String)] {
         guard let tv = currentReferenceStock?.reference.extra?.techViews else { return [] }
         let pairs: [(TechViewCategory, String?)] = [
             (.provenance,   tv.provenance),
@@ -406,6 +428,54 @@ struct ReferenceDetailView: View {
         settings.techViewsShootingMethodID != nil
     }
 
+    private var metadataSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("Metadata")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button {
+                    seedMetadataDrafts()
+                    showMetadataEditor = true
+                } label: {
+                    Label("Edit", systemImage: "pencil")
+                        .labelStyle(.titleAndIcon)
+                        .font(.caption.weight(.semibold))
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+            VStack(alignment: .leading, spacing: 12) {
+                let entries = metadataEntries
+                if entries.isEmpty {
+                    Label("No metadata yet", systemImage: "list.bullet.rectangle")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(entries, id: \.category) { entry in
+                        metadataRow(entry.category, value: entry.value)
+                    }
+                }
+            }
+            .padding()
+            .background(.background, in: RoundedRectangle(cornerRadius: 12))
+        }
+    }
+
+    private func metadataRow(_ category: TechViewCategory, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Label(category.displayName, systemImage: category.symbolName)
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.subheadline)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    // MARK: - Tech views (picture gallery filtered by shooting method)
+
     private var techViewsSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
@@ -415,22 +485,27 @@ struct ReferenceDetailView: View {
                 Spacer()
             }
             VStack(alignment: .leading, spacing: 12) {
-                let entries = techViewEntries
-                if entries.isEmpty {
-                    Label("No tech views yet", systemImage: "doc.text.viewfinder")
+                if techViewsLoadStatus != .loaded {
+                    techViewsLookupBanner
+                } else if techViewPictures.isEmpty {
+                    Label("No tech-view pictures yet", systemImage: "photo.stack")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 } else {
-                    ForEach(entries, id: \.category) { entry in
-                        techViewRow(entry.category, value: entry.value)
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        LazyHStack(spacing: 10) {
+                            ForEach(techViewPictures) { picture in
+                                techViewThumbnail(picture)
+                            }
+                        }
                     }
                 }
                 Button {
                     showTechViewsCapture = true
                 } label: {
                     Label(
-                        entries.isEmpty ? "Capture tech views" : "Add more tech views",
-                        systemImage: entries.isEmpty ? "camera.viewfinder" : "plus"
+                        techViewPictures.isEmpty ? "Capture tech views" : "Add more tech views",
+                        systemImage: techViewPictures.isEmpty ? "camera.viewfinder" : "plus"
                     )
                     .frame(maxWidth: .infinity)
                 }
@@ -448,15 +523,47 @@ struct ReferenceDetailView: View {
         }
     }
 
-    private func techViewRow(_ category: TechViewCategory, value: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Label(category.displayName, systemImage: category.symbolName)
-                .font(.caption.weight(.medium))
-                .foregroundStyle(.secondary)
-            Text(value)
-                .font(.subheadline)
-                .fixedSize(horizontal: false, vertical: true)
+    @ViewBuilder
+    private func techViewThumbnail(_ picture: Picture) -> some View {
+        let placeholder = RoundedRectangle(cornerRadius: 8, style: .continuous)
+            .fill(Color.secondary.opacity(0.12))
+        if let url = picture.thumbnailURL {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFill()
+                case .failure:
+                    placeholder.overlay(
+                        Image(systemName: "photo")
+                            .foregroundStyle(.secondary)
+                    )
+                case .empty:
+                    placeholder.overlay(ProgressView().controlSize(.small))
+                @unknown default:
+                    placeholder
+                }
+            }
+            .frame(width: 120, height: 120)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        } else {
+            placeholder
+                .frame(width: 120, height: 120)
+                .overlay(
+                    Image(systemName: "photo")
+                        .foregroundStyle(.secondary)
+                )
         }
+    }
+
+    private var techViewsLookupBanner: some View {
+        retryBanner(
+            status: techViewsLoadStatus,
+            failedTitle: "Couldn't load tech-view pictures.",
+            refreshingTitle: "Reloading tech-view pictures…",
+            retry: { Task { await loadTechViews(triggeredByUser: true) } }
+        )
     }
 
     @MainActor
@@ -572,6 +679,164 @@ struct ReferenceDetailView: View {
             if Task.isCancelled { return }
             guard picturesLoadStatus == .failed else { return }
             await loadPictures(triggeredByUser: false)
+        }
+    }
+
+    // MARK: - Tech-views loader
+
+    /// Fetches the picture gallery for the current reference,
+    /// scoped to the active shooting method. Same retry semantics
+    /// as `loadPictures`: initial failure schedules an auto-retry
+    /// 5 s later; manual triggers cancel any pending auto-retry.
+    /// Skipped silently when there's no shooting method
+    /// configured or no reference yet — the section in that case
+    /// shows the "configure shooting method" hint instead of a
+    /// load error.
+    @MainActor
+    private func loadTechViews(triggeredByUser: Bool) async {
+        guard let ref = currentReferenceStock?.reference.ref,
+              let methodName = settings.techViewsShootingMethodName
+        else {
+            techViewPictures = []
+            techViewsLoadStatus = .loaded
+            return
+        }
+        if triggeredByUser { techViewsRetryTask?.cancel() }
+        techViewsLoadStatus = .refreshing
+        let service = PictureService(environment: settings.currentEnvironment)
+        do {
+            let raw = try await service.listTechViews(
+                forRef: ref,
+                shootingMethodName: methodName
+            )
+            // The /picture endpoint can return multiple rows per
+            // physical file (one per status change). Collapse so
+            // we only show one thumbnail per uploaded shot.
+            techViewPictures = raw.latestByFilePath().sorted { lhs, rhs in
+                (lhs.dateCre ?? "") > (rhs.dateCre ?? "")
+            }
+            techViewsLoadStatus = .loaded
+        } catch {
+            techViewsLoadStatus = .failed
+            if !triggeredByUser {
+                scheduleTechViewsAutoRetry()
+            }
+        }
+    }
+
+    private func scheduleTechViewsAutoRetry() {
+        techViewsRetryTask?.cancel()
+        techViewsRetryTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(5))
+            if Task.isCancelled { return }
+            guard techViewsLoadStatus == .failed else { return }
+            await loadTechViews(triggeredByUser: false)
+        }
+    }
+
+    // MARK: - Metadata editor sheet
+
+    private func seedMetadataDrafts() {
+        let tv = currentReferenceStock?.reference.extra?.techViews
+        metadataDrafts = [
+            TechViewCategory.provenance.rawValue:   tv?.provenance ?? "",
+            TechViewCategory.composition.rawValue:  tv?.composition ?? "",
+            TechViewCategory.care.rawValue:         tv?.care ?? "",
+            TechViewCategory.standards.rawValue:    tv?.standards ?? "",
+            TechViewCategory.restrictions.rawValue: tv?.restrictions ?? "",
+            TechViewCategory.notes.rawValue:        tv?.notes ?? ""
+        ]
+        metadataSaveError = nil
+    }
+
+    private var metadataEditorSheet: some View {
+        NavigationStack {
+            Form {
+                ForEach(TechViewCategory.allCases) { category in
+                    Section {
+                        TextField(
+                            "",
+                            text: Binding(
+                                get: { metadataDrafts[category.rawValue] ?? "" },
+                                set: { metadataDrafts[category.rawValue] = $0 }
+                            ),
+                            axis: .vertical
+                        )
+                        .textInputAutocapitalization(.sentences)
+                        .autocorrectionDisabled(false)
+                        .lineLimit(1...6)
+                    } header: {
+                        Label(category.displayName, systemImage: category.symbolName)
+                    }
+                }
+                if let metadataSaveError {
+                    Section {
+                        Label(metadataSaveError, systemImage: "exclamationmark.triangle.fill")
+                            .font(.footnote)
+                            .foregroundStyle(.red)
+                    }
+                }
+            }
+            .navigationTitle("Edit metadata")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { showMetadataEditor = false }
+                        .disabled(metadataSaving)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    if metadataSaving {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Button("Save") {
+                            Task { await saveMetadataDrafts() }
+                        }
+                    }
+                }
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") {
+                        UIApplication.shared.sendAction(
+                            #selector(UIResponder.resignFirstResponder),
+                            to: nil, from: nil, for: nil
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    @MainActor
+    private func saveMetadataDrafts() async {
+        guard let referenceID = currentReferenceStock?.reference.id else {
+            metadataSaveError = "Reference id unavailable."
+            return
+        }
+        // Only send categories whose draft has actual content;
+        // ReferenceExtraService merges with whatever's already on
+        // GS, so leaving a key out preserves any prior value.
+        var payload: [String: String] = [:]
+        for category in TechViewCategory.allCases {
+            let trimmed = (metadataDrafts[category.rawValue] ?? "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                payload[category.rawValue] = trimmed
+            }
+        }
+        metadataSaving = true
+        metadataSaveError = nil
+        defer { metadataSaving = false }
+        let service = ReferenceExtraService(environment: settings.currentEnvironment)
+        do {
+            try await service.updateTechViews(referenceID: referenceID, fields: payload)
+            showMetadataEditor = false
+            // Pull the freshly-saved values back into the
+            // displayed reference so the row list reflects them.
+            await refreshReferenceAfterMeasures()
+        } catch let err as GSHTTPClient.HTTPError {
+            metadataSaveError = err.userMessage
+        } catch {
+            metadataSaveError = error.localizedDescription
         }
     }
 
