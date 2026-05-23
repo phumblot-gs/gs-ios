@@ -693,6 +693,7 @@
       }
     },
     "Detected text" : {
+      "extractionState" : "stale",
       "localizations" : {
         "fr" : {
           "stringUnit" : {
@@ -1435,6 +1436,7 @@
       }
     },
     "No text detected on this shot." : {
+      "extractionState" : "stale",
       "localizations" : {
         "fr" : {
           "stringUnit" : {
@@ -1706,6 +1708,7 @@
       }
     },
     "Reading…" : {
+      "extractionState" : "stale",
       "localizations" : {
         "fr" : {
           "stringUnit" : {

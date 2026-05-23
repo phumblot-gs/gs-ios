@@ -2,12 +2,14 @@ import SwiftUI
 import UIKit
 
 /// Bottom-sheet style annotation surface shown after a photo is
-/// taken. Lists each OCR observation alongside a category picker so
-/// the user can tag what it represents (origin, composition, care,
-/// standards, restrictions, notes); below that, a Pictograms section
-/// lets the user confirm or correct auto-detected non-textual icons.
-/// "Save" + "Retake" buttons hand control back to the parent
-/// capture view.
+/// taken. The OCR section lists each text observation in an inline
+/// editable field so the user can correct what Vision returned
+/// before assigning a category. The Pictograms section shows each
+/// auto-detected icon: tapping the label area opens
+/// `PictoLabelPicker` to pick or teach a label; once labelled, the
+/// row reveals a category picker and a clearly tappable delete
+/// button. Unlabelled rows stay compact and are silently dropped
+/// on save.
 struct TechViewsAnnotationView: View {
     let image: UIImage
     let observations: [OCRObservation]
@@ -15,9 +17,16 @@ struct TechViewsAnnotationView: View {
     let candidates: [TechViewsPictoDetection.Candidate]
     let isDetectingPictos: Bool
     @Binding var assignments: [UUID: TechViewCategory]
+    @Binding var ocrEdits: [UUID: String]
     @Binding var pictoAnnotations: [UUID: PictoAnnotation]
     let onRetake: () -> Void
     let onSave: () -> Void
+
+    @State private var pickerTarget: PickerTarget?
+
+    private struct PickerTarget: Identifiable {
+        let id: UUID
+    }
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -28,13 +37,20 @@ struct TechViewsAnnotationView: View {
                 footer
             }
         }
+        .sheet(item: $pickerTarget) { target in
+            PictoLabelPicker(
+                annotation: annotationBinding(for: target.id),
+                onDismiss: { pickerTarget = nil }
+            )
+            .presentationDetents([.medium, .large])
+        }
     }
 
     private var preview: some View {
         Image(uiImage: image)
             .resizable()
             .scaledToFit()
-            .frame(maxWidth: .infinity, maxHeight: 220)
+            .frame(maxWidth: .infinity, maxHeight: 200)
             .padding(.top, 8)
     }
 
@@ -72,7 +88,11 @@ struct TechViewsAnnotationView: View {
     }
 
     private func observationRow(_ obs: OCRObservation) -> some View {
-        let binding = Binding<TechViewCategory?>(
+        let textBinding = Binding<String>(
+            get: { ocrEdits[obs.id] ?? obs.text },
+            set: { ocrEdits[obs.id] = $0 }
+        )
+        let categoryBinding = Binding<TechViewCategory?>(
             get: { assignments[obs.id] },
             set: { newValue in
                 if let newValue {
@@ -83,15 +103,21 @@ struct TechViewsAnnotationView: View {
             }
         )
         return HStack(alignment: .top, spacing: 10) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(obs.text)
+            VStack(alignment: .leading, spacing: 4) {
+                TextField("Text", text: textBinding, axis: .vertical)
                     .font(.subheadline)
+                    .foregroundStyle(.white)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .lineLimit(1...4)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 6)
+                    .background(.black.opacity(0.35), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                 Text("\(Int(obs.confidence * 100))%")
                     .font(.caption2.monospacedDigit())
                     .foregroundStyle(.secondary)
             }
-            Spacer()
-            categoryMenu(selection: binding)
+            categoryMenu(selection: categoryBinding)
         }
         .padding(10)
         .background(Color.black.opacity(0.25), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
@@ -119,59 +145,116 @@ struct TechViewsAnnotationView: View {
     }
 
     private func pictoRow(_ candidate: TechViewsPictoDetection.Candidate) -> some View {
-        let annotationBinding = Binding<PictoAnnotation>(
-            get: { pictoAnnotations[candidate.id] ?? PictoAnnotation(id: candidate.id, label: "", category: nil) },
-            set: { pictoAnnotations[candidate.id] = $0 }
-        )
-        let labelBinding = Binding<String>(
-            get: { annotationBinding.wrappedValue.label },
-            set: { annotationBinding.wrappedValue.label = $0 }
-        )
-        let categoryBinding = Binding<TechViewCategory?>(
-            get: { annotationBinding.wrappedValue.category },
-            set: { annotationBinding.wrappedValue.category = $0 }
-        )
-        let suggested = annotationBinding.wrappedValue.matchedLearnedID != nil
-        return HStack(alignment: .top, spacing: 10) {
-            Image(uiImage: candidate.crop)
-                .resizable()
-                .interpolation(.medium)
-                .aspectRatio(contentMode: .fit)
-                .frame(width: 56, height: 56)
-                .background(Color.white)
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-            VStack(alignment: .leading, spacing: 6) {
-                TextField("Label (e.g. Wash 30°)", text: labelBinding)
-                    .textInputAutocapitalization(.sentences)
-                    .autocorrectionDisabled()
-                    .font(.subheadline)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 6)
-                    .background(.black.opacity(0.35), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-                if suggested, let distance = annotationBinding.wrappedValue.suggestionDistance {
-                    Text(String(format: "Suggested · distance %.1f", distance))
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            Spacer(minLength: 4)
-            VStack(spacing: 6) {
-                categoryMenu(selection: categoryBinding)
+        let annotation = pictoAnnotations[candidate.id]
+        let hasLabel = annotation?.hasUsableContent ?? false
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 12) {
+                Image(uiImage: candidate.crop)
+                    .resizable()
+                    .interpolation(.medium)
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 60, height: 60)
+                    .background(Color.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 Button {
-                    pictoAnnotations.removeValue(forKey: candidate.id)
+                    pickerTarget = PickerTarget(id: candidate.id)
                 } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.body)
-                        .foregroundStyle(.secondary)
+                    pictoLabelContent(annotation: annotation)
                 }
                 .buttonStyle(.plain)
+                .contentShape(Rectangle())
+            }
+            if hasLabel {
+                labelledControls(candidate: candidate, annotation: annotation)
             }
         }
-        .padding(10)
+        .padding(12)
         .background(Color.black.opacity(0.25), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
+    @ViewBuilder
+    private func pictoLabelContent(annotation: PictoAnnotation?) -> some View {
+        if let annotation, !annotation.label.isEmpty {
+            HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(annotation.label)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .lineLimit(2)
+                    if let distance = annotation.suggestionDistance,
+                       annotation.matchedLearnedID != nil {
+                        Text(String(format: "Suggested · distance %.1f", distance))
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    } else if annotation.matchedLearnedID == nil {
+                        Text("New label")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            HStack(spacing: 8) {
+                Text("Choose label")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.white)
+                Spacer()
+                Image(systemName: "chevron.down")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 12)
+            .background(Color.accentColor.opacity(0.25), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+    }
+
+    private func labelledControls(candidate: TechViewsPictoDetection.Candidate, annotation: PictoAnnotation?) -> some View {
+        let categoryBinding = Binding<TechViewCategory?>(
+            get: { pictoAnnotations[candidate.id]?.category },
+            set: { newValue in
+                guard var current = pictoAnnotations[candidate.id] else { return }
+                current.category = newValue
+                pictoAnnotations[candidate.id] = current
+            }
+        )
+        return HStack(spacing: 10) {
+            categoryMenu(selection: categoryBinding)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Button(role: .destructive) {
+                pictoAnnotations.removeValue(forKey: candidate.id)
+            } label: {
+                Label("Delete", systemImage: "trash")
+                    .labelStyle(.titleAndIcon)
+                    .font(.subheadline)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+            }
+            .buttonStyle(.bordered)
+            .tint(.red)
+        }
+    }
+
     // MARK: - Shared
+
+    private func annotationBinding(for id: UUID) -> Binding<PictoAnnotation> {
+        Binding(
+            get: { pictoAnnotations[id] ?? PictoAnnotation(id: id, label: "", category: nil) },
+            set: { newValue in
+                if newValue.label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    pictoAnnotations.removeValue(forKey: id)
+                } else {
+                    pictoAnnotations[id] = newValue
+                }
+            }
+        )
+    }
 
     private func sectionHeader(title: String, isLoading: Bool, loadingMessage: String) -> some View {
         HStack {
@@ -210,16 +293,18 @@ struct TechViewsAnnotationView: View {
             if let category = selection.wrappedValue {
                 Label(category.displayName, systemImage: category.symbolName)
                     .labelStyle(.titleAndIcon)
-                    .font(.caption)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(Color.accentColor.opacity(0.18), in: Capsule())
+                    .font(.subheadline)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Color.accentColor.opacity(0.22), in: Capsule())
+                    .foregroundStyle(.white)
             } else {
-                Text("Ignore")
-                    .font(.caption)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(Color.secondary.opacity(0.18), in: Capsule())
+                Label("Ignore", systemImage: "circle.dashed")
+                    .labelStyle(.titleAndIcon)
+                    .font(.subheadline)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Color.secondary.opacity(0.22), in: Capsule())
                     .foregroundStyle(.secondary)
             }
         }
