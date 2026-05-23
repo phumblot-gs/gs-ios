@@ -1,5 +1,6 @@
 import SwiftUI
 import GSAPIClient
+import GSCamera
 import GSCore
 
 struct SettingsTab: View {
@@ -27,6 +28,7 @@ struct SettingsTab: View {
                 languageSection
                 backendSection
                 techViewsSection
+                captureBehaviourSection
                 developmentSection
                 accountSection
             }
@@ -263,6 +265,67 @@ struct SettingsTab: View {
                 await loadShootingMethods()
             }
         }
+    }
+
+    // MARK: - Capture behaviour (Presentation / OCR modes)
+
+    private var captureBehaviourSection: some View {
+        Section {
+            Picker("Starting mode", selection: capturePersistenceBinding) {
+                Text("Always Presentation").tag(DevSettings.CapturePersistence.alwaysPresentation)
+                Text("Remember last").tag(DevSettings.CapturePersistence.rememberLast)
+            }
+
+            Picker("White balance (Presentation)", selection: whiteBalanceBinding) {
+                ForEach(PresentationWhiteBalance.allCases) { wb in
+                    Text(wb.displayName).tag(wb)
+                }
+            }
+
+            Picker("Colour profile (Presentation)", selection: colorProfileBinding) {
+                ForEach(PresentationColorProfile.allCases) { profile in
+                    Text(profile.displayName).tag(profile)
+                }
+            }
+            if currentColorProfile != .none {
+                Text(currentColorProfile.summary)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        } header: {
+            Text("Capture behaviour")
+        } footer: {
+            Text("Presentation mode uses the wide-angle camera with the colour-grading profile you pick here. OCR mode swaps to the ultra-wide camera when available so the lens focuses down to ~2 cm — colour profile and locked white balance are skipped in that mode for maximum readability.")
+        }
+    }
+
+    private var capturePersistenceBinding: Binding<DevSettings.CapturePersistence> {
+        Binding(
+            get: { settings.techViewsCapturePersistence },
+            set: { settings.techViewsCapturePersistence = $0 }
+        )
+    }
+
+    private var whiteBalanceBinding: Binding<PresentationWhiteBalance> {
+        Binding(
+            get: {
+                PresentationWhiteBalance(rawValue: settings.techViewsWhiteBalanceRaw) ?? .auto
+            },
+            set: { settings.techViewsWhiteBalanceRaw = $0.rawValue }
+        )
+    }
+
+    private var colorProfileBinding: Binding<PresentationColorProfile> {
+        Binding(
+            get: {
+                PresentationColorProfile(rawValue: settings.techViewsColorProfileRaw) ?? .none
+            },
+            set: { settings.techViewsColorProfileRaw = $0.rawValue }
+        )
+    }
+
+    private var currentColorProfile: PresentationColorProfile {
+        PresentationColorProfile(rawValue: settings.techViewsColorProfileRaw) ?? .none
     }
 
     private var shootingMethodBinding: Binding<Int?> {

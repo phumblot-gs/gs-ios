@@ -168,6 +168,44 @@ public final class DevSettings {
 
     // MARK: - Technical views
 
+    /// How the capture screen picks its starting mode (presentation
+    /// vs OCR) when the user enters the photo flow for a new
+    /// reference.
+    public enum CapturePersistence: String, Sendable, CaseIterable, Codable {
+        case alwaysPresentation
+        case rememberLast
+    }
+
+    public var techViewsCapturePersistence: CapturePersistence {
+        didSet { UserDefaults.standard.set(techViewsCapturePersistence.rawValue, forKey: Self.capturePersistenceKey) }
+    }
+
+    /// Raw value of the last `CaptureMode` the user actively used.
+    /// Honoured only when `techViewsCapturePersistence == .rememberLast`.
+    public var techViewsLastCaptureModeRaw: String? {
+        didSet {
+            if let raw = techViewsLastCaptureModeRaw {
+                UserDefaults.standard.set(raw, forKey: Self.lastCaptureModeKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: Self.lastCaptureModeKey)
+            }
+        }
+    }
+
+    /// Raw value of `PresentationWhiteBalance` (the Presentation
+    /// mode's white-balance behaviour — auto or a fixed Kelvin
+    /// preset). Defaults to `"auto"`.
+    public var techViewsWhiteBalanceRaw: String {
+        didSet { UserDefaults.standard.set(techViewsWhiteBalanceRaw, forKey: Self.whiteBalanceKey) }
+    }
+
+    /// Raw value of `PresentationColorProfile` (the curated
+    /// colour-grading preset applied to Presentation captures).
+    /// Defaults to `"none"`.
+    public var techViewsColorProfileRaw: String {
+        didSet { UserDefaults.standard.set(techViewsColorProfileRaw, forKey: Self.colorProfileKey) }
+    }
+
     /// Shooting method the technical-views uploads are scoped to.
     /// Required: the Photo tab is gated on this being non-nil.
     public var techViewsShootingMethodID: Int? {
@@ -245,6 +283,13 @@ public final class DevSettings {
         }
         self.techViewsShootingMethodName = UserDefaults.standard.string(forKey: Self.techViewsShootingMethodNameKey)
 
+        let persistenceRaw = UserDefaults.standard.string(forKey: Self.capturePersistenceKey)
+            ?? CapturePersistence.alwaysPresentation.rawValue
+        self.techViewsCapturePersistence = CapturePersistence(rawValue: persistenceRaw) ?? .alwaysPresentation
+        self.techViewsLastCaptureModeRaw = UserDefaults.standard.string(forKey: Self.lastCaptureModeKey)
+        self.techViewsWhiteBalanceRaw = UserDefaults.standard.string(forKey: Self.whiteBalanceKey) ?? "auto"
+        self.techViewsColorProfileRaw = UserDefaults.standard.string(forKey: Self.colorProfileKey) ?? "none"
+
         // Safety net: force the default-on-register status to be enabled,
         // even if the user previously persisted a list that excluded it.
         // Done at the end of init so every stored property is initialised.
@@ -265,4 +310,8 @@ public final class DevSettings {
     private static let measurementUnitKey = "dev.measurement.unit"
     private static let techViewsShootingMethodIDKey = "dev.techViews.shootingMethodID"
     private static let techViewsShootingMethodNameKey = "dev.techViews.shootingMethodName"
+    private static let capturePersistenceKey = "dev.techViews.capturePersistence"
+    private static let lastCaptureModeKey = "dev.techViews.lastCaptureMode"
+    private static let whiteBalanceKey = "dev.techViews.whiteBalance"
+    private static let colorProfileKey = "dev.techViews.colorProfile"
 }

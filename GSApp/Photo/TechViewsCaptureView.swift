@@ -57,9 +57,29 @@ struct TechViewsCaptureView: View {
         }
     }
 
+    /// Builds the camera configuration we hand to GSCamera, picking
+    /// the starting mode based on the user's persistence preference.
+    private var initialCameraConfiguration: CameraConfiguration {
+        let mode: CaptureMode
+        switch settings.techViewsCapturePersistence {
+        case .alwaysPresentation:
+            mode = .presentation
+        case .rememberLast:
+            if let raw = settings.techViewsLastCaptureModeRaw,
+               let last = CaptureMode(rawValue: raw) {
+                mode = last
+            } else {
+                mode = .presentation
+            }
+        }
+        let wb = PresentationWhiteBalance(rawValue: settings.techViewsWhiteBalanceRaw) ?? .auto
+        let profile = PresentationColorProfile(rawValue: settings.techViewsColorProfileRaw) ?? .none
+        return CameraConfiguration(mode: mode, whiteBalance: wb, colorProfile: profile)
+    }
+
     var body: some View {
         ZStack {
-            CameraView(shutter: shutter) { photo in
+            CameraView(shutter: shutter, configuration: initialCameraConfiguration) { photo in
                 handleCapture(photo: photo)
             }
             .ignoresSafeArea()
@@ -160,8 +180,9 @@ struct TechViewsCaptureView: View {
                     .padding(.vertical, 8)
                     .background(.red.opacity(0.85), in: Capsule())
             }
-            HStack {
+            HStack(spacing: 24) {
                 Spacer()
+                modeToggleButton
                 Button {
                     shutter.capture()
                 } label: {
@@ -173,9 +194,37 @@ struct TechViewsCaptureView: View {
                 .disabled(shutter.isCapturing || shutter.authorization != .authorized)
                 .accessibilityLabel("Shutter")
                 Spacer()
+                    .overlay(alignment: .leading) {
+                        // Mirror the toggle's width so the shutter
+                        // stays optically centred.
+                        Color.clear.frame(width: 56, height: 56)
+                    }
             }
             .padding(.bottom, 32)
         }
+    }
+
+    private var modeToggleButton: some View {
+        let isOCR = shutter.mode == .ocr
+        return Button {
+            let next: CaptureMode = isOCR ? .presentation : .ocr
+            shutter.switchMode(to: next)
+            if settings.techViewsCapturePersistence == .rememberLast {
+                settings.techViewsLastCaptureModeRaw = next.rawValue
+            }
+        } label: {
+            VStack(spacing: 2) {
+                Image(systemName: isOCR ? "text.viewfinder" : "camera")
+                    .font(.title3.weight(.semibold))
+                Text(isOCR ? "OCR" : "Photo")
+                    .font(.caption2.weight(.semibold))
+            }
+            .foregroundStyle(.white)
+            .frame(width: 56, height: 56)
+            .background(isOCR ? Color.accentColor.opacity(0.85) : Color.black.opacity(0.5), in: Circle())
+        }
+        .disabled(shutter.isCapturing)
+        .accessibilityLabel(isOCR ? "Switch to Presentation" : "Switch to OCR")
     }
 
     // MARK: - Actions
