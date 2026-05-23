@@ -75,7 +75,13 @@ struct TechViewsCaptureView: View {
         }
         let wb = PresentationWhiteBalance(rawValue: settings.techViewsWhiteBalanceRaw) ?? .auto
         let profile = PresentationColorProfile(rawValue: settings.techViewsColorProfileRaw) ?? .none
-        return CameraConfiguration(mode: mode, whiteBalance: wb, colorProfile: profile)
+        let space = PresentationColorSpace(rawValue: settings.techViewsColorSpaceRaw) ?? .sRGB
+        return CameraConfiguration(
+            mode: mode,
+            whiteBalance: wb,
+            colorProfile: profile,
+            colorSpace: space
+        )
     }
 
     var body: some View {

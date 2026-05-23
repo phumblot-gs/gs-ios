@@ -206,6 +206,13 @@ public final class DevSettings {
         didSet { UserDefaults.standard.set(techViewsColorProfileRaw, forKey: Self.colorProfileKey) }
     }
 
+    /// Raw value of `PresentationColorSpace` — the ICC profile
+    /// tagged onto Presentation / Detail JPEGs after capture.
+    /// Defaults to `"sRGB"` (the international standard).
+    public var techViewsColorSpaceRaw: String {
+        didSet { UserDefaults.standard.set(techViewsColorSpaceRaw, forKey: Self.colorSpaceKey) }
+    }
+
     /// Shooting method the technical-views uploads are scoped to.
     /// Required: the Photo tab is gated on this being non-nil.
     public var techViewsShootingMethodID: Int? {
@@ -289,6 +296,7 @@ public final class DevSettings {
         self.techViewsLastCaptureModeRaw = UserDefaults.standard.string(forKey: Self.lastCaptureModeKey)
         self.techViewsWhiteBalanceRaw = UserDefaults.standard.string(forKey: Self.whiteBalanceKey) ?? "auto"
         self.techViewsColorProfileRaw = UserDefaults.standard.string(forKey: Self.colorProfileKey) ?? "none"
+        self.techViewsColorSpaceRaw = UserDefaults.standard.string(forKey: Self.colorSpaceKey) ?? "sRGB"
 
         // Safety net: force the default-on-register status to be enabled,
         // even if the user previously persisted a list that excluded it.
@@ -314,4 +322,5 @@ public final class DevSettings {
     private static let lastCaptureModeKey = "dev.techViews.lastCaptureMode"
     private static let whiteBalanceKey = "dev.techViews.whiteBalance"
     private static let colorProfileKey = "dev.techViews.colorProfile"
+    private static let colorSpaceKey = "dev.techViews.colorSpace"
 }

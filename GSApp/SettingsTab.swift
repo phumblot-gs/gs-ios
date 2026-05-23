@@ -292,10 +292,19 @@ struct SettingsTab: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+
+            Picker("Colour space (JPEG profile)", selection: colorSpaceBinding) {
+                ForEach(PresentationColorSpace.allCases) { space in
+                    Text(space.displayName).tag(space)
+                }
+            }
+            Text(currentColorSpace.summary)
+                .font(.caption)
+                .foregroundStyle(.secondary)
         } header: {
             Text("Capture behaviour")
         } footer: {
-            Text("Photo uses the wide-angle camera with the white balance and colour profile chosen above. Detail switches to the ultra-wide camera (focuses down to ~2 cm) but keeps the same white balance and colour profile — for close-up product shots. OCR also uses the ultra-wide but with auto white balance and no colour grading; it's the only mode where Vision OCR + pictogram detection run after capture.")
+            Text("Photo uses the wide-angle camera with the white balance, colour profile and colour space chosen above. Detail switches to the ultra-wide camera (focuses down to ~2 cm) but keeps the same look — for close-up product shots. OCR also uses the ultra-wide but with auto white balance and no colour processing; it's the only mode where Vision OCR + pictogram detection run after capture, and its JPEGs keep the sensor's native colour profile. Focal length, white-balance mode, ISO and lens model are written into the JPEG EXIF metadata for all modes.")
         }
     }
 
@@ -326,6 +335,19 @@ struct SettingsTab: View {
 
     private var currentColorProfile: PresentationColorProfile {
         PresentationColorProfile(rawValue: settings.techViewsColorProfileRaw) ?? .none
+    }
+
+    private var colorSpaceBinding: Binding<PresentationColorSpace> {
+        Binding(
+            get: {
+                PresentationColorSpace(rawValue: settings.techViewsColorSpaceRaw) ?? .sRGB
+            },
+            set: { settings.techViewsColorSpaceRaw = $0.rawValue }
+        )
+    }
+
+    private var currentColorSpace: PresentationColorSpace {
+        PresentationColorSpace(rawValue: settings.techViewsColorSpaceRaw) ?? .sRGB
     }
 
     private var shootingMethodBinding: Binding<Int?> {

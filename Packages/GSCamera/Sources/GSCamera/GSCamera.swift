@@ -1,6 +1,8 @@
 @preconcurrency import AVFoundation
 import CoreImage
 import CoreImage.CIFilterBuiltins
+import ImageIO
+import UniformTypeIdentifiers
 import GSCore
 
 // MARK: - Result
@@ -80,6 +82,47 @@ public enum PresentationColorProfile: String, Sendable, CaseIterable, Identifiab
     }
 }
 
+/// ICC colour profile we tag onto Presentation / Detail JPEGs
+/// after capture. Defaults to `.sRGB` — the international
+/// standard for cross-device compatibility. Display P3 is the
+/// native colour space of modern iPhones; Adobe RGB targets
+/// print workflows. OCR captures always keep the sensor's
+/// native colour profile (typically P3) since we re-encode
+/// nothing in that mode.
+public enum PresentationColorSpace: String, Sendable, CaseIterable, Identifiable, Codable {
+    case sRGB
+    case displayP3
+    case adobeRGB
+
+    public var id: String { rawValue }
+
+    public var displayName: String {
+        switch self {
+        case .sRGB: "sRGB (standard)"
+        case .displayP3: "Display P3 (Apple wide gamut)"
+        case .adobeRGB: "Adobe RGB (print)"
+        }
+    }
+
+    public var summary: String {
+        switch self {
+        case .sRGB: "International web standard. Most compatible across devices and downstream tools."
+        case .displayP3: "Apple's wide-gamut space. Closest to what the iPhone sensor captures natively."
+        case .adobeRGB: "Wider than sRGB, narrower than P3. Typical for print colour pipelines."
+        }
+    }
+
+    fileprivate var cgColorSpace: CGColorSpace? {
+        let name: CFString
+        switch self {
+        case .sRGB: name = CGColorSpace.sRGB
+        case .displayP3: name = CGColorSpace.displayP3
+        case .adobeRGB: name = CGColorSpace.adobeRGB1998
+        }
+        return CGColorSpace(name: name)
+    }
+}
+
 /// White-balance behaviour for the `.presentation` capture mode.
 /// `.auto` is iOS continuous WB; the explicit temperatures lock the
 /// device to a fixed colour temperature (degrees Kelvin) so multiple
@@ -125,15 +168,18 @@ public struct CameraConfiguration: Sendable {
     public var mode: CaptureMode
     public var whiteBalance: PresentationWhiteBalance
     public var colorProfile: PresentationColorProfile
+    public var colorSpace: PresentationColorSpace
 
     public init(
         mode: CaptureMode = .presentation,
         whiteBalance: PresentationWhiteBalance = .auto,
-        colorProfile: PresentationColorProfile = .none
+        colorProfile: PresentationColorProfile = .none,
+        colorSpace: PresentationColorSpace = .sRGB
     ) {
         self.mode = mode
         self.whiteBalance = whiteBalance
         self.colorProfile = colorProfile
+        self.colorSpace = colorSpace
     }
 }
 
@@ -629,6 +675,7 @@ public final class CameraSessionController: UIViewController {
         Task { @MainActor in self.shutter?.update(isCapturing: true) }
         let modeForCapture = configuration.mode
         let profileForCapture = configuration.colorProfile
+        let colorSpaceForCapture = configuration.colorSpace
         let delegate = CaptureDelegate { [weak self] result in
             guard let self else { return }
             switch result {
@@ -637,7 +684,8 @@ public final class CameraSessionController: UIViewController {
             case .success(let raw):
                 Task.detached(priority: .userInitiated) {
                     let processed = ColorProfileProcessor.apply(
-                        profileForCapture,
+                        profile: profileForCapture,
+                        colorSpace: colorSpaceForCapture,
                         to: raw,
                         when: modeForCapture
                     )
@@ -699,42 +747,89 @@ private final class CaptureDelegate: NSObject, AVCapturePhotoCaptureDelegate, @u
 
 private enum ColorProfileProcessor {
 
-    /// Apply a colour profile to a JPEG. We only post-process
-    /// modes that honour presentation processing (presentation +
-    /// detail) — OCR captures are returned untouched since
-    /// readability beats prettiness there. `.none` skips the
-    /// CoreImage round-trip entirely.
+    /// Re-encode a Photo / Detail capture through the user's
+    /// chosen colour space (default sRGB) and apply an optional
+    /// colour-grading profile. OCR captures are returned
+    /// untouched — readability beats prettiness there and we
+    /// don't want to disturb the sensor-native pixel buffer Vision
+    /// will read. EXIF metadata from the raw AVCapture JPEG
+    /// (focal length, white-balance mode, ISO, lens model, …) is
+    /// preserved through the round-trip via `CGImageDestination`.
     static func apply(
-        _ profile: PresentationColorProfile,
+        profile: PresentationColorProfile,
+        colorSpace: PresentationColorSpace,
         to photo: CapturedPhoto,
         when mode: CaptureMode
     ) -> CapturedPhoto {
-        guard mode.honoursPresentationProcessing, profile != .none else { return photo }
-        guard let result = graded(jpegData: photo.imageData, profile: profile) else {
-            return photo
-        }
+        guard mode.honoursPresentationProcessing else { return photo }
+        guard let result = reencode(
+            jpegData: photo.imageData,
+            profile: profile,
+            colorSpace: colorSpace
+        ) else { return photo }
         return CapturedPhoto(imageData: result, capturedAt: photo.capturedAt)
     }
 
-    private static func graded(jpegData: Data, profile: PresentationColorProfile) -> Data? {
+    private static func reencode(
+        jpegData: Data,
+        profile: PresentationColorProfile,
+        colorSpace: PresentationColorSpace
+    ) -> Data? {
         // Going through UIImage(data:) → CIImage(image:) bakes the
         // source's EXIF orientation into the pixel buffer up front,
-        // so the graded JPEG comes out in display-oriented pixels
-        // with EXIF orientation = .up. Downstream consumers (OCR,
-        // crop preview) get the same self-consistent pixel space
-        // they expect from a raw camera capture.
+        // so the new JPEG comes out in display-oriented pixels
+        // with EXIF orientation = .up. Downstream consumers (the
+        // annotation preview + the GS upload) get the same
+        // self-consistent pixel space.
         guard let uiSource = UIImage(data: jpegData),
               let ciSource = CIImage(image: uiSource) else { return nil }
         let graded = apply(profile: profile, to: ciSource)
         let context = CIContext()
-        let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
+        let outputColorSpace = colorSpace.cgColorSpace ?? CGColorSpaceCreateDeviceRGB()
         guard let cgImage = context.createCGImage(
             graded,
             from: graded.extent,
             format: .RGBA8,
-            colorSpace: colorSpace
+            colorSpace: outputColorSpace
         ) else { return nil }
-        return UIImage(cgImage: cgImage).jpegData(compressionQuality: 0.92)
+        return encodeJPEG(
+            cgImage: cgImage,
+            sourceJPEG: jpegData,
+            quality: 0.92
+        )
+    }
+
+    /// Write the processed `cgImage` as a JPEG with the same
+    /// EXIF / TIFF / GPS / Maker-Note dictionaries the original
+    /// AVCapture JPEG carried. We override only what changed in
+    /// our pipeline: orientation (now `.up`) and the embedded ICC
+    /// profile (now whatever the user picked in Settings).
+    private static func encodeJPEG(
+        cgImage: CGImage,
+        sourceJPEG: Data,
+        quality: CGFloat
+    ) -> Data? {
+        let imageDestinationData = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(
+            imageDestinationData,
+            UTType.jpeg.identifier as CFString,
+            1,
+            nil
+        ) else { return nil }
+
+        var properties: [CFString: Any] = [:]
+        if let source = CGImageSourceCreateWithData(sourceJPEG as CFData, nil),
+           let sourceProperties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any] {
+            properties = sourceProperties
+        }
+        // Our pixel buffer is display-oriented now; tell ImageIO
+        // not to apply any further rotation when interpreting it.
+        properties[kCGImagePropertyOrientation] = 1
+        properties[kCGImageDestinationLossyCompressionQuality] = quality
+
+        CGImageDestinationAddImage(destination, cgImage, properties as CFDictionary)
+        guard CGImageDestinationFinalize(destination) else { return nil }
+        return imageDestinationData as Data
     }
 
     private static func apply(profile: PresentationColorProfile, to image: CIImage) -> CIImage {
