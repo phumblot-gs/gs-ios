@@ -46,23 +46,34 @@ struct GSAPIClientTests {
         #expect(oauth.authorizationHeaderValue == "access_token abc")
     }
 
-    @Test("AuthState recognises Grand-Shooting staff via email or account id")
+    @Test("AuthState.staffStatus distinguishes staff / not staff / unknown")
     @MainActor
-    func authStateStaffGate() {
+    func authStateStaffStatus() {
         let state = AuthState()
-        // Email domain wins.
+        // Email domain match → staff.
         state.signIn(email: "phf@grand-shooting.com", accountID: nil)
-        #expect(state.isGrandShootingStaff)
+        #expect(state.staffStatus == .staff)
         state.signIn(email: "phf@GRAND-shooting.com", accountID: nil)
-        #expect(state.isGrandShootingStaff)
-        // Account id wins even with no email (the current GS case).
+        #expect(state.staffStatus == .staff)
+        // Account id match → staff (current GS case).
         state.signIn(email: nil, accountID: 16)
-        #expect(state.isGrandShootingStaff)
-        // Neither matches → not staff.
-        state.signIn(email: "someone@example.com", accountID: 42)
-        #expect(!state.isGrandShootingStaff)
+        #expect(state.staffStatus == .staff)
+        // Email matches but account id contradicts → email wins,
+        // staff.
+        state.signIn(email: "phf@grand-shooting.com", accountID: 42)
+        #expect(state.staffStatus == .staff)
+        // Positive non-staff signal → notStaff.
+        state.signIn(email: "someone@example.com", accountID: nil)
+        #expect(state.staffStatus == .notStaff)
+        state.signIn(email: nil, accountID: 42)
+        #expect(state.staffStatus == .notStaff)
+        // No signal at all → unknown (do NOT punish — backend
+        // hasn't told us yet).
         state.signIn(email: nil, accountID: nil)
-        #expect(!state.isGrandShootingStaff)
+        #expect(state.staffStatus == .unknown)
+        // Empty email string counts as no signal.
+        state.signIn(email: "", accountID: nil)
+        #expect(state.staffStatus == .unknown)
     }
 }
 

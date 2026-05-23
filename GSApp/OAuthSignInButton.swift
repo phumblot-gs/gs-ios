@@ -63,11 +63,14 @@ struct OAuthSignInButton: View {
             let service = OAuthSignInService(environment: env)
             let result = try await service.completeSignIn(callbackURL: callbackURL)
             authState.signIn(email: result.email, accountID: result.accountID)
-            // Force the production backend for everyone outside
-            // Grand Shooting. Staff (email @grand-shooting.com OR
-            // account_id = 16) keeps whatever they had picked in
-            // Settings.
-            if !authState.isGrandShootingStaff {
+            // Only clamp when the backend gave us a *positive*
+            // non-staff signal. When the signal is missing (the
+            // current GS situation — neither email nor
+            // account_id flow back), keep whatever environment
+            // the user picked at the login screen. Otherwise a
+            // staff member who turned on the staging easter egg
+            // would lose their backend right after signing in.
+            if authState.staffStatus == .notStaff {
                 settings.backendEnvironment = .production
             }
         } catch let error as ASWebAuthenticationSessionError where error.code == .canceledLogin {

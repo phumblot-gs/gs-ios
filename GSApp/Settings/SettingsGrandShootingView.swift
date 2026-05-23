@@ -21,7 +21,11 @@ struct SettingsGrandShootingView: View {
     var body: some View {
         Form {
             techViewsSection
-            if authState.isGrandShootingStaff {
+            // Show the picker for confirmed staff AND for
+            // `.unknown` (i.e. backend hasn't shipped account_id
+            // / email yet). Only hide it from confirmed non-staff
+            // users.
+            if authState.staffStatus != .notStaff {
                 backendSection
             }
             developmentSection
@@ -29,12 +33,12 @@ struct SettingsGrandShootingView: View {
         .navigationTitle("Grand Shooting")
         .onAppear {
             loadDraft()
-            // Belt + suspenders: non-staff devices never run
-            // against staging. The picker is hidden in their UI
-            // but a stale UserDefaults value could persist from a
-            // previous build — overwrite it on every Settings
-            // visit while the user is non-staff.
-            if !authState.isGrandShootingStaff,
+            // Belt + suspenders: clamp confirmed non-staff users
+            // to production on every visit. `.unknown` users
+            // keep whatever they had picked (login-screen easter
+            // egg) until the backend can tell us who they really
+            // are.
+            if authState.staffStatus == .notStaff,
                settings.backendEnvironment != .production {
                 settings.backendEnvironment = .production
             }

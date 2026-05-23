@@ -29,11 +29,15 @@ struct GSApp: App {
             // runs in the background.
             .task(id: authState.isSignedIn) {
                 if authState.isSignedIn {
-                    // Belt for the suspenders: clamp non-staff users
-                    // to production on every launch, even if they
-                    // somehow had `.staging` persisted (older build,
-                    // restore, …).
-                    if !authState.isGrandShootingStaff,
+                    // Belt for the suspenders: clamp confirmed
+                    // non-staff users to production on every
+                    // launch. We leave `.unknown` users alone so a
+                    // staff device that authenticated against
+                    // staging through the easter egg keeps its
+                    // backend — the GS proxy doesn't return
+                    // identity yet, so today everyone is
+                    // `.unknown` until the Lambda patch lands.
+                    if authState.staffStatus == .notStaff,
                        settings.backendEnvironment != .production {
                         settings.backendEnvironment = .production
                     }

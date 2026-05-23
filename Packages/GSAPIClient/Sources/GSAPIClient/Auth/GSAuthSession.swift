@@ -185,19 +185,40 @@ public final class AuthState {
         await GSAuthSession.shared.clearOAuthSession()
     }
 
-    /// True when the signed-in user belongs to Grand-Shooting
-    /// — either by email domain (`@grand-shooting.com`) or by
-    /// account id (`16`, the internal GS account). Either signal
-    /// is sufficient; GS may not return the email but it does
-    /// return the account id, so in practice the account match
-    /// is what carries the gate today.
-    public var isGrandShootingStaff: Bool {
-        if accountID == Self.staffAccountID { return true }
-        let domain = userEmail?
+    /// Three-state predicate to drive the staging-vs-production
+    /// gate. `unknown` is the important case: until the OAuth
+    /// backend starts returning `account_id` (and / or `email`),
+    /// every signed-in user lands here, and the app must NOT
+    /// punish them by forcing production — otherwise a staff
+    /// member who authenticated against staging via the long-press
+    /// easter egg loses their backend the moment they sign in.
+    public enum StaffStatus: Equatable {
+        case staff
+        case notStaff
+        case unknown
+    }
+
+    public var staffStatus: StaffStatus {
+        if accountID == Self.staffAccountID { return .staff }
+        let emailDomain = userEmail?
             .split(separator: "@", maxSplits: 1, omittingEmptySubsequences: true)
             .last
             .map(String.init)?
             .lowercased()
-        return domain == Self.staffDomain
+        if emailDomain == Self.staffDomain { return .staff }
+
+        let hasAccountSignal = accountID != nil
+        let hasEmailSignal = (userEmail?.isEmpty == false)
+        if hasAccountSignal || hasEmailSignal { return .notStaff }
+        return .unknown
+    }
+
+    /// Convenience accessor for "user is staff" — kept for sites
+    /// that only need a Bool. Returns false in both `.notStaff`
+    /// and `.unknown`, so don't use this to gate destructive
+    /// actions ("hide the staging picker"); use `staffStatus` and
+    /// distinguish `.unknown` from `.notStaff` instead.
+    public var isGrandShootingStaff: Bool {
+        staffStatus == .staff
     }
 }
