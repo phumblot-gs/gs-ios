@@ -3,6 +3,8 @@ import SwiftData
 import GSCamera
 import GSAPIClient
 import GSCore
+import ImageIO
+import UniformTypeIdentifiers
 import UIKit
 
 /// Capture loop for a single reference. Live camera preview with a
@@ -346,7 +348,16 @@ struct TechViewsCaptureView: View {
         nextInc += 1
         let filename = "\(reference.ref)_\(inc).jpg"
         let resized = pending.image.resized(toMaxDimension: 1200)
-        guard let uploadData = resized.jpegData(compressionQuality: 0.85) else {
+        // `UIImage.jpegData(compressionQuality:)` writes a minimal
+        // JPEG — no EXIF, no TIFF, no Maker Note. Use ImageIO to
+        // copy the source camera JPEG's property graph onto the
+        // resized buffer so focal length, white-balance mode, ISO,
+        // lens make + model survive the upload.
+        guard let uploadData = encodeJPEGPreservingMetadata(
+            image: resized,
+            sourceJPEG: pending.jpegData,
+            quality: 0.85
+        ) else {
             self.pending = nil
             observations = []
             assignments = [:]
@@ -501,4 +512,50 @@ private extension UIImage {
             draw(in: CGRect(origin: .zero, size: size))
         }
     }
+}
+
+// MARK: - JPEG encoder that preserves EXIF
+
+/// Encodes the resized `image` to JPEG while copying the source
+/// camera JPEG's full property graph (EXIF / TIFF / GPS /
+/// Maker-Note dictionaries). `UIImage.jpegData(compressionQuality:)`
+/// drops metadata, so we go through Image I/O instead. Only
+/// orientation (now `.up`) and pixel dimensions (now the resized
+/// values) are overridden — focal length, white-balance mode,
+/// ISO, lens make + model, GPS and Apple maker notes from the
+/// camera flow through unchanged.
+private func encodeJPEGPreservingMetadata(
+    image: UIImage,
+    sourceJPEG: Data,
+    quality: CGFloat
+) -> Data? {
+    guard let cgImage = image.cgImage else { return nil }
+    let outData = NSMutableData()
+    guard let destination = CGImageDestinationCreateWithData(
+        outData,
+        UTType.jpeg.identifier as CFString,
+        1,
+        nil
+    ) else { return nil }
+
+    var properties: [String: Any] = [:]
+    if let source = CGImageSourceCreateWithData(sourceJPEG as CFData, nil),
+       let sourceProperties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [String: Any] {
+        properties = sourceProperties
+    }
+    properties[kCGImagePropertyOrientation as String] = 1
+    properties[kCGImagePropertyPixelWidth as String] = cgImage.width
+    properties[kCGImagePropertyPixelHeight as String] = cgImage.height
+    var tiff = (properties[kCGImagePropertyTIFFDictionary as String] as? [String: Any]) ?? [:]
+    tiff[kCGImagePropertyTIFFOrientation as String] = 1
+    properties[kCGImagePropertyTIFFDictionary as String] = tiff
+    var exif = (properties[kCGImagePropertyExifDictionary as String] as? [String: Any]) ?? [:]
+    exif[kCGImagePropertyExifPixelXDimension as String] = cgImage.width
+    exif[kCGImagePropertyExifPixelYDimension as String] = cgImage.height
+    properties[kCGImagePropertyExifDictionary as String] = exif
+    properties[kCGImageDestinationLossyCompressionQuality as String] = quality
+
+    CGImageDestinationAddImage(destination, cgImage, properties as CFDictionary)
+    guard CGImageDestinationFinalize(destination) else { return nil }
+    return outData as Data
 }
