@@ -46,21 +46,18 @@ struct GSAPIClientTests {
         #expect(oauth.authorizationHeaderValue == "access_token abc")
     }
 
-    @Test("MockAuthService rejects bad credentials")
-    func mockAuthRejectsBadCredentials() {
-        let mock = MockAuthService()
-        #expect(throws: MockAuthService.SignInError.invalidCredentials) {
-            try mock.signIn(username: "wrong", password: "wrong")
-        }
-    }
-
-    @Test("MockAuthService accepts the canonical dev credentials")
-    func mockAuthAcceptsValid() throws {
-        let mock = MockAuthService()
-        try mock.signIn(
-            username: MockAuthService.acceptedUsername,
-            password: MockAuthService.acceptedPassword
-        )
+    @Test("AuthState recognises @grand-shooting.com staff")
+    @MainActor
+    func authStateStaffGate() {
+        let state = AuthState()
+        state.signIn(email: "phf@grand-shooting.com")
+        #expect(state.isGrandShootingStaff)
+        state.signIn(email: "phf@GRAND-shooting.com")
+        #expect(state.isGrandShootingStaff)
+        state.signIn(email: "someone@example.com")
+        #expect(!state.isGrandShootingStaff)
+        state.signIn(email: nil)
+        #expect(!state.isGrandShootingStaff)
     }
 }
 
