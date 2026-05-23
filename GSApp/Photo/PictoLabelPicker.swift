@@ -103,7 +103,7 @@ struct PictoLabelPicker: View {
             }
             if isCurrentlyAssigned(entry) {
                 Image(systemName: "checkmark")
-                    .foregroundStyle(.accent)
+                    .foregroundStyle(Color.accentColor)
             }
         }
         .padding(.vertical, 4)
