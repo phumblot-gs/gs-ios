@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 import GSCamera
 import GSAPIClient
 import GSCore
@@ -7,22 +8,32 @@ import UIKit
 /// Capture loop for a single reference. Live camera preview with a
 /// shutter; after each shot Vision runs OCR on the still in the
 /// background while the user reviews the result on the annotation
-/// sheet. The user tags any extracted text with one of six tech-view
-/// categories, then taps "Save" — the photo uploads to today's
-/// production under `<ref>_<inc>.jpg`, and the categorised text is
-/// pushed to `extra.tech_views` on the reference. Both calls fire
-/// in parallel and don't block the next shot.
+/// sheet. Once OCR has the text boxes, a second Vision pass tries to
+/// detect non-textual pictogram candidates and matches them against
+/// the learned picto library. The user tags any extracted text + any
+/// detected picto with one of six tech-view categories, then taps
+/// "Save" — the photo uploads to today's production under
+/// `<ref>_<inc>.jpg`, the categorised text + picto labels are pushed
+/// to `extra.tech_views` on the reference, and any freshly-labelled
+/// pictos are persisted locally so they auto-match next time. Both
+/// network calls fire in parallel and don't block the next shot.
 struct TechViewsCaptureView: View {
     @Bindable var settings: DevSettings
     let reference: Reference
     let onExit: @MainActor () -> Void
+
+    @Environment(\.modelContext) private var modelContext
+    @Query(sort: \LearnedPictogram.createdAt, order: .reverse) private var learnedPictograms: [LearnedPictogram]
 
     @StateObject private var shutter = CameraShutter()
     @State private var pending: PendingShot?
     @State private var observations: [OCRObservation] = []
     @State private var assignments: [UUID: TechViewCategory] = [:]
     @State private var isRunningOCR: Bool = false
-    @State private var ocrTask: Task<Void, Never>?
+    @State private var isDetectingPictos: Bool = false
+    @State private var candidates: [TechViewsPictoDetection.Candidate] = []
+    @State private var pictoAnnotations: [UUID: PictoAnnotation] = [:]
+    @State private var analysisTask: Task<Void, Never>?
     @State private var nextInc: Int = 1
     @State private var uploads: [UploadStatus] = []
 
@@ -64,7 +75,10 @@ struct TechViewsCaptureView: View {
                     image: pending.image,
                     observations: observations,
                     isRunningOCR: isRunningOCR,
+                    candidates: candidates,
+                    isDetectingPictos: isDetectingPictos,
                     assignments: $assignments,
+                    pictoAnnotations: $pictoAnnotations,
                     onRetake: { retake() },
                     onSave: { save(pending: pending) }
                 )
@@ -166,40 +180,85 @@ struct TechViewsCaptureView: View {
         guard let image = UIImage(data: photo.imageData) else { return }
         observations = []
         assignments = [:]
+        candidates = []
+        pictoAnnotations = [:]
         pending = PendingShot(image: image, jpegData: photo.imageData)
         isRunningOCR = true
-        ocrTask?.cancel()
-        ocrTask = Task {
-            do {
-                let result = try await TechViewsOCR.recognize(in: image)
-                if Task.isCancelled { return }
-                await MainActor.run {
-                    observations = result
-                    isRunningOCR = false
-                }
-            } catch {
-                if Task.isCancelled { return }
-                await MainActor.run {
-                    observations = []
-                    isRunningOCR = false
-                }
-            }
+        isDetectingPictos = true
+        analysisTask?.cancel()
+        analysisTask = Task { @MainActor in
+            await runAnalysis(on: image)
         }
     }
 
+    @MainActor
+    private func runAnalysis(on image: UIImage) async {
+        // 1) OCR first so we know which regions are text and can
+        //    exclude them from the picto detection pass.
+        do {
+            let ocrResult = try await TechViewsOCR.recognize(in: image)
+            if Task.isCancelled { return }
+            observations = ocrResult
+            isRunningOCR = false
+        } catch {
+            if Task.isCancelled { return }
+            observations = []
+            isRunningOCR = false
+        }
+
+        // 2) Picto detection. Even if OCR failed we still try — the
+        //    detector just gets an empty exclusion list.
+        do {
+            let textBoxes = observations.map(\.boundingBox)
+            let detected = try await TechViewsPictoDetection.detect(
+                in: image,
+                excluding: textBoxes
+            )
+            if Task.isCancelled { return }
+            candidates = detected
+            pictoAnnotations = autoAnnotate(detected)
+            isDetectingPictos = false
+        } catch {
+            if Task.isCancelled { return }
+            candidates = []
+            pictoAnnotations = [:]
+            isDetectingPictos = false
+        }
+    }
+
+    private func autoAnnotate(
+        _ detected: [TechViewsPictoDetection.Candidate]
+    ) -> [UUID: PictoAnnotation] {
+        var out: [UUID: PictoAnnotation] = [:]
+        for candidate in detected {
+            guard let suggestion = TechViewsPictoMatcher.bestMatch(
+                for: candidate,
+                in: learnedPictograms
+            ) else { continue }
+            out[candidate.id] = PictoAnnotation(
+                id: candidate.id,
+                label: suggestion.label,
+                category: TechViewCategory(rawValue: suggestion.categoryRawValue),
+                matchedLearnedID: suggestion.learnedID,
+                suggestionDistance: suggestion.distance
+            )
+        }
+        return out
+    }
+
     private func retake() {
-        ocrTask?.cancel()
-        ocrTask = nil
+        analysisTask?.cancel()
+        analysisTask = nil
         pending = nil
         observations = []
         assignments = [:]
+        candidates = []
+        pictoAnnotations = [:]
         isRunningOCR = false
+        isDetectingPictos = false
     }
 
     private func save(pending: PendingShot) {
-        // Snapshot the data the upload tasks need before we reset
-        // the pending state — Swift's @State setters are async, and
-        // the UI dismissal shouldn't race the background tasks.
         let inc = nextInc
         nextInc += 1
         let filename = "\(reference.ref)_\(inc).jpg"
@@ -208,23 +267,28 @@ struct TechViewsCaptureView: View {
             self.pending = nil
             observations = []
             assignments = [:]
+            candidates = []
+            pictoAnnotations = [:]
             return
         }
 
-        // Aggregate categorised text per category (newline-separated
-        // when several observations land in the same bucket).
-        var fields: [String: String] = [:]
+        // Aggregate categorised text + picto labels per category.
+        var fields: [String: [String]] = [:]
         for observation in observations {
             guard let category = assignments[observation.id] else { continue }
             let trimmed = observation.text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else { continue }
-            let key = category.rawValue
-            if let existing = fields[key], !existing.isEmpty {
-                fields[key] = existing + "\n" + trimmed
-            } else {
-                fields[key] = trimmed
-            }
+            fields[category.rawValue, default: []].append(trimmed)
         }
+        for candidate in candidates {
+            guard let annotation = pictoAnnotations[candidate.id],
+                  annotation.hasUsableContent,
+                  let category = annotation.category else { continue }
+            let label = annotation.label.trimmingCharacters(in: .whitespacesAndNewlines)
+            fields[category.rawValue, default: []].append(label)
+            persistLearning(candidate: candidate, annotation: annotation, category: category)
+        }
+        let mergedFields: [String: String] = fields.mapValues { $0.joined(separator: "\n") }
 
         let status = UploadStatus(filename: filename, state: .inFlight)
         uploads.append(status)
@@ -234,14 +298,47 @@ struct TechViewsCaptureView: View {
         self.pending = nil
         observations = []
         assignments = [:]
-        ocrTask?.cancel()
-        ocrTask = nil
+        candidates = []
+        pictoAnnotations = [:]
+        analysisTask?.cancel()
+        analysisTask = nil
         isRunningOCR = false
+        isDetectingPictos = false
 
         Task { await runUpload(data: uploadData, filename: filename, statusID: statusID) }
-        if !fields.isEmpty, let referenceID {
-            Task { await pushTechViews(referenceID: referenceID, fields: fields) }
+        if !mergedFields.isEmpty, let referenceID {
+            Task { await pushTechViews(referenceID: referenceID, fields: mergedFields) }
         }
+    }
+
+    /// Saves a new `LearnedPictogram` when the user labelled an
+    /// unknown picto, or bumps the match counter on an existing one
+    /// when they accepted a suggestion verbatim.
+    private func persistLearning(
+        candidate: TechViewsPictoDetection.Candidate,
+        annotation: PictoAnnotation,
+        category: TechViewCategory
+    ) {
+        // Reinforcement path: same learned picto, same label.
+        if let matchedID = annotation.matchedLearnedID,
+           let existing = learnedPictograms.first(where: { $0.persistentModelID == matchedID }),
+           annotation.reinforces(existing) {
+            existing.matchCount += 1
+            return
+        }
+        // Otherwise teach a new picto. Resize the crop to a small
+        // thumbnail before persisting — the embedding is what matters
+        // for matching; the image is just for the UI.
+        guard let thumbnailData = candidate.crop
+            .resized(toMaxDimension: 200)
+            .jpegData(compressionQuality: 0.7) else { return }
+        let pictogram = LearnedPictogram(
+            label: annotation.label.trimmingCharacters(in: .whitespacesAndNewlines),
+            category: category,
+            embedding: candidate.featurePrintData,
+            thumbnailData: thumbnailData
+        )
+        modelContext.insert(pictogram)
     }
 
     @MainActor
@@ -268,10 +365,6 @@ struct TechViewsCaptureView: View {
             let service = ReferenceExtraService(environment: settings.currentEnvironment)
             try await service.updateTechViews(referenceID: referenceID, fields: fields)
         } catch {
-            // Non-blocking: failure to push categorised text doesn't
-            // affect the photo upload. We surface it through the
-            // existing per-upload error banner instead of a dedicated
-            // channel since the photo + extra usually go together.
             let message = (error as? GSHTTPClient.HTTPError)?.userMessage ?? error.localizedDescription
             print("[TechViews] updateTechViews failed: \(message)")
         }

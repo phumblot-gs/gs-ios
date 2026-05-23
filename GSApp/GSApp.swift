@@ -41,7 +41,11 @@ struct GSApp: App {
         // SwiftData container for the Measures feature. Schema kept local
         // to the app target for now — we'll move it to a backend-synced
         // store when categories need to be shared across team members.
-        .modelContainer(for: [MeasureCategory.self, MeasurementTemplate.self])
+        .modelContainer(for: [
+            MeasureCategory.self,
+            MeasurementTemplate.self,
+            LearnedPictogram.self
+        ])
     }
 }
 
