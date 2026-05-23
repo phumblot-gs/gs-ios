@@ -1,6 +1,8 @@
 import Foundation
 @preconcurrency import AVFoundation
 
+#if os(iOS)
+
 /// Read-only helpers that describe the host iPhone's camera
 /// hardware in 35mm-equivalent terms. Used by:
 ///   - `CameraSessionController` to pick the best physical lens
@@ -92,3 +94,5 @@ public enum CameraInspector {
         return Int((18.0 / denom).rounded())
     }
 }
+
+#endif
