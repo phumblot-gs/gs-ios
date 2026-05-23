@@ -232,7 +232,12 @@ struct TechViewsCaptureView: View {
     // MARK: - Actions
 
     private func handleCapture(photo: CapturedPhoto) {
-        guard let image = UIImage(data: photo.imageData) else { return }
+        guard let rawImage = UIImage(data: photo.imageData) else { return }
+        // Bake any EXIF rotation into the pixel buffer so the
+        // preview, OCR, picto detection and crop preview all see a
+        // single .up-oriented coordinate space — no surprise
+        // landscape view when the user holds the phone in portrait.
+        let image = rawImage.normalizedUp()
         observations = []
         assignments = [:]
         ocrEdits = [:]
@@ -474,6 +479,20 @@ private extension UIImage {
         let renderer = UIGraphicsImageRenderer(size: newSize)
         return renderer.image { _ in
             draw(in: CGRect(origin: .zero, size: newSize))
+        }
+    }
+
+    /// Returns a copy whose pixel buffer matches the display
+    /// orientation (`imageOrientation == .up`). When the camera
+    /// hands us a JPEG with EXIF orientation other than `.up` the
+    /// raw `cgImage` is in sensor space — this redraw bakes the
+    /// rotation into the pixels so downstream Vision + crop code
+    /// can assume a single, consistent coordinate space.
+    func normalizedUp() -> UIImage {
+        guard imageOrientation != .up else { return self }
+        let renderer = UIGraphicsImageRenderer(size: size)
+        return renderer.image { _ in
+            draw(in: CGRect(origin: .zero, size: size))
         }
     }
 }

@@ -557,6 +557,19 @@ public final class CameraSessionController: UIViewController {
                 AVVideoCodecKey: AVVideoCodecType.jpeg
             ])
             settings.photoQualityPrioritization = .quality
+            // The session is portrait-only at the moment. Lock the
+            // photo connection to 90° before each capture so the
+            // resulting JPEG isn't rotated into the sensor's native
+            // landscape orientation. Set per-capture (rather than
+            // once at session setup) because device swaps —
+            // Presentation ↔ Detail ↔ OCR — re-create the
+            // connection.
+            if let connection = self?.photoOutput.connection(with: .video) {
+                let portraitAngle: CGFloat = 90
+                if connection.isVideoRotationAngleSupported(portraitAngle) {
+                    connection.videoRotationAngle = portraitAngle
+                }
+            }
             self?.photoOutput.capturePhoto(with: settings, delegate: delegate)
         }
     }
