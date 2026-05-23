@@ -1,16 +1,21 @@
 import SwiftUI
 import UIKit
+import GSCamera
 
 /// Bottom-sheet style annotation surface shown after a photo is
-/// taken. Each OCR observation and each pictogram candidate is
-/// rendered as a tappable summary row: tapping opens a dedicated
-/// editor sheet that holds the user's full attention — text +
-/// category + delete for OCR via `OCRObservationEditor`, label +
-/// learning for pictograms via `PictoLabelPicker`. Both sheets
-/// share `TechViewEditorShell`, so the UX rhythm (Cancel,
-/// keyboard dismiss, presentation detents) is identical.
+/// taken. In `.ocr` capture mode each OCR observation and each
+/// pictogram candidate is rendered as a tappable summary row:
+/// tapping opens a dedicated editor sheet that holds the user's
+/// full attention — text + category + delete for OCR via
+/// `OCRObservationEditor`, label + learning for pictograms via
+/// `PictoLabelPicker`. Both sheets share `TechViewEditorShell`, so
+/// the UX rhythm (Cancel, keyboard dismiss, presentation detents)
+/// is identical. In `.presentation` / `.detail` modes the view
+/// only offers preview + Retake/Save — there's nothing to
+/// annotate, the user just confirms the shot.
 struct TechViewsAnnotationView: View {
     let image: UIImage
+    let captureMode: CaptureMode
     let observations: [OCRObservation]
     let isRunningOCR: Bool
     let candidates: [TechViewsPictoDetection.Candidate]
@@ -42,8 +47,12 @@ struct TechViewsAnnotationView: View {
         ZStack(alignment: .top) {
             Color.black.ignoresSafeArea()
             VStack(spacing: 0) {
-                preview
-                annotationsScroll
+                if captureMode == .ocr {
+                    preview
+                    annotationsScroll
+                } else {
+                    largePreview
+                }
                 footer
             }
         }
@@ -72,6 +81,20 @@ struct TechViewsAnnotationView: View {
             .scaledToFit()
             .frame(maxWidth: .infinity, maxHeight: 200)
             .padding(.top, 8)
+    }
+
+    /// Edge-to-edge preview used by the photo / detail modes —
+    /// nothing to annotate, so the shot fills the available space
+    /// above the footer.
+    private var largePreview: some View {
+        VStack(spacing: 0) {
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFit()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(.vertical, 12)
+        }
+        .background(Color.black)
     }
 
     private var annotationsScroll: some View {

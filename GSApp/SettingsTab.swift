@@ -295,7 +295,7 @@ struct SettingsTab: View {
         } header: {
             Text("Capture behaviour")
         } footer: {
-            Text("Presentation mode uses the wide-angle camera with the colour-grading profile you pick here. OCR mode swaps to the ultra-wide camera when available so the lens focuses down to ~2 cm — colour profile and locked white balance are skipped in that mode for maximum readability.")
+            Text("Photo uses the wide-angle camera with the white balance and colour profile chosen above. Detail switches to the ultra-wide camera (focuses down to ~2 cm) but keeps the same white balance and colour profile — for close-up product shots. OCR also uses the ultra-wide but with auto white balance and no colour grading; it's the only mode where Vision OCR + pictogram detection run after capture.")
         }
     }
 

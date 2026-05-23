@@ -31,6 +31,7 @@ struct TechViewsCaptureView: View {
     @State private var assignments: [UUID: TechViewCategory] = [:]
     @State private var ocrEdits: [UUID: String] = [:]
     @State private var hiddenOCRIDs: Set<UUID> = []
+    @State private var pendingMode: CaptureMode = .presentation
     @State private var isRunningOCR: Bool = false
     @State private var isDetectingPictos: Bool = false
     @State private var candidates: [TechViewsPictoDetection.Candidate] = []
@@ -95,6 +96,7 @@ struct TechViewsCaptureView: View {
             if let pending {
                 TechViewsAnnotationView(
                     image: pending.image,
+                    captureMode: pendingMode,
                     observations: observations,
                     isRunningOCR: isRunningOCR,
                     candidates: candidates,
@@ -205,26 +207,26 @@ struct TechViewsCaptureView: View {
     }
 
     private var modeToggleButton: some View {
-        let isOCR = shutter.mode == .ocr
+        let current = shutter.mode
+        let next = current.nextInRotation
         return Button {
-            let next: CaptureMode = isOCR ? .presentation : .ocr
             shutter.switchMode(to: next)
             if settings.techViewsCapturePersistence == .rememberLast {
                 settings.techViewsLastCaptureModeRaw = next.rawValue
             }
         } label: {
             VStack(spacing: 2) {
-                Image(systemName: isOCR ? "text.viewfinder" : "camera")
+                Image(systemName: current.iconName)
                     .font(.title3.weight(.semibold))
-                Text(isOCR ? "OCR" : "Photo")
+                Text(current.shortLabel)
                     .font(.caption2.weight(.semibold))
             }
             .foregroundStyle(.white)
             .frame(width: 56, height: 56)
-            .background(isOCR ? Color.accentColor.opacity(0.85) : Color.black.opacity(0.5), in: Circle())
+            .background(current.toggleBackground, in: Circle())
         }
         .disabled(shutter.isCapturing)
-        .accessibilityLabel(isOCR ? "Switch to Presentation" : "Switch to OCR")
+        .accessibilityLabel("Switch to \(next.shortLabel)")
     }
 
     // MARK: - Actions
@@ -237,7 +239,20 @@ struct TechViewsCaptureView: View {
         hiddenOCRIDs = []
         candidates = []
         pictoAnnotations = [:]
+        pendingMode = shutter.mode
         pending = PendingShot(image: image, jpegData: photo.imageData)
+
+        // Vision OCR + picto detection only runs in OCR mode — the
+        // other modes are normal product shots that just need an
+        // upload after the user confirms.
+        guard pendingMode == .ocr else {
+            isRunningOCR = false
+            isDetectingPictos = false
+            analysisTask?.cancel()
+            analysisTask = nil
+            return
+        }
+
         isRunningOCR = true
         isDetectingPictos = true
         analysisTask?.cancel()

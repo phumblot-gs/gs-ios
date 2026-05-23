@@ -17,16 +17,30 @@ public struct CapturedPhoto: Sendable {
 
 // MARK: - Capture mode
 
-/// Two operating modes the photo capture surface exposes:
+/// Three operating modes the photo capture surface exposes:
 /// `.presentation` for showroom-style shots (wide-angle, accurate
-/// framing & colours), `.ocr` for close-range label / packaging
-/// reads (ultra-wide when available so the camera focuses down to
-/// ~2 cm, raw pixels with distortion correction disabled).
+/// framing & colours), `.detail` for close-range product shots
+/// that still want presentation's colour treatment (ultra-wide so
+/// the lens focuses down to ~2 cm, but custom white balance and
+/// colour profile still apply), and `.ocr` for label / packaging
+/// reads (ultra-wide, auto white balance, no colour grading — the
+/// caller only triggers Vision OCR + picto detection in this mode).
 public enum CaptureMode: String, Sendable, CaseIterable, Identifiable {
     case presentation
+    case detail
     case ocr
 
     public var id: String { rawValue }
+
+    /// True when the mode is meant for product photos — i.e. the
+    /// caller should apply the user's WB and colour profile to the
+    /// output JPEG. Always false for `.ocr`.
+    public var honoursPresentationProcessing: Bool {
+        switch self {
+        case .presentation, .detail: true
+        case .ocr: false
+        }
+    }
 }
 
 /// Optional colour-grading hint applied to `.presentation` shots
@@ -384,7 +398,10 @@ public final class CameraSessionController: UIViewController {
                 for: .video,
                 position: .back
             )
-        case .ocr:
+        case .detail, .ocr:
+            // Both detail and OCR want the close-focus capability
+            // of the ultra-wide sensor; fall back to wide-angle on
+            // devices where the ultra-wide isn't present.
             if let ultra = AVCaptureDevice.default(
                 .builtInUltraWideCamera,
                 for: .video,
@@ -429,7 +446,7 @@ public final class CameraSessionController: UIViewController {
             defer { device.unlockForConfiguration() }
 
             switch configuration.mode {
-            case .presentation:
+            case .presentation, .detail:
                 if device.isFocusModeSupported(.continuousAutoFocus) {
                     device.focusMode = .continuousAutoFocus
                 }
@@ -564,15 +581,16 @@ private final class CaptureDelegate: NSObject, AVCapturePhotoCaptureDelegate, @u
 private enum ColorProfileProcessor {
 
     /// Apply a colour profile to a JPEG. We only post-process
-    /// `.presentation` shots — OCR captures are returned untouched
-    /// since readability beats prettiness there. `.none` skips the
+    /// modes that honour presentation processing (presentation +
+    /// detail) — OCR captures are returned untouched since
+    /// readability beats prettiness there. `.none` skips the
     /// CoreImage round-trip entirely.
     static func apply(
         _ profile: PresentationColorProfile,
         to photo: CapturedPhoto,
         when mode: CaptureMode
     ) -> CapturedPhoto {
-        guard mode == .presentation, profile != .none else { return photo }
+        guard mode.honoursPresentationProcessing, profile != .none else { return photo }
         guard let result = graded(jpegData: photo.imageData, profile: profile) else {
             return photo
         }
