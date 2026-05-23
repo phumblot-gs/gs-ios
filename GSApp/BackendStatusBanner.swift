@@ -27,6 +27,24 @@ struct BackendStatusBanner: View {
     }
 
     var body: some View {
+        // Healthy path stays invisible — no value in showing a
+        // green "everything is fine" pill on every screen. The
+        // banner only materialises on `.failed` so the user sees
+        // it exactly when there's something to act on.
+        Group {
+            if case .failed = status {
+                pill
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .animation(.easeOut(duration: 0.2), value: status)
+        .task { await loop() }
+        .onDisappear { pingTask?.cancel() }
+        .accessibilityHidden({ if case .ok = status { return true } else { return false } }())
+        .accessibilityLabel("Backend status: \(label)")
+    }
+
+    private var pill: some View {
         HStack(spacing: 6) {
             Circle()
                 .fill(dotColor)
@@ -39,13 +57,6 @@ struct BackendStatusBanner: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 4)
         .background(.thinMaterial, in: Capsule())
-        .task {
-            await loop()
-        }
-        .onDisappear {
-            pingTask?.cancel()
-        }
-        .accessibilityLabel("Backend status: \(label)")
     }
 
     private var dotColor: Color {
