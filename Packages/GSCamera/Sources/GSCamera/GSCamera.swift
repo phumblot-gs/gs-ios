@@ -181,11 +181,18 @@ public final class CameraShutter: ObservableObject {
 
     /// Replace the full configuration (mode, WB, colour profile)
     /// — useful when Settings change while the camera view is
-    /// already on screen.
+    /// already on screen. Defers the `@Published` mutation off the
+    /// caller's frame so we don't trip SwiftUI's "publishing
+    /// changes from within view updates" warning when callers
+    /// invoke this from a view body / `onChange` handler.
     public func applySettings(_ configuration: CameraConfiguration) {
         self.configuration = configuration
-        self.mode = configuration.mode
-        controller?.apply(configuration: configuration)
+        let newMode = configuration.mode
+        let pendingConfiguration = configuration
+        Task { @MainActor [weak self] in
+            self?.mode = newMode
+            self?.controller?.apply(configuration: pendingConfiguration)
+        }
     }
 
     // Wiring used by the controller.
@@ -198,9 +205,16 @@ public final class CameraShutter: ObservableObject {
     fileprivate func update(capabilities: CameraCapabilities) {
         self.capabilities = capabilities
     }
+    /// Called from `CameraView.makeUIViewController`, i.e. during a
+    /// SwiftUI view update. The `@Published` `mode` mutation must
+    /// be deferred so we don't run inside the same frame that
+    /// triggered the view make.
     fileprivate func seedInitial(configuration: CameraConfiguration) {
         self.configuration = configuration
-        self.mode = configuration.mode
+        let newMode = configuration.mode
+        Task { @MainActor [weak self] in
+            self?.mode = newMode
+        }
     }
 }
 
