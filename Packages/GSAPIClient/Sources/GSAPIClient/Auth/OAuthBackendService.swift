@@ -15,6 +15,12 @@ public struct OAuthBackendService: Sendable {
         /// When present, the client should switch `GSEnvironment.apiBaseURL` to
         /// this value so subsequent calls land on the right shard.
         public let api_base_url: String?
+        /// Email of the authenticated user, as reported by the GS portal.
+        /// Surfaced so the app can identify Grand-Shooting staff (their
+        /// emails end in `@grand-shooting.com`) and gate dev-only UI like
+        /// the staging-environment picker. Optional — older backend
+        /// builds may not return it yet.
+        public let email: String?
     }
 
     public enum OAuthError: Error, Sendable {

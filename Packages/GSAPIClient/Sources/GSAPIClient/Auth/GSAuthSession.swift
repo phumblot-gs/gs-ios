@@ -135,21 +135,52 @@ public actor GSAuthSession {
 @MainActor
 public final class AuthState {
     public private(set) var isSignedIn: Bool
+    /// Email of the signed-in user, as reported by the OAuth
+    /// backend's `/auth/exchange` response. Drives `isGrandShootingStaff`,
+    /// which gates the staging-environment picker in Settings.
+    public private(set) var userEmail: String?
 
     private static let signedInKey = "auth.signed-in"
+    private static let emailKey = "auth.user-email"
+    private static let staffDomain = "grand-shooting.com"
 
     public init() {
         self.isSignedIn = UserDefaults.standard.bool(forKey: Self.signedInKey)
+        self.userEmail = UserDefaults.standard.string(forKey: Self.emailKey)
     }
 
-    public func signIn() {
+    public func signIn(email: String?) {
         isSignedIn = true
+        userEmail = email
         UserDefaults.standard.set(true, forKey: Self.signedInKey)
+        if let email, !email.isEmpty {
+            UserDefaults.standard.set(email, forKey: Self.emailKey)
+        } else {
+            UserDefaults.standard.removeObject(forKey: Self.emailKey)
+        }
     }
 
     public func signOut() async {
         isSignedIn = false
+        userEmail = nil
         UserDefaults.standard.set(false, forKey: Self.signedInKey)
+        UserDefaults.standard.removeObject(forKey: Self.emailKey)
         await GSAuthSession.shared.clearOAuthSession()
+    }
+
+    /// True when the signed-in user's email belongs to the
+    /// `@grand-shooting.com` domain — i.e. they're internal staff
+    /// and can see / change dev-only knobs (notably the
+    /// staging↔production backend switch). Outside callers should
+    /// hide those controls when this is false and force the
+    /// production environment.
+    public var isGrandShootingStaff: Bool {
+        guard let domain = userEmail?
+            .split(separator: "@", maxSplits: 1, omittingEmptySubsequences: true)
+            .last
+            .map(String.init)?
+            .lowercased()
+        else { return false }
+        return domain == Self.staffDomain
     }
 }

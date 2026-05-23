@@ -7,6 +7,7 @@ import GSCore
 /// shooting method, the backend environment selector, and the
 /// fallback API-key form.
 struct SettingsGrandShootingView: View {
+    @Bindable var authState: AuthState
     @Bindable var settings: DevSettings
     @Bindable var catalog: CatalogCache
 
@@ -20,11 +21,24 @@ struct SettingsGrandShootingView: View {
     var body: some View {
         Form {
             techViewsSection
-            backendSection
+            if authState.isGrandShootingStaff {
+                backendSection
+            }
             developmentSection
         }
         .navigationTitle("Grand Shooting")
-        .onAppear(perform: loadDraft)
+        .onAppear {
+            loadDraft()
+            // Belt + suspenders: non-staff devices never run
+            // against staging. The picker is hidden in their UI
+            // but a stale UserDefaults value could persist from a
+            // previous build — overwrite it on every Settings
+            // visit while the user is non-staff.
+            if !authState.isGrandShootingStaff,
+               settings.backendEnvironment != .production {
+                settings.backendEnvironment = .production
+            }
+        }
         .overlay(alignment: .top) {
             if savedToastVisible {
                 Label("Saved", systemImage: "checkmark.circle.fill")

@@ -26,7 +26,7 @@ struct SettingsTab: View {
                     menuRow(title: "Photo", systemImage: "camera")
                 }
                 NavigationLink {
-                    SettingsGrandShootingView(settings: settings, catalog: catalog)
+                    SettingsGrandShootingView(authState: authState, settings: settings, catalog: catalog)
                 } label: {
                     menuRow(title: "Grand Shooting", systemImage: "building.2")
                 }

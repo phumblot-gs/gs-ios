@@ -15,6 +15,15 @@ import GSCore
 /// returns the callback URL, this service finishes the job.
 public struct OAuthSignInService: Sendable {
 
+    public struct SignInResult: Sendable {
+        public let token: GSAccessToken
+        /// Email of the authenticated user, as reported by the
+        /// OAuth backend. Nil when the backend doesn't include it
+        /// (older deployments); callers should treat that case as
+        /// "non-staff" — i.e. force production, hide dev knobs.
+        public let email: String?
+    }
+
     public enum SignInError: Error, Sendable {
         case missingSessionId
         case backend(OAuthBackendService.OAuthError)
@@ -28,12 +37,12 @@ public struct OAuthSignInService: Sendable {
         self.backend = OAuthBackendService(environment: environment)
     }
 
-    public func completeSignIn(callbackURL: URL) async throws -> GSAccessToken {
+    public func completeSignIn(callbackURL: URL) async throws -> SignInResult {
         let sessionId = try Self.parseSessionId(from: callbackURL)
         return try await completeSignIn(sessionId: sessionId)
     }
 
-    public func completeSignIn(sessionId: String) async throws -> GSAccessToken {
+    public func completeSignIn(sessionId: String) async throws -> SignInResult {
         let response: OAuthBackendService.ExchangeResponse
         do {
             response = try await backend.exchange(sessionId: sessionId)
@@ -62,7 +71,7 @@ public struct OAuthSignInService: Sendable {
             }
         }
 
-        return token
+        return SignInResult(token: token, email: response.email)
     }
 
     private static func parseSessionId(from url: URL) throws -> String {

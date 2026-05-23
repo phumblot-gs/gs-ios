@@ -29,6 +29,14 @@ struct GSApp: App {
             // runs in the background.
             .task(id: authState.isSignedIn) {
                 if authState.isSignedIn {
+                    // Belt for the suspenders: clamp non-staff users
+                    // to production on every launch, even if they
+                    // somehow had `.staging` persisted (older build,
+                    // restore, …).
+                    if !authState.isGrandShootingStaff,
+                       settings.backendEnvironment != .production {
+                        settings.backendEnvironment = .production
+                    }
                     await catalog.refresh(environment: settings.currentEnvironment)
                 }
             }

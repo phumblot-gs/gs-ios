@@ -61,8 +61,14 @@ struct OAuthSignInButton: View {
                 additionalHeaderFields: [:]
             )
             let service = OAuthSignInService(environment: env)
-            _ = try await service.completeSignIn(callbackURL: callbackURL)
-            authState.signIn()
+            let result = try await service.completeSignIn(callbackURL: callbackURL)
+            authState.signIn(email: result.email)
+            // Force the production backend for everyone outside
+            // Grand Shooting. Staff (@grand-shooting.com) keeps
+            // whatever they had picked in Settings.
+            if !authState.isGrandShootingStaff {
+                settings.backendEnvironment = .production
+            }
         } catch let error as ASWebAuthenticationSessionError where error.code == .canceledLogin {
             // User tapped Cancel in Safari — silent, no error display.
             return
