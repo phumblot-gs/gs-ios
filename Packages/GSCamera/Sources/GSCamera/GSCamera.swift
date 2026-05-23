@@ -775,15 +775,25 @@ private enum ColorProfileProcessor {
         profile: PresentationColorProfile,
         colorSpace: PresentationColorSpace
     ) -> Data? {
-        // Going through UIImage(data:) → CIImage(image:) bakes the
-        // source's EXIF orientation into the pixel buffer up front,
-        // so the new JPEG comes out in display-oriented pixels
-        // with EXIF orientation = .up. Downstream consumers (the
-        // annotation preview + the GS upload) get the same
-        // self-consistent pixel space.
-        guard let uiSource = UIImage(data: jpegData),
-              let ciSource = CIImage(image: uiSource) else { return nil }
-        let graded = apply(profile: profile, to: ciSource)
+        // Read the source JPEG directly via Image I/O so we can
+        // pair the raw pixel buffer with the EXIF orientation tag
+        // without going through `CIImage(image:)`, whose
+        // "honours orientation" semantics have been observed to be
+        // unreliable across iOS versions / source formats.
+        guard let source = CGImageSourceCreateWithData(jpegData as CFData, nil),
+              let sourceCGImage = CGImageSourceCreateImageAtIndex(source, 0, nil)
+        else { return nil }
+        let sourceProperties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [String: Any]
+        let orientationValue = (sourceProperties?[kCGImagePropertyOrientation as String] as? NSNumber)?.uint32Value ?? 1
+        let exifOrientation = CGImagePropertyOrientation(rawValue: orientationValue) ?? .up
+
+        // Apply the orientation explicitly. After this call the
+        // CIImage's extent is the display-oriented rect, so a
+        // subsequent `createCGImage(from: extent)` renders pixels
+        // that are already correctly rotated for the viewer.
+        let ciOriented = CIImage(cgImage: sourceCGImage).oriented(exifOrientation)
+        let graded = apply(profile: profile, to: ciOriented)
+
         let context = CIContext()
         let outputColorSpace = colorSpace.cgColorSpace ?? CGColorSpaceCreateDeviceRGB()
         guard let cgImage = context.createCGImage(
@@ -844,8 +854,17 @@ private enum ColorProfileProcessor {
             metadata = mutable
         }
 
+        // Belt + suspenders: Image I/O writes the JPEG's TIFF
+        // section from EITHER the metadata graph OR the options
+        // dictionary depending on what the source had. Pin the
+        // orientation to 1 in both surfaces so neither path can
+        // resurrect the source's value.
         let options: [CFString: Any] = [
-            kCGImageDestinationLossyCompressionQuality: quality
+            kCGImageDestinationLossyCompressionQuality: quality,
+            kCGImagePropertyOrientation: 1,
+            kCGImagePropertyTIFFDictionary: [
+                kCGImagePropertyTIFFOrientation: 1
+            ] as [CFString: Any]
         ]
         CGImageDestinationAddImageAndMetadata(
             destination,
