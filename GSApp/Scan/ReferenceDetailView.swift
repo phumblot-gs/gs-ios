@@ -31,6 +31,29 @@ struct ReferenceDetailView: View {
     @State private var statusUpdating = false
     @State private var showMeasureFlow = false
 
+    /// `/stock` lookup health for this reference. Only meaningful
+    /// when `source` is `.scan` — direct entries from a batch
+    /// stay `.loaded` because the stock items were resolved on the
+    /// previous screen.
+    enum StockLoadStatus: Equatable {
+        case loaded
+        case failed
+        case refreshing
+    }
+    @State private var stockLoadStatus: StockLoadStatus = .loaded
+    @State private var stockRetryTask: Task<Void, Never>?
+
+    /// Returns the scan context (payload + attribute) when the
+    /// detail view was opened from a barcode scan. Nil for direct
+    /// entries (batch navigation, …) — those don't need to refetch
+    /// `/stock` because the data was already validated upstream.
+    private var scanContext: (payload: String, attribute: StockService.SearchAttribute)? {
+        if case .scan(let match) = source {
+            return (match.payload, match.searchAttribute)
+        }
+        return nil
+    }
+
     private var sourceReferences: [ReferenceStock] {
         switch source {
         case .scan(let match): return match.references
@@ -57,6 +80,9 @@ struct ReferenceDetailView: View {
                 if references.count > 1 {
                     referencePicker
                 }
+                if stockLoadStatus != .loaded {
+                    stockLookupBanner
+                }
                 if !stockItems.isEmpty {
                     stockItemSection
                 }
@@ -68,10 +94,22 @@ struct ReferenceDetailView: View {
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .background(Color(.systemGroupedBackground))
+        .refreshable {
+            await refreshStock(triggeredByUser: true)
+        }
         .task {
             if references.isEmpty { references = sourceReferences }
             await loadPictures()
+            // If the upstream /stock GET failed during the scan,
+            // surface the banner and schedule one auto-retry after
+            // 5 s. The retry is cancellable — pull-to-refresh while
+            // it's pending replaces it with the user-initiated one.
+            if case .scan(let match) = source, match.stockLookupFailed {
+                stockLoadStatus = .failed
+                scheduleAutoRetry()
+            }
         }
+        .onDisappear { stockRetryTask?.cancel() }
         .sheet(isPresented: $statusSheetVisible) {
             statusPicker
         }
@@ -433,6 +471,94 @@ struct ReferenceDetailView: View {
             picturesError = NSError(domain: "GSHTTPClient", code: -1, userInfo: [NSLocalizedDescriptionKey: err.userMessage])
         } catch {
             picturesError = error
+        }
+    }
+
+    // MARK: - Stock retry surface
+
+    @ViewBuilder
+    private var stockLookupBanner: some View {
+        HStack(alignment: .center, spacing: 12) {
+            if stockLoadStatus == .refreshing {
+                ProgressView().controlSize(.small)
+            } else {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+                    .font(.title3)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(stockLoadStatus == .refreshing
+                     ? "Reloading stock items…"
+                     : "Couldn't load stock items.")
+                    .font(.subheadline.weight(.semibold))
+                if stockLoadStatus == .failed {
+                    Text("Pull to refresh, or tap Retry.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Spacer()
+            if stockLoadStatus == .failed {
+                Button("Retry") {
+                    Task { await refreshStock(triggeredByUser: true) }
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+        }
+        .padding()
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.orange.opacity(0.4), lineWidth: 1)
+        )
+    }
+
+    /// Queues a single auto-retry of the `/stock` lookup 5 s after
+    /// the banner appears. Cancellable via `stockRetryTask` so a
+    /// manual pull-to-refresh or a navigation-away doesn't leave
+    /// it firing in the background.
+    private func scheduleAutoRetry() {
+        stockRetryTask?.cancel()
+        stockRetryTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(5))
+            if Task.isCancelled { return }
+            guard stockLoadStatus == .failed else { return }
+            await refreshStock(triggeredByUser: false)
+        }
+    }
+
+    /// Re-runs `StockService.search` for the scan payload, merges
+    /// the result into the local `references` state, and updates
+    /// `stockLoadStatus` so the banner reflects the outcome.
+    /// `triggeredByUser == true` cancels any pending auto-retry.
+    @MainActor
+    private func refreshStock(triggeredByUser: Bool) async {
+        guard let context = scanContext else { return }
+        if triggeredByUser { stockRetryTask?.cancel() }
+        stockLoadStatus = .refreshing
+        let service = StockService(environment: settings.currentEnvironment)
+        do {
+            let matches = try await service.search(
+                scannedValue: context.payload,
+                by: context.attribute
+            )
+            references = references.map { existing in
+                let items = matches.first(where: { $0.reference.ref == existing.reference.ref })?.stockItems ?? []
+                return ReferenceStock(reference: existing.reference, stockItems: items)
+            }
+            // If the retry returned no items either, the call
+            // technically succeeded — there genuinely is no stock
+            // for this reference. Mark as loaded so the banner
+            // disappears.
+            stockLoadStatus = .loaded
+        } catch {
+            // Stay in `.failed` so the banner sticks. We never
+            // re-schedule another auto-retry from here — that
+            // would loop indefinitely on a flaky network. The
+            // user retries via the banner button or
+            // pull-to-refresh.
+            stockLoadStatus = .failed
         }
     }
 }

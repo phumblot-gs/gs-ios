@@ -122,11 +122,20 @@ struct ScanProductFlow: View {
 
             // Enrichment: fetch stock items if any exist. Failure here
             // doesn't fail the whole scan — we still show the reference,
-            // just without a Stock items section.
-            let stockMatches = (try? await stockService.search(
-                scannedValue: code.payload,
-                by: settings.searchAttribute
-            )) ?? []
+            // just without a Stock items section. We DO surface the
+            // failure to the detail view via `stockLookupFailed` so the
+            // user gets a "couldn't load stock" banner and an auto-retry
+            // (instead of silently believing the reference has no stock).
+            var stockMatches: [ReferenceStock] = []
+            var stockLookupFailed = false
+            do {
+                stockMatches = try await stockService.search(
+                    scannedValue: code.payload,
+                    by: settings.searchAttribute
+                )
+            } catch {
+                stockLookupFailed = true
+            }
 
             // Pair each (richer) /reference row with the stock items from
             // /stock. We deliberately keep the /reference variant — /stock
@@ -139,7 +148,12 @@ struct ScanProductFlow: View {
                 return ReferenceStock(reference: reference, stockItems: items)
             }
             feedback.didFindReference()
-            lastScan = .matched(ScanState.MatchedReference(payload: code.payload, references: combined))
+            lastScan = .matched(ScanState.MatchedReference(
+                payload: code.payload,
+                searchAttribute: settings.searchAttribute,
+                references: combined,
+                stockLookupFailed: stockLookupFailed
+            ))
         } catch GSHTTPClient.HTTPError.notAuthenticated {
             inflight = false
             feedback.didFailLookup(reason: .other)
@@ -168,8 +182,17 @@ enum ScanState {
 
     struct MatchedReference: Hashable, Identifiable {
         let id = UUID()
+        /// The raw barcode payload — used by the detail view to
+        /// retry the `/stock` lookup if the original call failed.
         let payload: String
+        /// Which `Reference` attribute was used as the lookup key.
+        /// Propagated to the detail view for the same retry path.
+        let searchAttribute: StockService.SearchAttribute
         let references: [ReferenceStock]
+        /// True when the initial `/stock` GET failed. Tells the
+        /// detail view to surface a "couldn't load stock items"
+        /// banner and schedule an auto-retry.
+        let stockLookupFailed: Bool
     }
 }
 
