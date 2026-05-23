@@ -273,7 +273,16 @@ public final class CameraSessionController: UIViewController {
     /// the photo matches what the user saw when they pressed the
     /// shutter regardless of how they were holding the phone.
     private var rotationCoordinator: AVCaptureDevice.RotationCoordinator?
-    private var rotationObservation: NSKeyValueObservation?
+    /// We KVO **both** preview and capture angles. Reading
+    /// `videoRotationAngleFor...` directly from the coordinator at
+    /// shutter time was unreliable: the value can lag the current
+    /// physical orientation by one motion-update cycle, which is
+    /// exactly the symmetry you'd see if you flick from portrait
+    /// to landscape and shoot before the coordinator catches up
+    /// (and vice versa). Observing both properties means the two
+    /// connections always carry the latest angle by the time the
+    /// user taps the shutter.
+    private var rotationObservations: [NSKeyValueObservation] = []
 
     fileprivate init(
         shutter: CameraShutter,
@@ -351,25 +360,33 @@ public final class CameraSessionController: UIViewController {
         sessionQueue.async { [weak self] in
             self?.configureSession(with: snapshot)
             self?.session.startRunning()
+            Task { @MainActor [weak self] in
+                // The connection has just been created on the
+                // session queue. Nudge it with the current capture
+                // angle so the very first shot is correctly
+                // oriented even if no KVO update has fired yet.
+                self?.applyCaptureRotation()
+            }
         }
     }
 
     /// Spins up an `AVCaptureDevice.RotationCoordinator` for the
-    /// given device and immediately applies the live preview angle
-    /// so the live feed sits horizon-level. KVO on the preview
-    /// angle keeps things lined up if the user physically rotates
-    /// the phone while a session is active.
+    /// given device and observes BOTH its angle properties so the
+    /// preview and the photo output stay aligned with the device's
+    /// physical orientation in real time. Apple's recommended
+    /// pattern — direct reads can lag the sensor by one cycle.
     @MainActor
     private func installRotationCoordinator(for device: AVCaptureDevice) {
-        rotationObservation?.invalidate()
-        rotationObservation = nil
+        rotationObservations.forEach { $0.invalidate() }
+        rotationObservations.removeAll()
         let coordinator = AVCaptureDevice.RotationCoordinator(
             device: device,
             previewLayer: previewLayer
         )
         rotationCoordinator = coordinator
         applyPreviewRotation()
-        rotationObservation = coordinator.observe(
+        applyCaptureRotation()
+        let previewObservation = coordinator.observe(
             \.videoRotationAngleForHorizonLevelPreview,
             options: [.new]
         ) { [weak self] _, _ in
@@ -377,6 +394,15 @@ public final class CameraSessionController: UIViewController {
                 self?.applyPreviewRotation()
             }
         }
+        let captureObservation = coordinator.observe(
+            \.videoRotationAngleForHorizonLevelCapture,
+            options: [.new]
+        ) { [weak self] _, _ in
+            Task { @MainActor [weak self] in
+                self?.applyCaptureRotation()
+            }
+        }
+        rotationObservations = [previewObservation, captureObservation]
     }
 
     @MainActor
@@ -386,6 +412,25 @@ public final class CameraSessionController: UIViewController {
             let connection = previewLayer?.connection
         else { return }
         let angle = coordinator.videoRotationAngleForHorizonLevelPreview
+        if connection.isVideoRotationAngleSupported(angle) {
+            connection.videoRotationAngle = angle
+        }
+    }
+
+    /// Pushes the current capture angle from the rotation
+    /// coordinator onto the photo output's video connection.
+    /// Called from the KVO observer **and** from
+    /// `configureSession` / `reconfigure` (after a device swap)
+    /// because in those cases the connection has just been
+    /// (re)created and is sitting at its default angle until we
+    /// nudge it.
+    @MainActor
+    private func applyCaptureRotation() {
+        guard
+            let coordinator = rotationCoordinator,
+            let connection = photoOutput.connection(with: .video)
+        else { return }
+        let angle = coordinator.videoRotationAngleForHorizonLevelCapture
         if connection.isVideoRotationAngleSupported(angle) {
             connection.videoRotationAngle = angle
         }
@@ -431,6 +476,11 @@ public final class CameraSessionController: UIViewController {
         }
         sessionQueue.async { [weak self] in
             self?.reconfigure(with: snapshot)
+            Task { @MainActor [weak self] in
+                // Device swap recreated the photo connection; push
+                // the current capture angle onto the new one.
+                self?.applyCaptureRotation()
+            }
         }
     }
 
@@ -579,13 +629,6 @@ public final class CameraSessionController: UIViewController {
         Task { @MainActor in self.shutter?.update(isCapturing: true) }
         let modeForCapture = configuration.mode
         let profileForCapture = configuration.colorProfile
-        // Read the live capture angle from the rotation coordinator
-        // *now*, on the main actor, so the value matches whatever
-        // orientation the user is holding the phone at the moment
-        // they tapped the shutter. We then pass that scalar into
-        // the session queue closure for the actual capture call.
-        let captureAngle: CGFloat = rotationCoordinator?
-            .videoRotationAngleForHorizonLevelCapture ?? 90
         let delegate = CaptureDelegate { [weak self] result in
             guard let self else { return }
             switch result {
@@ -609,20 +652,16 @@ public final class CameraSessionController: UIViewController {
         sessionQueue.async { [weak self] in
             // Build the settings inside the queue so we don't cross
             // an actor boundary with a non-Sendable
-            // `AVCapturePhotoSettings`.
+            // `AVCapturePhotoSettings`. We no longer touch
+            // `videoRotationAngle` here — the KVO observer set up
+            // in `installRotationCoordinator` keeps the photo
+            // connection's angle in sync with the live device
+            // orientation, so by the time we get to this line the
+            // angle is already correct.
             let settings = AVCapturePhotoSettings(format: [
                 AVVideoCodecKey: AVVideoCodecType.jpeg
             ])
             settings.photoQualityPrioritization = .quality
-            // Apply the rotation read from the RotationCoordinator
-            // right before triggering the capture. Set per-capture
-            // (rather than once at session setup) because device
-            // swaps — Presentation ↔ Detail ↔ OCR — re-create the
-            // connection.
-            if let connection = self?.photoOutput.connection(with: .video),
-               connection.isVideoRotationAngleSupported(captureAngle) {
-                connection.videoRotationAngle = captureAngle
-            }
             self?.photoOutput.capturePhoto(with: settings, delegate: delegate)
         }
     }
