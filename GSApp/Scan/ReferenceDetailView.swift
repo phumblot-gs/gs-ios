@@ -25,23 +25,29 @@ struct ReferenceDetailView: View {
     @State private var selectedIndex: Int = 0
     @State private var selectedStockItemIndex: Int = 0
     @State private var pictures: [Picture] = []
-    @State private var picturesLoading = false
-    @State private var picturesError: (any Error)?
     @State private var statusSheetVisible = false
     @State private var statusUpdating = false
     @State private var showMeasureFlow = false
+    /// Inline error surfaced by a user-triggered action that
+    /// failed (currently only the status change). Different
+    /// channel from the on-load status banners so we don't
+    /// conflate "this PATCH failed" with "the GET on appear
+    /// failed".
+    @State private var actionErrorMessage: String?
 
-    /// `/stock` lookup health for this reference. Only meaningful
-    /// when `source` is `.scan` — direct entries from a batch
-    /// stay `.loaded` because the stock items were resolved on the
-    /// previous screen.
-    enum StockLoadStatus: Equatable {
+    /// Shared shape for both async loaders on this screen
+    /// (`/stock` and `/picture`). `.loaded` covers both "data
+    /// present" and "data legitimately empty" — the banner is
+    /// only shown on `.failed` or `.refreshing`.
+    enum LoadStatus: Equatable {
         case loaded
         case failed
         case refreshing
     }
-    @State private var stockLoadStatus: StockLoadStatus = .loaded
+    @State private var stockLoadStatus: LoadStatus = .loaded
     @State private var stockRetryTask: Task<Void, Never>?
+    @State private var picturesLoadStatus: LoadStatus = .loaded
+    @State private var picturesRetryTask: Task<Void, Never>?
 
     /// Returns the scan context (payload + attribute) when the
     /// detail view was opened from a barcode scan. Nil for direct
@@ -95,21 +101,35 @@ struct ReferenceDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .background(Color(.systemGroupedBackground))
         .refreshable {
-            await refreshStock(triggeredByUser: true)
+            async let stock: Void = refreshStock(triggeredByUser: true)
+            async let pics: Void = loadPictures(triggeredByUser: true)
+            _ = await (stock, pics)
         }
         .task {
             if references.isEmpty { references = sourceReferences }
-            await loadPictures()
+            await loadPictures(triggeredByUser: false)
             // If the upstream /stock GET failed during the scan,
             // surface the banner and schedule one auto-retry after
             // 5 s. The retry is cancellable — pull-to-refresh while
             // it's pending replaces it with the user-initiated one.
             if case .scan(let match) = source, match.stockLookupFailed {
                 stockLoadStatus = .failed
-                scheduleAutoRetry()
+                scheduleStockAutoRetry()
             }
         }
-        .onDisappear { stockRetryTask?.cancel() }
+        .onDisappear {
+            stockRetryTask?.cancel()
+            picturesRetryTask?.cancel()
+        }
+        .alert(
+            "Status update failed",
+            isPresented: Binding(
+                get: { actionErrorMessage != nil },
+                set: { if !$0 { actionErrorMessage = nil } }
+            ),
+            actions: { Button("OK") { actionErrorMessage = nil } },
+            message: { Text(actionErrorMessage ?? "") }
+        )
         .sheet(isPresented: $statusSheetVisible) {
             statusPicker
         }
@@ -367,13 +387,10 @@ struct ReferenceDetailView: View {
             Text("Pictures")
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(.secondary)
-            if picturesLoading {
-                ProgressView().frame(maxWidth: .infinity, alignment: .center)
-            } else if let err = picturesError {
-                Label("Couldn't load pictures: \(err.localizedDescription)", systemImage: "exclamationmark.triangle")
-                    .font(.footnote)
-                    .foregroundStyle(.red)
-            } else {
+            if picturesLoadStatus != .loaded {
+                picturesLookupBanner
+            }
+            if picturesLoadStatus == .loaded {
                 ForEach(shotListRows, id: \.id) { row in
                     ShotListRow(row: row)
                 }
@@ -429,18 +446,35 @@ struct ReferenceDetailView: View {
 
     // MARK: - API
 
+    /// Mirrors `refreshStock(triggeredByUser:)`. On the initial
+    /// load (`triggeredByUser == false`) a failure schedules one
+    /// auto-retry 5 s later. On a manual refresh (pull-to-refresh
+    /// or banner button) we cancel any pending auto-retry first
+    /// so the two requests don't race.
     @MainActor
-    private func loadPictures() async {
-        pictures = []
-        picturesError = nil
+    private func loadPictures(triggeredByUser: Bool) async {
         guard let ref = currentReferenceStock?.reference.ref else { return }
-        picturesLoading = true
-        defer { picturesLoading = false }
+        if triggeredByUser { picturesRetryTask?.cancel() }
+        picturesLoadStatus = .refreshing
         do {
             let service = PictureService(environment: settings.currentEnvironment)
             pictures = try await service.list(forRef: ref)
+            picturesLoadStatus = .loaded
         } catch {
-            picturesError = error
+            picturesLoadStatus = .failed
+            if !triggeredByUser {
+                schedulePicturesAutoRetry()
+            }
+        }
+    }
+
+    private func schedulePicturesAutoRetry() {
+        picturesRetryTask?.cancel()
+        picturesRetryTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(5))
+            if Task.isCancelled { return }
+            guard picturesLoadStatus == .failed else { return }
+            await loadPictures(triggeredByUser: false)
         }
     }
 
@@ -468,18 +502,41 @@ struct ReferenceDetailView: View {
                 }
             }
         } catch let err as GSHTTPClient.HTTPError {
-            picturesError = NSError(domain: "GSHTTPClient", code: -1, userInfo: [NSLocalizedDescriptionKey: err.userMessage])
+            actionErrorMessage = err.userMessage
         } catch {
-            picturesError = error
+            actionErrorMessage = error.localizedDescription
         }
     }
 
-    // MARK: - Stock retry surface
+    // MARK: - Retry banners
+
+    private var stockLookupBanner: some View {
+        retryBanner(
+            status: stockLoadStatus,
+            failedTitle: "Couldn't load stock items.",
+            refreshingTitle: "Reloading stock items…",
+            retry: { Task { await refreshStock(triggeredByUser: true) } }
+        )
+    }
+
+    private var picturesLookupBanner: some View {
+        retryBanner(
+            status: picturesLoadStatus,
+            failedTitle: "Couldn't load pictures.",
+            refreshingTitle: "Reloading pictures…",
+            retry: { Task { await loadPictures(triggeredByUser: true) } }
+        )
+    }
 
     @ViewBuilder
-    private var stockLookupBanner: some View {
+    private func retryBanner(
+        status: LoadStatus,
+        failedTitle: LocalizedStringKey,
+        refreshingTitle: LocalizedStringKey,
+        retry: @escaping () -> Void
+    ) -> some View {
         HStack(alignment: .center, spacing: 12) {
-            if stockLoadStatus == .refreshing {
+            if status == .refreshing {
                 ProgressView().controlSize(.small)
             } else {
                 Image(systemName: "exclamationmark.triangle.fill")
@@ -487,23 +544,19 @@ struct ReferenceDetailView: View {
                     .font(.title3)
             }
             VStack(alignment: .leading, spacing: 2) {
-                Text(stockLoadStatus == .refreshing
-                     ? "Reloading stock items…"
-                     : "Couldn't load stock items.")
+                Text(status == .refreshing ? refreshingTitle : failedTitle)
                     .font(.subheadline.weight(.semibold))
-                if stockLoadStatus == .failed {
+                if status == .failed {
                     Text("Pull to refresh, or tap Retry.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
             Spacer()
-            if stockLoadStatus == .failed {
-                Button("Retry") {
-                    Task { await refreshStock(triggeredByUser: true) }
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+            if status == .failed {
+                Button("Retry", action: retry)
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
             }
         }
         .padding()
@@ -518,7 +571,7 @@ struct ReferenceDetailView: View {
     /// the banner appears. Cancellable via `stockRetryTask` so a
     /// manual pull-to-refresh or a navigation-away doesn't leave
     /// it firing in the background.
-    private func scheduleAutoRetry() {
+    private func scheduleStockAutoRetry() {
         stockRetryTask?.cancel()
         stockRetryTask = Task { @MainActor in
             try? await Task.sleep(for: .seconds(5))
