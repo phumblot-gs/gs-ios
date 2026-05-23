@@ -267,6 +267,13 @@ public final class CameraSessionController: UIViewController {
     private let sessionQueue = DispatchQueue(label: "com.grand-shooting.camera.session")
     private var previewLayer: AVCaptureVideoPreviewLayer?
     private var configuration: CameraConfiguration
+    /// Tracks the device's physical orientation via the
+    /// accelerometer + preview layer so the preview and the
+    /// captured JPEG both end up "level with the horizon" — i.e.
+    /// the photo matches what the user saw when they pressed the
+    /// shutter regardless of how they were holding the phone.
+    private var rotationCoordinator: AVCaptureDevice.RotationCoordinator?
+    private var rotationObservation: NSKeyValueObservation?
 
     fileprivate init(
         shutter: CameraShutter,
@@ -338,9 +345,49 @@ public final class CameraSessionController: UIViewController {
         let capabilities = CameraCapabilities(hasUltraWide: Self.detectUltraWide())
         shutter?.update(capabilities: capabilities)
         let snapshot = configuration
+        if let device = Self.preferredDevice(for: snapshot.mode) {
+            installRotationCoordinator(for: device)
+        }
         sessionQueue.async { [weak self] in
             self?.configureSession(with: snapshot)
             self?.session.startRunning()
+        }
+    }
+
+    /// Spins up an `AVCaptureDevice.RotationCoordinator` for the
+    /// given device and immediately applies the live preview angle
+    /// so the live feed sits horizon-level. KVO on the preview
+    /// angle keeps things lined up if the user physically rotates
+    /// the phone while a session is active.
+    @MainActor
+    private func installRotationCoordinator(for device: AVCaptureDevice) {
+        rotationObservation?.invalidate()
+        rotationObservation = nil
+        let coordinator = AVCaptureDevice.RotationCoordinator(
+            device: device,
+            previewLayer: previewLayer
+        )
+        rotationCoordinator = coordinator
+        applyPreviewRotation()
+        rotationObservation = coordinator.observe(
+            \.videoRotationAngleForHorizonLevelPreview,
+            options: [.new]
+        ) { [weak self] _, _ in
+            Task { @MainActor [weak self] in
+                self?.applyPreviewRotation()
+            }
+        }
+    }
+
+    @MainActor
+    private func applyPreviewRotation() {
+        guard
+            let coordinator = rotationCoordinator,
+            let connection = previewLayer?.connection
+        else { return }
+        let angle = coordinator.videoRotationAngleForHorizonLevelPreview
+        if connection.isVideoRotationAngleSupported(angle) {
+            connection.videoRotationAngle = angle
         }
     }
 
@@ -379,6 +426,9 @@ public final class CameraSessionController: UIViewController {
     fileprivate func apply(configuration: CameraConfiguration) {
         self.configuration = configuration
         let snapshot = configuration
+        if let device = Self.preferredDevice(for: snapshot.mode) {
+            installRotationCoordinator(for: device)
+        }
         sessionQueue.async { [weak self] in
             self?.reconfigure(with: snapshot)
         }
@@ -529,6 +579,13 @@ public final class CameraSessionController: UIViewController {
         Task { @MainActor in self.shutter?.update(isCapturing: true) }
         let modeForCapture = configuration.mode
         let profileForCapture = configuration.colorProfile
+        // Read the live capture angle from the rotation coordinator
+        // *now*, on the main actor, so the value matches whatever
+        // orientation the user is holding the phone at the moment
+        // they tapped the shutter. We then pass that scalar into
+        // the session queue closure for the actual capture call.
+        let captureAngle: CGFloat = rotationCoordinator?
+            .videoRotationAngleForHorizonLevelCapture ?? 90
         let delegate = CaptureDelegate { [weak self] result in
             guard let self else { return }
             switch result {
@@ -557,18 +614,14 @@ public final class CameraSessionController: UIViewController {
                 AVVideoCodecKey: AVVideoCodecType.jpeg
             ])
             settings.photoQualityPrioritization = .quality
-            // The session is portrait-only at the moment. Lock the
-            // photo connection to 90° before each capture so the
-            // resulting JPEG isn't rotated into the sensor's native
-            // landscape orientation. Set per-capture (rather than
-            // once at session setup) because device swaps —
-            // Presentation ↔ Detail ↔ OCR — re-create the
+            // Apply the rotation read from the RotationCoordinator
+            // right before triggering the capture. Set per-capture
+            // (rather than once at session setup) because device
+            // swaps — Presentation ↔ Detail ↔ OCR — re-create the
             // connection.
-            if let connection = self?.photoOutput.connection(with: .video) {
-                let portraitAngle: CGFloat = 90
-                if connection.isVideoRotationAngleSupported(portraitAngle) {
-                    connection.videoRotationAngle = portraitAngle
-                }
+            if let connection = self?.photoOutput.connection(with: .video),
+               connection.isVideoRotationAngleSupported(captureAngle) {
+                connection.videoRotationAngle = captureAngle
             }
             self?.photoOutput.capturePhoto(with: settings, delegate: delegate)
         }

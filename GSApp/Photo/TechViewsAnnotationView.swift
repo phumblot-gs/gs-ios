@@ -83,16 +83,18 @@ struct TechViewsAnnotationView: View {
             .padding(.top, 8)
     }
 
-    /// Edge-to-edge preview used by the photo / detail modes —
-    /// nothing to annotate, so the shot fills the available space
-    /// above the footer.
+    /// Edge-to-edge preview used by the photo / detail modes.
+    /// Mirrors the live camera layer's `videoGravity =
+    /// resizeAspectFill` so the review surface looks identical to
+    /// what the user saw when they pressed the shutter — no black
+    /// letterbox bands above and below.
     private var largePreview: some View {
-        VStack(spacing: 0) {
+        GeometryReader { geo in
             Image(uiImage: image)
                 .resizable()
-                .scaledToFit()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .padding(.vertical, 12)
+                .scaledToFill()
+                .frame(width: geo.size.width, height: geo.size.height)
+                .clipped()
         }
         .background(Color.black)
     }
