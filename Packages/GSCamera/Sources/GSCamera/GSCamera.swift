@@ -823,8 +823,16 @@ private enum ColorProfileProcessor {
             properties = sourceProperties
         }
         // Our pixel buffer is display-oriented now; tell ImageIO
-        // not to apply any further rotation when interpreting it.
+        // not to apply any further rotation. The orientation lives
+        // in TWO places — the top-level convenience key AND the
+        // TIFF sub-dictionary (which is what actually gets written
+        // to the EXIF stream). If we only clear the top-level the
+        // TIFF tag wins and the JPEG comes out double-rotated.
         properties[kCGImagePropertyOrientation] = 1
+        if var tiff = properties[kCGImagePropertyTIFFDictionary] as? [CFString: Any] {
+            tiff[kCGImagePropertyTIFFOrientation] = 1
+            properties[kCGImagePropertyTIFFDictionary] = tiff
+        }
         properties[kCGImageDestinationLossyCompressionQuality] = quality
 
         CGImageDestinationAddImage(destination, cgImage, properties as CFDictionary)
