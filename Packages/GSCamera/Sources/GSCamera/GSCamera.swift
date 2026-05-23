@@ -809,21 +809,25 @@ private enum ColorProfileProcessor {
         )
     }
 
-    /// Write the processed `cgImage` as a JPEG, preserving the
-    /// source's EXIF / TIFF / XMP / GPS / Maker-Note graph and
-    /// overriding only what changed in our pipeline: the
-    /// orientation tag (now `.up` because the round-trip baked the
-    /// rotation into pixels) and the embedded ICC profile (set
-    /// implicitly via `cgImage.colorSpace`).
+    /// Write the processed `cgImage` as a JPEG, preserving every
+    /// EXIF / TIFF / GPS / Maker-Note dictionary that AVCapture
+    /// stamped onto the source (focal length, white-balance mode,
+    /// ISO, exposure, lens model + make, Apple maker notes, GPS),
+    /// and overriding only what changed in our pipeline — the
+    /// orientation tag becomes `1` because the round-trip baked
+    /// the rotation into pixels, and the embedded ICC profile is
+    /// whatever the user chose, set implicitly via the cgImage's
+    /// colour space.
     ///
-    /// Uses `CGImageMetadata` instead of a `[CFString: Any]`
-    /// property dictionary because the dictionary approach goes
-    /// through Swift's `as? [CFString: Any]` bridging from
-    /// `CFDictionary`, which silently drops the typed key in some
-    /// configurations and left the TIFF/Orientation tag in the
-    /// source's value. `CGImageMetadataSetValueMatchingImageProperty`
-    /// operates on a strongly-typed metadata graph so the override
-    /// is guaranteed to land.
+    /// We cast the source `CFDictionary` as `[String: Any]` (not
+    /// `[CFString: Any]`) because CFString auto-bridges to String
+    /// — that's the bridging direction Image I/O actually
+    /// supports. The earlier `[CFString: Any]` cast was silently
+    /// dropping nested sub-dictionaries, which is why the TIFF
+    /// orientation override wasn't landing and the metadata
+    /// switched to the XMP-only `CGImageMetadata` graph (which
+    /// AVCapture JPEGs don't populate, hence the missing focal
+    /// length the user spotted).
     private static func encodeJPEG(
         cgImage: CGImage,
         sourceJPEG: Data,
@@ -837,41 +841,29 @@ private enum ColorProfileProcessor {
             nil
         ) else { return nil }
 
-        var metadata: CGImageMetadata?
+        var properties: [String: Any] = [:]
         if let source = CGImageSourceCreateWithData(sourceJPEG as CFData, nil),
-           let sourceMetadata = CGImageSourceCopyMetadataAtIndex(source, 0, nil),
-           let mutable = CGImageMetadataCreateMutableCopy(sourceMetadata) {
-            // The TIFF Orientation tag is the authoritative one
-            // for JPEG readers. The Image I/O metadata API keeps
-            // the XMP namespace alias in sync, so one set call
-            // covers both surfaces.
-            CGImageMetadataSetValueMatchingImageProperty(
-                mutable,
-                kCGImagePropertyTIFFDictionary,
-                kCGImagePropertyTIFFOrientation,
-                1 as CFNumber
-            )
-            metadata = mutable
+           let sourceProperties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [String: Any] {
+            properties = sourceProperties
         }
 
-        // Belt + suspenders: Image I/O writes the JPEG's TIFF
-        // section from EITHER the metadata graph OR the options
-        // dictionary depending on what the source had. Pin the
-        // orientation to 1 in both surfaces so neither path can
-        // resurrect the source's value.
-        let options: [CFString: Any] = [
-            kCGImageDestinationLossyCompressionQuality: quality,
-            kCGImagePropertyOrientation: 1,
-            kCGImagePropertyTIFFDictionary: [
-                kCGImagePropertyTIFFOrientation: 1
-            ] as [CFString: Any]
-        ]
-        CGImageDestinationAddImageAndMetadata(
-            destination,
-            cgImage,
-            metadata,
-            options as CFDictionary
-        )
+        // Override the orientation in BOTH the top-level
+        // convenience key and the TIFF sub-dictionary (which is
+        // what Image I/O actually writes to the JPEG's TIFF
+        // segment). Use String keys throughout so the sub-dict
+        // mutation is guaranteed to land.
+        let orientationKey = kCGImagePropertyOrientation as String
+        let tiffKey = kCGImagePropertyTIFFDictionary as String
+        let tiffOrientationKey = kCGImagePropertyTIFFOrientation as String
+
+        properties[orientationKey] = 1
+        var tiff = (properties[tiffKey] as? [String: Any]) ?? [:]
+        tiff[tiffOrientationKey] = 1
+        properties[tiffKey] = tiff
+
+        properties[kCGImageDestinationLossyCompressionQuality as String] = quality
+
+        CGImageDestinationAddImage(destination, cgImage, properties as CFDictionary)
         guard CGImageDestinationFinalize(destination) else { return nil }
         return imageDestinationData as Data
     }
