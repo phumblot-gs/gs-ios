@@ -50,8 +50,6 @@ struct SettingsPhotoView: View {
                 .foregroundStyle(.secondary)
         } header: {
             Text("Capture behaviour")
-        } footer: {
-            Text("Photo uses the wide-angle camera with the white balance, colour profile and colour space chosen above. Detail switches to the ultra-wide camera (focuses down to ~2 cm) but keeps the same look — for close-up product shots. OCR also uses the ultra-wide but with auto white balance and no colour processing; it's the only mode where Vision OCR + pictogram detection run after capture, and its JPEGs keep the sensor's native colour profile. Focal length, white-balance mode, ISO and lens model are written into the JPEG EXIF metadata for all modes.")
         }
     }
 

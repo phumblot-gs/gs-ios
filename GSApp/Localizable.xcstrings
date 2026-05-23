@@ -904,6 +904,7 @@
       }
     },
     "Grand Shooting" : {
+      "extractionState" : "stale",
       "localizations" : {
         "fr" : {
           "stringUnit" : {
@@ -1750,6 +1751,17 @@
         }
       }
     },
+    "Profile" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Profil"
+          }
+        }
+      }
+    },
     "Rank %@" : {
 
     },
@@ -1807,16 +1819,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Référence (ref)"
-          }
-        }
-      }
-    },
-    "Profile" : {
-      "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Profil"
           }
         }
       }
@@ -2069,6 +2071,7 @@
       }
     },
     "Scanner" : {
+      "extractionState" : "stale",
       "localizations" : {
         "fr" : {
           "stringUnit" : {
