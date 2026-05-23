@@ -184,7 +184,7 @@ enum TechViewsPictoDetection {
         request.imageCropAndScaleOption = .centerCrop
         let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
         try handler.perform([request])
-        guard let observation = (request.results as? [VNFeaturePrintObservation])?.first else {
+        guard let observation = request.results?.first else {
             throw NSError(
                 domain: "TechViewsPictoDetection.featurePrint",
                 code: -1,
