@@ -274,8 +274,12 @@ public final class DevSettings {
 
     private init() {
         self.gsAPIShard = UserDefaults.standard.string(forKey: Self.shardKey) ?? "api-19"
-        let envRaw = UserDefaults.standard.string(forKey: Self.envKey) ?? "staging"
-        self.backendEnvironment = BackendEnvironment(rawValue: envRaw) ?? .staging
+        // Default to production for fresh installs — the staging
+        // backend is staff-only and a normal user should never hit
+        // it. Staff can flip back via the long-press easter egg on
+        // the login screen (or via Settings once signed in).
+        let envRaw = UserDefaults.standard.string(forKey: Self.envKey) ?? "production"
+        self.backendEnvironment = BackendEnvironment(rawValue: envRaw) ?? .production
 
         self.activeZone = UserDefaults.standard.string(forKey: Self.activeZoneKey)
 
