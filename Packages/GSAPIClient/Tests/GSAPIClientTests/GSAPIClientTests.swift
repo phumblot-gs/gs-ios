@@ -46,17 +46,22 @@ struct GSAPIClientTests {
         #expect(oauth.authorizationHeaderValue == "access_token abc")
     }
 
-    @Test("AuthState recognises @grand-shooting.com staff")
+    @Test("AuthState recognises Grand-Shooting staff via email or account id")
     @MainActor
     func authStateStaffGate() {
         let state = AuthState()
-        state.signIn(email: "phf@grand-shooting.com")
+        // Email domain wins.
+        state.signIn(email: "phf@grand-shooting.com", accountID: nil)
         #expect(state.isGrandShootingStaff)
-        state.signIn(email: "phf@GRAND-shooting.com")
+        state.signIn(email: "phf@GRAND-shooting.com", accountID: nil)
         #expect(state.isGrandShootingStaff)
-        state.signIn(email: "someone@example.com")
+        // Account id wins even with no email (the current GS case).
+        state.signIn(email: nil, accountID: 16)
+        #expect(state.isGrandShootingStaff)
+        // Neither matches → not staff.
+        state.signIn(email: "someone@example.com", accountID: 42)
         #expect(!state.isGrandShootingStaff)
-        state.signIn(email: nil)
+        state.signIn(email: nil, accountID: nil)
         #expect(!state.isGrandShootingStaff)
     }
 }

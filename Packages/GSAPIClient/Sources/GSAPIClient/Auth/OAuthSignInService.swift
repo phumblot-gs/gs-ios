@@ -18,10 +18,13 @@ public struct OAuthSignInService: Sendable {
     public struct SignInResult: Sendable {
         public let token: GSAccessToken
         /// Email of the authenticated user, as reported by the
-        /// OAuth backend. Nil when the backend doesn't include it
-        /// (older deployments); callers should treat that case as
-        /// "non-staff" — i.e. force production, hide dev knobs.
+        /// OAuth backend. Nil when the backend doesn't include
+        /// it (currently the case — GS doesn't expose user
+        /// identity to the proxy yet).
         public let email: String?
+        /// Numeric GS account the user belongs to. Used as the
+        /// fallback staff signal when `email` isn't populated.
+        public let accountID: Int?
     }
 
     public enum SignInError: Error, Sendable {
@@ -71,7 +74,11 @@ public struct OAuthSignInService: Sendable {
             }
         }
 
-        return SignInResult(token: token, email: response.email)
+        return SignInResult(
+            token: token,
+            email: response.email,
+            accountID: response.account_id
+        )
     }
 
     private static func parseSessionId(from url: URL) throws -> String {

@@ -136,51 +136,68 @@ public actor GSAuthSession {
 public final class AuthState {
     public private(set) var isSignedIn: Bool
     /// Email of the signed-in user, as reported by the OAuth
-    /// backend's `/auth/exchange` response. Drives `isGrandShootingStaff`,
-    /// which gates the staging-environment picker in Settings.
+    /// backend. May be nil — GS doesn't currently expose user
+    /// identity to the proxy. When present and ending in
+    /// `@grand-shooting.com`, it marks the user as internal staff.
     public private(set) var userEmail: String?
+    /// Numeric account ID the signed-in user belongs to. Used as
+    /// the practical staff signal until GS gives us emails:
+    /// `accountID == 16` is the Grand-Shooting internal account.
+    public private(set) var accountID: Int?
 
     private static let signedInKey = "auth.signed-in"
     private static let emailKey = "auth.user-email"
+    private static let accountIDKey = "auth.account-id"
     private static let staffDomain = "grand-shooting.com"
+    private static let staffAccountID = 16
 
     public init() {
         self.isSignedIn = UserDefaults.standard.bool(forKey: Self.signedInKey)
         self.userEmail = UserDefaults.standard.string(forKey: Self.emailKey)
+        let storedAccount = UserDefaults.standard.integer(forKey: Self.accountIDKey)
+        self.accountID = storedAccount == 0 ? nil : storedAccount
     }
 
-    public func signIn(email: String?) {
+    public func signIn(email: String?, accountID: Int?) {
         isSignedIn = true
         userEmail = email
+        self.accountID = accountID
         UserDefaults.standard.set(true, forKey: Self.signedInKey)
         if let email, !email.isEmpty {
             UserDefaults.standard.set(email, forKey: Self.emailKey)
         } else {
             UserDefaults.standard.removeObject(forKey: Self.emailKey)
         }
+        if let accountID, accountID > 0 {
+            UserDefaults.standard.set(accountID, forKey: Self.accountIDKey)
+        } else {
+            UserDefaults.standard.removeObject(forKey: Self.accountIDKey)
+        }
     }
 
     public func signOut() async {
         isSignedIn = false
         userEmail = nil
+        accountID = nil
         UserDefaults.standard.set(false, forKey: Self.signedInKey)
         UserDefaults.standard.removeObject(forKey: Self.emailKey)
+        UserDefaults.standard.removeObject(forKey: Self.accountIDKey)
         await GSAuthSession.shared.clearOAuthSession()
     }
 
-    /// True when the signed-in user's email belongs to the
-    /// `@grand-shooting.com` domain — i.e. they're internal staff
-    /// and can see / change dev-only knobs (notably the
-    /// staging↔production backend switch). Outside callers should
-    /// hide those controls when this is false and force the
-    /// production environment.
+    /// True when the signed-in user belongs to Grand-Shooting
+    /// — either by email domain (`@grand-shooting.com`) or by
+    /// account id (`16`, the internal GS account). Either signal
+    /// is sufficient; GS may not return the email but it does
+    /// return the account id, so in practice the account match
+    /// is what carries the gate today.
     public var isGrandShootingStaff: Bool {
-        guard let domain = userEmail?
+        if accountID == Self.staffAccountID { return true }
+        let domain = userEmail?
             .split(separator: "@", maxSplits: 1, omittingEmptySubsequences: true)
             .last
             .map(String.init)?
             .lowercased()
-        else { return false }
         return domain == Self.staffDomain
     }
 }

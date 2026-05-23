@@ -15,12 +15,18 @@ public struct OAuthBackendService: Sendable {
         /// When present, the client should switch `GSEnvironment.apiBaseURL` to
         /// this value so subsequent calls land on the right shard.
         public let api_base_url: String?
-        /// Email of the authenticated user, as reported by the GS portal.
-        /// Surfaced so the app can identify Grand-Shooting staff (their
-        /// emails end in `@grand-shooting.com`) and gate dev-only UI like
-        /// the staging-environment picker. Optional — older backend
-        /// builds may not return it yet.
+        /// Email of the authenticated user, when the GS portal
+        /// returns it. Currently GS doesn't expose user identity
+        /// to the OAuth proxy — left optional so the iOS side
+        /// keeps decoding cleanly and can light up automatically
+        /// the day GS starts shipping the field.
         public let email: String?
+        /// Numeric GS account the user belongs to. The backend
+        /// learns this at OAuth time even though personal info
+        /// isn't available, so it's our practical staff signal:
+        /// `account_id == 16` is the Grand-Shooting internal
+        /// account and lights up the staff-only UI.
+        public let account_id: Int?
     }
 
     public enum OAuthError: Error, Sendable {

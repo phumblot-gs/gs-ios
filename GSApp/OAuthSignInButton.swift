@@ -62,10 +62,11 @@ struct OAuthSignInButton: View {
             )
             let service = OAuthSignInService(environment: env)
             let result = try await service.completeSignIn(callbackURL: callbackURL)
-            authState.signIn(email: result.email)
+            authState.signIn(email: result.email, accountID: result.accountID)
             // Force the production backend for everyone outside
-            // Grand Shooting. Staff (@grand-shooting.com) keeps
-            // whatever they had picked in Settings.
+            // Grand Shooting. Staff (email @grand-shooting.com OR
+            // account_id = 16) keeps whatever they had picked in
+            // Settings.
             if !authState.isGrandShootingStaff {
                 settings.backendEnvironment = .production
             }
