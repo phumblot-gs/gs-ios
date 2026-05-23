@@ -83,20 +83,15 @@ struct TechViewsAnnotationView: View {
             .padding(.top, 8)
     }
 
-    /// Edge-to-edge preview used by the photo / detail modes.
-    /// Mirrors the live camera layer's `videoGravity =
-    /// resizeAspectFill` so the review surface looks identical to
-    /// what the user saw when they pressed the shutter — no black
-    /// letterbox bands above and below.
+    /// Edge-to-edge zoomable preview used by the photo / detail
+    /// modes. Default is aspect-fit (image fills the width, any
+    /// extra vertical space sits as black bands above / below for
+    /// landscape shots) so the user sees the whole frame at once.
+    /// Pinch-to-zoom + pan + double-tap-to-toggle are wired up by
+    /// the underlying UIScrollView.
     private var largePreview: some View {
-        GeometryReader { geo in
-            Image(uiImage: image)
-                .resizable()
-                .scaledToFill()
-                .frame(width: geo.size.width, height: geo.size.height)
-                .clipped()
-        }
-        .background(Color.black)
+        ZoomablePhotoView(image: image)
+            .background(Color.black)
     }
 
     private var annotationsScroll: some View {
