@@ -30,6 +30,7 @@ struct TechViewsCaptureView: View {
     @State private var observations: [OCRObservation] = []
     @State private var assignments: [UUID: TechViewCategory] = [:]
     @State private var ocrEdits: [UUID: String] = [:]
+    @State private var hiddenOCRIDs: Set<UUID> = []
     @State private var isRunningOCR: Bool = false
     @State private var isDetectingPictos: Bool = false
     @State private var candidates: [TechViewsPictoDetection.Candidate] = []
@@ -80,6 +81,7 @@ struct TechViewsCaptureView: View {
                     isDetectingPictos: isDetectingPictos,
                     assignments: $assignments,
                     ocrEdits: $ocrEdits,
+                    hiddenOCRIDs: $hiddenOCRIDs,
                     pictoAnnotations: $pictoAnnotations,
                     onRetake: { retake() },
                     onSave: { save(pending: pending) }
@@ -183,6 +185,7 @@ struct TechViewsCaptureView: View {
         observations = []
         assignments = [:]
         ocrEdits = [:]
+        hiddenOCRIDs = []
         candidates = []
         pictoAnnotations = [:]
         pending = PendingShot(image: image, jpegData: photo.imageData)
@@ -256,6 +259,7 @@ struct TechViewsCaptureView: View {
         observations = []
         assignments = [:]
         ocrEdits = [:]
+        hiddenOCRIDs = []
         candidates = []
         pictoAnnotations = [:]
         isRunningOCR = false
@@ -281,6 +285,7 @@ struct TechViewsCaptureView: View {
         // OCR text honours any inline edits the user made.
         var fields: [String: [String]] = [:]
         for observation in observations {
+            if hiddenOCRIDs.contains(observation.id) { continue }
             guard let category = assignments[observation.id] else { continue }
             let raw = ocrEdits[observation.id] ?? observation.text
             let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -306,6 +311,7 @@ struct TechViewsCaptureView: View {
         observations = []
         assignments = [:]
         ocrEdits = [:]
+        hiddenOCRIDs = []
         candidates = []
         pictoAnnotations = [:]
         analysisTask?.cancel()

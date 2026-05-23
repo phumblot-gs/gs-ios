@@ -21,6 +21,7 @@ struct PictoLabelPicker: View {
     @State private var showAddForm: Bool = false
     @State private var newLabel: String = ""
     @State private var newCategory: TechViewCategory = .composition
+    @FocusState private var keyboardActive: Bool
 
     var body: some View {
         NavigationStack {
@@ -43,6 +44,20 @@ struct PictoLabelPicker: View {
                     } label: {
                         Label(showAddForm ? "Hide" : "New", systemImage: showAddForm ? "minus.circle" : "plus.circle")
                             .labelStyle(.titleAndIcon)
+                    }
+                }
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button {
+                        keyboardActive = false
+                        UIApplication.shared.sendAction(
+                            #selector(UIResponder.resignFirstResponder),
+                            to: nil, from: nil, for: nil
+                        )
+                    } label: {
+                        Label("Hide keyboard", systemImage: "keyboard.chevron.compact.down")
+                            .labelStyle(.titleAndIcon)
+                            .font(.body.weight(.medium))
                     }
                 }
             }
@@ -158,6 +173,7 @@ struct PictoLabelPicker: View {
                 .textInputAutocapitalization(.sentences)
                 .autocorrectionDisabled()
                 .submitLabel(.done)
+                .focused($keyboardActive)
                 .onSubmit(commitNew)
             HStack {
                 Text("Category")

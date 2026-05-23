@@ -2,14 +2,14 @@ import SwiftUI
 import UIKit
 
 /// Bottom-sheet style annotation surface shown after a photo is
-/// taken. The OCR section lists each text observation in an inline
-/// editable field so the user can correct what Vision returned
-/// before assigning a category. The Pictograms section shows each
-/// auto-detected icon: tapping the label area opens
-/// `PictoLabelPicker` to pick or teach a label; once labelled, the
-/// row reveals a category picker and a clearly tappable delete
-/// button. Unlabelled rows stay compact and are silently dropped
-/// on save.
+/// taken. Each OCR observation gets an inline, full-width editable
+/// TextField (corrections are kept until save) plus a category
+/// picker and a Delete button that removes the row outright. Picto
+/// candidates follow the same two-state UX: tap the label area to
+/// open `PictoLabelPicker`, then the labelled row exposes a
+/// category picker and Delete button. A keyboard accessory bar
+/// adds a "Done" button so the user can dismiss the keyboard if a
+/// field was tapped by accident.
 struct TechViewsAnnotationView: View {
     let image: UIImage
     let observations: [OCRObservation]
@@ -18,14 +18,20 @@ struct TechViewsAnnotationView: View {
     let isDetectingPictos: Bool
     @Binding var assignments: [UUID: TechViewCategory]
     @Binding var ocrEdits: [UUID: String]
+    @Binding var hiddenOCRIDs: Set<UUID>
     @Binding var pictoAnnotations: [UUID: PictoAnnotation]
     let onRetake: () -> Void
     let onSave: () -> Void
 
     @State private var pickerTarget: PickerTarget?
+    @FocusState private var focusedOCR: UUID?
 
     private struct PickerTarget: Identifiable {
         let id: UUID
+    }
+
+    private var visibleObservations: [OCRObservation] {
+        observations.filter { !hiddenOCRIDs.contains($0.id) }
     }
 
     var body: some View {
@@ -43,6 +49,18 @@ struct TechViewsAnnotationView: View {
                 onDismiss: { pickerTarget = nil }
             )
             .presentationDetents([.medium, .large])
+        }
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button {
+                    focusedOCR = nil
+                } label: {
+                    Label("Hide keyboard", systemImage: "keyboard.chevron.compact.down")
+                        .labelStyle(.titleAndIcon)
+                        .font(.body.weight(.medium))
+                }
+            }
         }
     }
 
@@ -76,11 +94,13 @@ struct TechViewsAnnotationView: View {
             loadingMessage: "Reading…"
         )
 
-        if observations.isEmpty && !isRunningOCR {
-            emptyState("No text detected on this shot.")
+        if visibleObservations.isEmpty && !isRunningOCR {
+            emptyState(observations.isEmpty
+                       ? "No text detected on this shot."
+                       : "All detected text was removed.")
         } else {
             LazyVStack(spacing: 8) {
-                ForEach(observations) { obs in
+                ForEach(visibleObservations) { obs in
                     observationRow(obs)
                 }
             }
@@ -102,25 +122,38 @@ struct TechViewsAnnotationView: View {
                 }
             }
         )
-        return HStack(alignment: .top, spacing: 10) {
-            VStack(alignment: .leading, spacing: 4) {
-                TextField("Text", text: textBinding, axis: .vertical)
-                    .font(.subheadline)
-                    .foregroundStyle(.white)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .lineLimit(1...4)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 6)
-                    .background(.black.opacity(0.35), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+        return VStack(alignment: .leading, spacing: 10) {
+            TextField("Text", text: textBinding, axis: .vertical)
+                .focused($focusedOCR, equals: obs.id)
+                .font(.subheadline)
+                .foregroundStyle(.white)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .lineLimit(1...5)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(.black.opacity(0.35), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+            HStack(spacing: 10) {
                 Text("\(Int(obs.confidence * 100))%")
                     .font(.caption2.monospacedDigit())
                     .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+                categoryMenu(selection: categoryBinding)
+                deleteButton {
+                    deleteObservation(obs.id)
+                }
             }
-            categoryMenu(selection: categoryBinding)
         }
-        .padding(10)
+        .padding(12)
         .background(Color.black.opacity(0.25), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    private func deleteObservation(_ id: UUID) {
+        if focusedOCR == id { focusedOCR = nil }
+        hiddenOCRIDs.insert(id)
+        assignments.removeValue(forKey: id)
+        ocrEdits.removeValue(forKey: id)
     }
 
     // MARK: - Picto section
@@ -165,7 +198,7 @@ struct TechViewsAnnotationView: View {
                 .contentShape(Rectangle())
             }
             if hasLabel {
-                labelledControls(candidate: candidate, annotation: annotation)
+                labelledControls(candidate: candidate)
             }
         }
         .padding(12)
@@ -215,7 +248,7 @@ struct TechViewsAnnotationView: View {
         }
     }
 
-    private func labelledControls(candidate: TechViewsPictoDetection.Candidate, annotation: PictoAnnotation?) -> some View {
+    private func labelledControls(candidate: TechViewsPictoDetection.Candidate) -> some View {
         let categoryBinding = Binding<TechViewCategory?>(
             get: { pictoAnnotations[candidate.id]?.category },
             set: { newValue in
@@ -227,17 +260,9 @@ struct TechViewsAnnotationView: View {
         return HStack(spacing: 10) {
             categoryMenu(selection: categoryBinding)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            Button(role: .destructive) {
+            deleteButton {
                 pictoAnnotations.removeValue(forKey: candidate.id)
-            } label: {
-                Label("Delete", systemImage: "trash")
-                    .labelStyle(.titleAndIcon)
-                    .font(.subheadline)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
             }
-            .buttonStyle(.bordered)
-            .tint(.red)
         }
     }
 
@@ -280,8 +305,6 @@ struct TechViewsAnnotationView: View {
 
     private func categoryMenu(selection: Binding<TechViewCategory?>) -> some View {
         Menu {
-            Button("Ignore", role: .destructive) { selection.wrappedValue = nil }
-            Divider()
             ForEach(TechViewCategory.allCases) { category in
                 Button {
                     selection.wrappedValue = category
@@ -299,7 +322,7 @@ struct TechViewsAnnotationView: View {
                     .background(Color.accentColor.opacity(0.22), in: Capsule())
                     .foregroundStyle(.white)
             } else {
-                Label("Ignore", systemImage: "circle.dashed")
+                Label("Category", systemImage: "tag")
                     .labelStyle(.titleAndIcon)
                     .font(.subheadline)
                     .padding(.horizontal, 12)
@@ -308,6 +331,18 @@ struct TechViewsAnnotationView: View {
                     .foregroundStyle(.secondary)
             }
         }
+    }
+
+    private func deleteButton(_ action: @escaping () -> Void) -> some View {
+        Button(role: .destructive, action: action) {
+            Label("Delete", systemImage: "trash")
+                .labelStyle(.titleAndIcon)
+                .font(.subheadline)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+        }
+        .buttonStyle(.bordered)
+        .tint(.red)
     }
 
     private var footer: some View {
