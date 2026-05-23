@@ -1,4 +1,4 @@
-import AVFoundation
+@preconcurrency import AVFoundation
 import CoreImage
 import CoreImage.CIFilterBuiltins
 import GSCore
@@ -496,10 +496,6 @@ public final class CameraSessionController: UIViewController {
 
     fileprivate func capturePhoto() {
         Task { @MainActor in self.shutter?.update(isCapturing: true) }
-        let settings = AVCapturePhotoSettings(format: [
-            AVVideoCodecKey: AVVideoCodecType.jpeg
-        ])
-        settings.photoQualityPrioritization = .quality
         let modeForCapture = configuration.mode
         let profileForCapture = configuration.colorProfile
         let delegate = CaptureDelegate { [weak self] result in
@@ -523,6 +519,13 @@ public final class CameraSessionController: UIViewController {
         }
         captureDelegate = delegate
         sessionQueue.async { [weak self] in
+            // Build the settings inside the queue so we don't cross
+            // an actor boundary with a non-Sendable
+            // `AVCapturePhotoSettings`.
+            let settings = AVCapturePhotoSettings(format: [
+                AVVideoCodecKey: AVVideoCodecType.jpeg
+            ])
+            settings.photoQualityPrioritization = .quality
             self?.photoOutput.capturePhoto(with: settings, delegate: delegate)
         }
     }
