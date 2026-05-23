@@ -24,6 +24,8 @@ struct LoginView: View {
     @Bindable var settings: DevSettings
 
     @State private var toggleTriggerCount = 0
+    @State private var pressStartTriggerCount = 0
+    @State private var isPressingLogo = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -33,10 +35,19 @@ struct LoginView: View {
                 Image(systemName: "camera.aperture")
                     .font(.system(size: 64, weight: .light))
                     .foregroundStyle(.tint)
+                    .frame(width: 140, height: 140)
                     .contentShape(Rectangle())
-                    .onLongPressGesture(minimumDuration: 5.0) {
-                        toggleTestMode()
-                    }
+                    .scaleEffect(isPressingLogo ? 0.88 : 1.0)
+                    .animation(.easeInOut(duration: 0.25), value: isPressingLogo)
+                    .onLongPressGesture(
+                        minimumDuration: 5.0,
+                        maximumDistance: 80,
+                        perform: { toggleTestMode() },
+                        onPressingChanged: { pressing in
+                            isPressingLogo = pressing
+                            if pressing { pressStartTriggerCount += 1 }
+                        }
+                    )
                     .accessibilityHint("Long-press 5 seconds to toggle staging mode")
                 Text("GS Mobile")
                     .font(.largeTitle.bold())
@@ -66,6 +77,10 @@ struct LoginView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(.systemBackground))
         .ignoresSafeArea(.keyboard, edges: .bottom)
+        // Light tap when the gesture starts being recognised
+        // (lets you know "ok, holding here works"), then a
+        // success thump when the 5 s threshold is crossed.
+        .sensoryFeedback(.selection, trigger: pressStartTriggerCount)
         .sensoryFeedback(.success, trigger: toggleTriggerCount)
     }
 
