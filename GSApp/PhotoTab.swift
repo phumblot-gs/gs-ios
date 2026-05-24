@@ -1,28 +1,23 @@
 import SwiftUI
 import GSAPIClient
 
+/// Standalone Photo tab. The tech-views capture flow now lives
+/// on the reference detail screen (reachable via Scan or Search),
+/// so this tab is intentionally a placeholder — kept around so a
+/// future standalone photo feature has a home, but otherwise just
+/// shows a "Coming soon" card.
 struct PhotoTab: View {
     @Bindable var settings: DevSettings
 
     var body: some View {
         NavigationStack {
-            Group {
-                if settings.techViewsShootingMethodID == nil {
-                    notConfiguredView
-                } else {
-                    TechViewsFlow(settings: settings)
-                }
+            ContentUnavailableView {
+                Label("Bientôt disponible", systemImage: "camera")
+            } description: {
+                Text("La prise de vues techniques se fait désormais depuis la fiche d'une référence (onglet Scanner).")
             }
             .navigationTitle("Photo")
             .navigationBarTitleDisplayMode(.inline)
-        }
-    }
-
-    private var notConfiguredView: some View {
-        ContentUnavailableView {
-            Label("Shooting method not set", systemImage: "camera.aperture")
-        } description: {
-            Text("Pick a shooting method in Settings → Technical views to enable technical-view uploads.")
         }
     }
 }
