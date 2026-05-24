@@ -205,7 +205,7 @@ struct MeasureSummaryView: View {
     @MainActor
     private func save(toReference reference: Reference) async {
         guard let referenceID = reference.id else {
-            saveError = "Reference is missing a reference_id."
+            saveError = String(localized: "Reference is missing a reference_id.")
             return
         }
         saving = true

@@ -77,13 +77,13 @@ struct OAuthSignInButton: View {
             // User tapped Cancel in Safari — silent, no error display.
             return
         } catch OAuthSignInService.SignInError.missingSessionId {
-            errorMessage = "OAuth callback didn't include a session id."
+            errorMessage = String(localized: "OAuth callback didn't include a session id.")
         } catch let OAuthSignInService.SignInError.backend(.http(status, body)) {
-            errorMessage = "Backend returned \(status). \(body ?? "")"
+            errorMessage = String(localized: "Backend returned \(status). \(body ?? "")")
         } catch OAuthSignInService.SignInError.backend(.transport) {
-            errorMessage = "Couldn't reach the mobile backend. Check connectivity."
+            errorMessage = String(localized: "Couldn't reach the mobile backend. Check connectivity.")
         } catch {
-            errorMessage = "Sign-in failed: \(error.localizedDescription)"
+            errorMessage = String(localized: "Sign-in failed: \(error.localizedDescription)")
         }
     }
 }

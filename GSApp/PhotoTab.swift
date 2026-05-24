@@ -12,9 +12,9 @@ struct PhotoTab: View {
     var body: some View {
         NavigationStack {
             ContentUnavailableView {
-                Label("Bientôt disponible", systemImage: "camera")
+                Label("Coming soon", systemImage: "camera")
             } description: {
-                Text("La prise de vues techniques se fait désormais depuis la fiche d'une référence (onglet Scanner).")
+                Text("Tech-view captures now live on the reference detail screen (Scanner tab).")
             }
             .navigationTitle("Photo")
             .navigationBarTitleDisplayMode(.inline)

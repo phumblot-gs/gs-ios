@@ -29,6 +29,10 @@ settings:
     CLANG_ENABLE_MODULES: YES
     DEVELOPMENT_TEAM: "545V88LR3Z"
     CODE_SIGN_STYLE: Automatic
+    # Auto-extract LocalizedStringKey literals during build so the
+    # `Localizable.xcstrings` catalog stays in sync with the code.
+    SWIFT_EMIT_LOC_STRINGS: YES
+    LOCALIZATION_PREFERS_STRING_CATALOGS: YES
 
 packages:
   GSCore:

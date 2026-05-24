@@ -40,11 +40,11 @@ struct SettingsPhotoView: View {
     private var featuresSection: some View {
         Section {
             Toggle("OCR", isOn: $settings.isOCREnabled)
-            Toggle("Mesures", isOn: $settings.isMeasureEnabled)
+            Toggle("Measures", isOn: $settings.isMeasureEnabled)
         } header: {
-            Text("Fonctionnalités")
+            Text("Features")
         } footer: {
-            Text("Désactive l'OCR sur les devices où Vision est lent ou imprécis. Désactive Mesures sur les devices sans LiDAR pour basculer en capture photo simple sous le pattern Measurement.")
+            Text("Turn OCR off on devices where Vision is slow or unreliable. Turn Measures off on devices without LiDAR to fall back to plain photo capture under the Measurement filename pattern.")
         }
     }
 

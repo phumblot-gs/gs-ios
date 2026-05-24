@@ -833,13 +833,13 @@ struct ReferenceDetailView: View {
         .matchedTransitionSource(id: "ghost-\(filename)", in: pictureZoomNamespace)
     }
 
-    /// Small "Envoi…" pill drawn on top of a ghost thumbnail so
-    /// the user understands the picture is uploading and will be
-    /// replaced by the GS-served copy shortly.
+    /// Small "Uploading…" pill drawn on top of a ghost thumbnail
+    /// so the user understands the picture is uploading and will
+    /// be replaced by the GS-served copy shortly.
     private var uploadingBadge: some View {
         HStack(spacing: 4) {
             ProgressView().controlSize(.mini).tint(.white)
-            Text("Envoi…")
+            Text("Uploading…")
                 .font(.caption2.weight(.medium))
                 .foregroundStyle(.white)
         }
