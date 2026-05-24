@@ -77,7 +77,7 @@ struct RootView: View {
                 .tabItem { Label("Photo", systemImage: "camera") }
             MeasureTab(settings: settings)
                 .tabItem { Label("Measures", systemImage: "ruler") }
-            HistoryTab()
+            HistoryTab(settings: settings)
                 .tabItem { Label("History", systemImage: "clock") }
             SettingsTab(authState: authState, settings: settings, catalog: catalog)
                 .tabItem { Label("Settings", systemImage: "gearshape") }

@@ -159,6 +159,13 @@ struct ReferenceDetailView: View {
         }
         .task {
             if references.isEmpty { references = sourceReferences }
+            // Record the visit as soon as a reference is bound to
+            // the screen — same hook for both scan and search
+            // entry points. Re-visiting bumps the existing entry
+            // back to the top of the history.
+            if let ref = currentReferenceStock?.reference {
+                ReferenceHistoryStore.shared.record(ref)
+            }
             await loadPictures(triggeredByUser: false)
             await loadTechViews(triggeredByUser: false)
             // If the upstream /stock GET failed during the scan,
