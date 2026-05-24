@@ -180,6 +180,24 @@ public final class DevSettings {
         didSet { UserDefaults.standard.set(techViewsCapturePersistence.rawValue, forKey: Self.capturePersistenceKey) }
     }
 
+    /// Whether the OCR capture mode runs the Vision text + picto
+    /// pipelines after a shot. When off, the OCR mode still
+    /// uploads the photo (under the OCR filename pattern) but
+    /// skips the annotation step entirely — useful on devices
+    /// where Vision is slow or unreliable.
+    public var isOCREnabled: Bool {
+        didSet { UserDefaults.standard.set(isOCREnabled, forKey: Self.ocrEnabledKey) }
+    }
+
+    /// Whether the LiDAR-based Measure flow is available. When
+    /// off, the Measures section routes to a plain photo capture
+    /// (using the Measurement filename pattern) instead of the
+    /// AR placement UI. Defaults to true only on devices that
+    /// actually have a LiDAR sensor.
+    public var isMeasureEnabled: Bool {
+        didSet { UserDefaults.standard.set(isMeasureEnabled, forKey: Self.measureEnabledKey) }
+    }
+
     /// Raw value of the last `CaptureMode` the user actively used.
     /// Honoured only when `techViewsCapturePersistence == .rememberLast`.
     public var techViewsLastCaptureModeRaw: String? {
@@ -372,6 +390,22 @@ public final class DevSettings {
         let persistenceRaw = UserDefaults.standard.string(forKey: Self.capturePersistenceKey)
             ?? CapturePersistence.alwaysPresentation.rawValue
         self.techViewsCapturePersistence = CapturePersistence(rawValue: persistenceRaw) ?? .alwaysPresentation
+
+        // Feature toggles. Use UserDefaults `object(forKey:)` to
+        // distinguish "never set" (use device-aware default) from
+        // an explicit user choice. OCR defaults on (iOS 26 Vision
+        // OCR is solid). Measure defaults to whether the device
+        // actually has a LiDAR sensor.
+        if let ocr = UserDefaults.standard.object(forKey: Self.ocrEnabledKey) as? Bool {
+            self.isOCREnabled = ocr
+        } else {
+            self.isOCREnabled = true
+        }
+        if let measure = UserDefaults.standard.object(forKey: Self.measureEnabledKey) as? Bool {
+            self.isMeasureEnabled = measure
+        } else {
+            self.isMeasureEnabled = GSDeviceSupport.hasLiDAR
+        }
         self.techViewsLastCaptureModeRaw = UserDefaults.standard.string(forKey: Self.lastCaptureModeKey)
         self.techViewsWhiteBalanceRaw = UserDefaults.standard.string(forKey: Self.whiteBalanceKey) ?? "auto"
         self.techViewsColorProfileRaw = UserDefaults.standard.string(forKey: Self.colorProfileKey) ?? "none"
@@ -419,6 +453,8 @@ public final class DevSettings {
     private static let techViewsShootingMethodIDKey = "dev.techViews.shootingMethodID"
     private static let techViewsShootingMethodNameKey = "dev.techViews.shootingMethodName"
     private static let capturePersistenceKey = "dev.techViews.capturePersistence"
+    private static let ocrEnabledKey = "dev.features.ocrEnabled"
+    private static let measureEnabledKey = "dev.features.measureEnabled"
     private static let lastCaptureModeKey = "dev.techViews.lastCaptureMode"
     private static let whiteBalanceKey = "dev.techViews.whiteBalance"
     private static let colorProfileKey = "dev.techViews.colorProfile"

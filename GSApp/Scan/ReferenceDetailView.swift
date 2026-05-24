@@ -189,26 +189,45 @@ struct ReferenceDetailView: View {
         }
         .fullScreenCover(isPresented: $showMeasureFlow) {
             if let reference = currentReferenceStock?.reference {
-                MeasureFlowView(
-                    settings: settings,
-                    attachedTo: reference,
-                    onDone: {
-                        showMeasureFlow = false
-                        // Same dual-refresh as the tech-views exit:
-                        // the reference picks up `extra.measures`,
-                        // the picture gallery picks up the just-
-                        // uploaded illustration so it appears in
-                        // the Measures section without a manual
-                        // pull-to-refresh.
-                        Task {
-                            await refreshReferenceAfterMeasures()
-                            await loadTechViews(triggeredByUser: true)
+                if settings.isMeasureEnabled {
+                    MeasureFlowView(
+                        settings: settings,
+                        attachedTo: reference,
+                        onDone: {
+                            showMeasureFlow = false
+                            // Same dual-refresh as the tech-views exit:
+                            // the reference picks up `extra.measures`,
+                            // the picture gallery picks up the just-
+                            // uploaded illustration so it appears in
+                            // the Measures section without a manual
+                            // pull-to-refresh.
+                            Task {
+                                await refreshReferenceAfterMeasures()
+                                await loadTechViews(triggeredByUser: true)
+                            }
+                        },
+                        onIllustrationReady: { preview in
+                            localCapturePreviews[preview.filename] = preview.jpegData
                         }
-                    },
-                    onIllustrationReady: { preview in
-                        localCapturePreviews[preview.filename] = preview.jpegData
-                    }
-                )
+                    )
+                } else {
+                    // Measure feature toggled off — present a plain
+                    // photo capture locked to the Measure mode so
+                    // the user can still document the product under
+                    // the Measurement filename pattern.
+                    TechViewsCaptureView(
+                        settings: settings,
+                        reference: reference,
+                        lockedMode: .measure,
+                        onExit: { previews in
+                            showMeasureFlow = false
+                            for preview in previews {
+                                localCapturePreviews[preview.filename] = preview.jpegData
+                            }
+                            Task { await loadTechViews(triggeredByUser: true) }
+                        }
+                    )
+                }
             }
         }
         .fullScreenCover(isPresented: $showTechViewsCapture) {
@@ -468,12 +487,6 @@ struct ReferenceDetailView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.regular)
-                .disabled(!GSDeviceSupport.hasLiDAR)
-                if !GSDeviceSupport.hasLiDAR {
-                    Text("Measurements need a LiDAR device.")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                }
             }
             .padding()
             .background(.background, in: RoundedRectangle(cornerRadius: 12))

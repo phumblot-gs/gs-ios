@@ -31,15 +31,30 @@ public enum CaptureMode: String, Sendable, CaseIterable, Identifiable {
     case presentation
     case detail
     case ocr
+    /// Photo-only fallback for the measurement flow on devices
+    /// without LiDAR (or when the user has explicitly disabled
+    /// the Measures feature). Behaves like `.detail` photo-wise
+    /// but uploads under the Measurement filename pattern so the
+    /// reference detail still surfaces the shot in the Measures
+    /// section. Excluded from the standard mode picker.
+    case measure
 
     public var id: String { rawValue }
+
+    /// The subset of modes the user can toggle between in the
+    /// standard Tech-views picker. `.measure` is opted out — it's
+    /// only ever entered via a locked-mode capture launched from
+    /// the Measures section.
+    public static var pickerCases: [CaptureMode] {
+        [.presentation, .detail, .ocr]
+    }
 
     /// True when the mode is meant for product photos — i.e. the
     /// caller should apply the user's WB and colour profile to the
     /// output JPEG. Always false for `.ocr`.
     public var honoursPresentationProcessing: Bool {
         switch self {
-        case .presentation, .detail: true
+        case .presentation, .detail, .measure: true
         case .ocr: false
         }
     }
@@ -610,7 +625,7 @@ public final class CameraSessionController: UIViewController {
             defer { device.unlockForConfiguration() }
 
             switch configuration.mode {
-            case .presentation, .detail:
+            case .presentation, .detail, .measure:
                 if device.isFocusModeSupported(.continuousAutoFocus) {
                     device.focusMode = .continuousAutoFocus
                 }

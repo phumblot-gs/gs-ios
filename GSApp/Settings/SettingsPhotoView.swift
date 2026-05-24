@@ -22,9 +22,30 @@ struct SettingsPhotoView: View {
         Form {
             captureBehaviourSection
             focalLengthsSection
+            featuresSection
             filenamePatternsSection
         }
         .navigationTitle("Photo")
+    }
+
+    // MARK: - Feature toggles
+
+    /// Lets the user turn OCR analysis or the LiDAR Measure flow
+    /// off on devices where they don't work well. When OCR is
+    /// disabled the OCR capture mode still uploads the shot — it
+    /// just skips the Vision analysis and the annotation editor.
+    /// When Measures is disabled the section's button opens a
+    /// plain photo capture (locked to the Measurement filename
+    /// pattern) instead of the AR placement flow.
+    private var featuresSection: some View {
+        Section {
+            Toggle("OCR", isOn: $settings.isOCREnabled)
+            Toggle("Mesures", isOn: $settings.isMeasureEnabled)
+        } header: {
+            Text("Fonctionnalités")
+        } footer: {
+            Text("Désactive l'OCR sur les devices où Vision est lent ou imprécis. Désactive Mesures sur les devices sans LiDAR pour basculer en capture photo simple sous le pattern Measurement.")
+        }
     }
 
     // MARK: - Filename patterns

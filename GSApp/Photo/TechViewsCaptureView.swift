@@ -22,6 +22,14 @@ import UIKit
 struct TechViewsCaptureView: View {
     @Bindable var settings: DevSettings
     let reference: Reference
+    /// When non-nil, the capture screen is locked to this mode:
+    /// the picker is hidden, mode rotation does nothing, the
+    /// initial camera configuration uses this mode's focal and
+    /// the OCR pipeline / annotation editor are bypassed (the
+    /// shot uploads straight through the matching filename
+    /// pattern). Currently used for the photo-only fallback of
+    /// the Measures section on non-LiDAR devices.
+    var lockedMode: CaptureMode? = nil
     /// Called when the capture flow is dismissed. Receives the list
     /// of successful uploads (filename + JPEG data) so the parent
     /// can paint them locally while GS finishes generating CDN
@@ -74,8 +82,13 @@ struct TechViewsCaptureView: View {
     }
 
     /// Builds the camera configuration we hand to GSCamera, picking
-    /// the starting mode based on the user's persistence preference.
+    /// the starting mode based on the user's persistence preference
+    /// (or the locked mode when the screen was opened in a single-
+    /// mode flavour).
     private var initialCameraConfiguration: CameraConfiguration {
+        if let lockedMode {
+            return configuration(for: lockedMode)
+        }
         let mode: CaptureMode
         switch settings.techViewsCapturePersistence {
         case .alwaysPresentation:
@@ -116,6 +129,9 @@ struct TechViewsCaptureView: View {
         case .presentation: return settings.techViewsPresentationFocal
         case .detail: return settings.techViewsDetailFocal
         case .ocr: return settings.techViewsOCRFocal
+        // Measure mode reuses Detail's focal — same close-product
+        // intent, just a different filename pattern.
+        case .measure: return settings.techViewsDetailFocal
         }
     }
 
@@ -125,11 +141,15 @@ struct TechViewsCaptureView: View {
         case .presentation: return settings.photoFilenamePresentationPattern
         case .detail: return settings.photoFilenameDetailPattern
         case .ocr: return settings.photoFilenameOCRPattern
+        case .measure: return settings.photoFilenameMeasurePattern
         }
     }
 
     private var allFilenamePatterns: [String] {
-        [
+        if let lockedMode {
+            return [filenamePattern(for: lockedMode)]
+        }
+        return [
             settings.photoFilenamePresentationPattern,
             settings.photoFilenameDetailPattern,
             settings.photoFilenameOCRPattern
@@ -306,7 +326,14 @@ struct TechViewsCaptureView: View {
             }
             HStack(spacing: 24) {
                 Spacer()
-                modeToggleButton
+                if lockedMode == nil {
+                    modeToggleButton
+                } else {
+                    // Keep the layout balanced: same footprint as
+                    // the mode toggle so the shutter stays optically
+                    // centred when the picker is hidden.
+                    Color.clear.frame(width: 56, height: 56)
+                }
                 Button {
                     shutter.capture()
                 } label: {
@@ -373,10 +400,17 @@ struct TechViewsCaptureView: View {
         pendingMode = shutter.mode
         pending = PendingShot(image: image, jpegData: photo.imageData)
 
-        // Vision OCR + picto detection only runs in OCR mode — the
-        // other modes are normal product shots that just need an
-        // upload after the user confirms.
-        guard pendingMode == .ocr else {
+        // Vision OCR + picto detection only runs when the user is
+        // actively in OCR mode, OCR is enabled globally, AND the
+        // screen isn't locked to a single mode (Measures-as-photo
+        // path). In every other branch the user still sees the
+        // preview + Retake/Save shell, just without the analysis
+        // sheet — `mergedFields` will be empty so `pushTechViews`
+        // is naturally skipped on save.
+        let runsAnalysis = lockedMode == nil
+            && settings.isOCREnabled
+            && pendingMode == .ocr
+        guard runsAnalysis else {
             isRunningOCR = false
             isDetectingPictos = false
             analysisTask?.cancel()

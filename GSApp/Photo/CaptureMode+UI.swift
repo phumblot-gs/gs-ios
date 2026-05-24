@@ -12,6 +12,10 @@ extension CaptureMode {
         case .presentation: .detail
         case .detail: .ocr
         case .ocr: .presentation
+        // `.measure` is locked, never reached by the rotation
+        // toggle. Falling through to `.presentation` keeps the
+        // switch exhaustive.
+        case .measure: .presentation
         }
     }
 
@@ -20,6 +24,7 @@ extension CaptureMode {
         case .presentation: "camera"
         case .detail: "camera.macro"
         case .ocr: "text.viewfinder"
+        case .measure: "ruler"
         }
     }
 
@@ -28,6 +33,7 @@ extension CaptureMode {
         case .presentation: "Photo"
         case .detail: "Detail"
         case .ocr: "OCR"
+        case .measure: "Measure"
         }
     }
 
@@ -39,6 +45,7 @@ extension CaptureMode {
         case .presentation: Color.black.opacity(0.5)
         case .detail: Color.accentColor.opacity(0.45)
         case .ocr: Color.accentColor.opacity(0.85)
+        case .measure: Color.black.opacity(0.5)
         }
     }
 }
