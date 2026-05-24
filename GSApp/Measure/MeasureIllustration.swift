@@ -107,18 +107,17 @@ enum MeasureIllustration {
             }
 
             // Segment name labels, centred on each polyline's
-            // midpoint. Drawn in the segment colour with a white
-            // halo so they stay readable against the cutout AND
-            // any segment colour underneath.
-            let labelFontSize = max(scaleRef * 0.028, 18)
-            let labelFont = UIFont.systemFont(ofSize: labelFontSize, weight: .semibold)
+            // midpoint. Drawn as white medium text on a black
+            // rounded box — matches the legend font weight and
+            // stays readable on any cutout background.
+            let labelFontSize = max(scaleRef * 0.026, 18)
+            let labelFont = UIFont.systemFont(ofSize: labelFontSize, weight: .medium)
             for item in resolved {
                 let mid = midpoint(item.points)
-                drawHaloedText(
+                drawBoxedLabel(
                     item.capture.templateName,
                     at: mid,
                     font: labelFont,
-                    color: item.color,
                     in: cgCtx
                 )
             }
@@ -225,25 +224,34 @@ enum MeasureIllustration {
         hypot(a.x - b.x, a.y - b.y)
     }
 
-    private static func drawHaloedText(
+    private static func drawBoxedLabel(
         _ text: String,
         at center: CGPoint,
         font: UIFont,
-        color: UIColor,
         in cgContext: CGContext
     ) {
-        let size = (text as NSString).size(withAttributes: [.font: font])
-        let origin = CGPoint(
-            x: center.x - size.width / 2,
-            y: center.y - size.height / 2
+        let textSize = (text as NSString).size(withAttributes: [.font: font])
+        let paddingX = font.pointSize * 0.45
+        let paddingY = font.pointSize * 0.22
+        let boxRect = CGRect(
+            x: center.x - (textSize.width / 2 + paddingX),
+            y: center.y - (textSize.height / 2 + paddingY),
+            width: textSize.width + paddingX * 2,
+            height: textSize.height + paddingY * 2
         )
-        // White halo: render the text with a fat white stroke,
-        // then the filled colour on top.
-        (text as NSString).draw(at: origin, withAttributes: [
+        let cornerRadius = font.pointSize * 0.3
+        let path = UIBezierPath(roundedRect: boxRect, cornerRadius: cornerRadius).cgPath
+        cgContext.addPath(path)
+        cgContext.setFillColor(UIColor.black.withAlphaComponent(0.78).cgColor)
+        cgContext.fillPath()
+
+        let textOrigin = CGPoint(
+            x: center.x - textSize.width / 2,
+            y: center.y - textSize.height / 2
+        )
+        (text as NSString).draw(at: textOrigin, withAttributes: [
             .font: font,
-            .foregroundColor: color,
-            .strokeColor: UIColor.white,
-            .strokeWidth: -font.pointSize * 0.4
+            .foregroundColor: UIColor.white
         ])
     }
 

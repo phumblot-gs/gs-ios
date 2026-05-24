@@ -73,20 +73,7 @@ struct TechViewsFilenameCounter {
         ean: String?,
         ref: String
     ) -> Int {
-        let eanValue = (ean?.isEmpty == false) ? ean! : ref
-        // Split on {INC}, substitute EAN/REF in each segment, regex-escape
-        // each segment, glue with a numeric capture group.
-        let parts = pattern.components(separatedBy: "{INC}")
-        guard parts.count >= 1 else { return 0 }
-        let escapedParts = parts.map { part -> String in
-            let substituted = part
-                .replacingOccurrences(of: "{EAN}", with: eanValue)
-                .replacingOccurrences(of: "{REF}", with: ref)
-            return NSRegularExpression.escapedPattern(for: substituted)
-        }
-        let regexBody = escapedParts.joined(separator: "(\\d+)")
-        guard let regex = try? NSRegularExpression(pattern: "^" + regexBody + "$") else { return 0 }
-
+        guard let regex = Self.regex(forPattern: pattern, ean: ean, ref: ref) else { return 0 }
         var maxInc = 0
         for filename in filenames {
             let nsRange = NSRange(filename.startIndex..., in: filename)
@@ -98,5 +85,41 @@ struct TechViewsFilenameCounter {
             maxInc = Swift.max(maxInc, inc)
         }
         return maxInc
+    }
+
+    /// Returns true if `filename` could have been produced by
+    /// `pattern` for the given `ean` / `ref` (any `{INC}`). Useful
+    /// for filtering a Picture list to find shots matching a
+    /// specific template — e.g. "give me the measurement
+    /// illustration uploaded for this reference".
+    static func filename(
+        _ filename: String,
+        matches pattern: String,
+        ean: String?,
+        ref: String
+    ) -> Bool {
+        guard let regex = regex(forPattern: pattern, ean: ean, ref: ref) else { return false }
+        let nsRange = NSRange(filename.startIndex..., in: filename)
+        return regex.firstMatch(in: filename, range: nsRange) != nil
+    }
+
+    private static func regex(
+        forPattern pattern: String,
+        ean: String?,
+        ref: String
+    ) -> NSRegularExpression? {
+        let eanValue = (ean?.isEmpty == false) ? ean! : ref
+        // Split on {INC}, substitute EAN/REF in each segment,
+        // regex-escape, glue with a numeric capture group.
+        let parts = pattern.components(separatedBy: "{INC}")
+        guard parts.count >= 1 else { return nil }
+        let escapedParts = parts.map { part -> String in
+            let substituted = part
+                .replacingOccurrences(of: "{EAN}", with: eanValue)
+                .replacingOccurrences(of: "{REF}", with: ref)
+            return NSRegularExpression.escapedPattern(for: substituted)
+        }
+        let regexBody = escapedParts.joined(separator: "(\\d+)")
+        return try? NSRegularExpression(pattern: "^" + regexBody + "$")
     }
 }

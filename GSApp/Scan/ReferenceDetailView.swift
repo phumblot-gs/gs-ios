@@ -375,6 +375,9 @@ struct ReferenceDetailView: View {
                         }
                     }
                 }
+                if let illustration = latestMeasurementPicture {
+                    measurementIllustrationThumb(illustration)
+                }
                 Button {
                     showMeasureFlow = true
                 } label: {
@@ -400,6 +403,55 @@ struct ReferenceDetailView: View {
 
     private func formatted(_ value: ReferenceExtra.MeasureValue) -> String {
         String(format: "%.1f %@", value.value, value.unit)
+    }
+
+    /// The most recent picture in the loaded tech-views list
+    /// whose filename matches the measurement filename pattern.
+    /// `techViewPictures` is already sorted newest-first, so
+    /// `.first(where:)` returns the latest.
+    private var latestMeasurementPicture: Picture? {
+        guard let reference = currentReferenceStock?.reference else { return nil }
+        let pattern = settings.photoFilenameMeasurePattern
+        return techViewPictures.first { picture in
+            guard let path = picture.filePath ?? picture.path else { return false }
+            let filename = (path as NSString).lastPathComponent
+            return TechViewsFilenameCounter.filename(
+                filename,
+                matches: pattern,
+                ean: reference.ean,
+                ref: reference.ref
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func measurementIllustrationThumb(_ picture: Picture) -> some View {
+        let placeholder = RoundedRectangle(cornerRadius: 8, style: .continuous)
+            .fill(Color.secondary.opacity(0.12))
+        let url = picture.thumbnailURL
+            ?? picture.path.flatMap { URL(string: $0) }
+        if let url {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFit()
+                case .failure:
+                    placeholder.overlay(
+                        Image(systemName: "photo")
+                            .foregroundStyle(.secondary)
+                    )
+                case .empty:
+                    placeholder.overlay(ProgressView().controlSize(.small))
+                @unknown default:
+                    placeholder
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .frame(maxHeight: 320)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
     }
 
     // MARK: - Metadata (extra.tech_views structured text)
