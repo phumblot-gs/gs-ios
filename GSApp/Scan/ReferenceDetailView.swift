@@ -40,6 +40,14 @@ struct ReferenceDetailView: View {
     @State private var techViewPictures: [Picture] = []
     @State private var techViewsLoadStatus: LoadStatus = .loaded
     @State private var techViewsRetryTask: Task<Void, Never>?
+
+    /// The picture currently presented in full-screen zoom. Set by
+    /// tapping any thumbnail on the screen; the `fullScreenCover`
+    /// binding clears it back to nil on dismiss.
+    @State private var zoomedPicture: Picture?
+    /// Namespace shared by every thumbnail and the zoom destination
+    /// so SwiftUI can run a matched-geometry zoom transition.
+    @Namespace private var pictureZoomNamespace
     /// Inline error surfaced by a user-triggered action that
     /// failed (currently only the status change). Different
     /// channel from the on-load status banners so we don't
@@ -180,6 +188,10 @@ struct ReferenceDetailView: View {
         }
         .sheet(isPresented: $showMetadataEditor) {
             metadataEditorSheet
+        }
+        .fullScreenCover(item: $zoomedPicture) { picture in
+            PictureZoomView(picture: picture) { zoomedPicture = nil }
+                .navigationTransition(.zoom(sourceID: picture.id, in: pictureZoomNamespace))
         }
     }
 
@@ -431,26 +443,32 @@ struct ReferenceDetailView: View {
         let url = picture.thumbnailURL
             ?? picture.path.flatMap { URL(string: $0) }
         if let url {
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case .success(let image):
-                    image
-                        .resizable()
-                        .scaledToFit()
-                case .failure:
-                    placeholder.overlay(
-                        Image(systemName: "photo")
-                            .foregroundStyle(.secondary)
-                    )
-                case .empty:
-                    placeholder.overlay(ProgressView().controlSize(.small))
-                @unknown default:
-                    placeholder
+            Button {
+                zoomedPicture = picture
+            } label: {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFit()
+                    case .failure:
+                        placeholder.overlay(
+                            Image(systemName: "photo")
+                                .foregroundStyle(.secondary)
+                        )
+                    case .empty:
+                        placeholder.overlay(ProgressView().controlSize(.small))
+                    @unknown default:
+                        placeholder
+                    }
                 }
+                .frame(maxWidth: .infinity)
+                .frame(maxHeight: 320)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
-            .frame(maxWidth: .infinity)
-            .frame(maxHeight: 320)
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .buttonStyle(.plain)
+            .matchedTransitionSource(id: picture.id, in: pictureZoomNamespace)
         }
     }
 
@@ -646,25 +664,31 @@ struct ReferenceDetailView: View {
         let placeholder = RoundedRectangle(cornerRadius: 8, style: .continuous)
             .fill(Color.secondary.opacity(0.12))
         if let url = picture.thumbnailURL {
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case .success(let image):
-                    image
-                        .resizable()
-                        .scaledToFill()
-                case .failure:
-                    placeholder.overlay(
-                        Image(systemName: "photo")
-                            .foregroundStyle(.secondary)
-                    )
-                case .empty:
-                    placeholder.overlay(ProgressView().controlSize(.small))
-                @unknown default:
-                    placeholder
+            Button {
+                zoomedPicture = picture
+            } label: {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    case .failure:
+                        placeholder.overlay(
+                            Image(systemName: "photo")
+                                .foregroundStyle(.secondary)
+                        )
+                    case .empty:
+                        placeholder.overlay(ProgressView().controlSize(.small))
+                    @unknown default:
+                        placeholder
+                    }
                 }
+                .frame(width: 120, height: 120)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
-            .frame(width: 120, height: 120)
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .buttonStyle(.plain)
+            .matchedTransitionSource(id: picture.id, in: pictureZoomNamespace)
         } else {
             placeholder
                 .frame(width: 120, height: 120)
