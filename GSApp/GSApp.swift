@@ -89,6 +89,12 @@ struct RootView: View {
             )
             .padding(.top, 4)
         }
+        // Apply the user's language preference to the whole UI.
+        // `.system` falls through to the OS default. Setting
+        // `\.locale` on the root view re-renders any `Text(...)`
+        // and `String(localized:)` against the chosen language's
+        // xcstrings entries.
+        .environment(\.locale, currentLocale)
         // After each catalog refresh we double-check that every
         // `MeasureCategory.gsCategoryID` still resolves to a known GS
         // category. Dangling links get listed in an alert and cleared
@@ -116,6 +122,16 @@ struct RootView: View {
             },
             message: { Text(orphanReport?.message ?? "") }
         )
+    }
+
+    /// Locale derived from the user's language preference. Drives
+    /// the `\.locale` environment so the UI re-renders against the
+    /// matching xcstrings entries when the picker changes.
+    private var currentLocale: Locale {
+        if let identifier = settings.languagePreference.localeIdentifier {
+            return Locale(identifier: identifier)
+        }
+        return .autoupdatingCurrent
     }
 }
 

@@ -9,6 +9,12 @@ options:
   generateEmptyDirectories: true
   groupSortPosition: top
   defaultConfig: Debug
+  developmentLanguage: en
+  knownRegions:
+    - en
+    - fr
+    - pl
+    - Base
 
 configs:
   Debug: debug

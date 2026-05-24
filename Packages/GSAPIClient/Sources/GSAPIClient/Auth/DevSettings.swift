@@ -71,12 +71,28 @@ public final class DevSettings {
         case system
         case en
         case fr
+        case pl
 
         public var displayName: String {
             switch self {
             case .system: return String(localized: "System")
             case .en: return "English"
             case .fr: return "Français"
+            case .pl: return "Polski"
+            }
+        }
+
+        /// BCP-47 / Apple locale identifier to push to
+        /// `AppleLanguages` so SwiftUI's String(localized:) and
+        /// `Bundle.main.localizedString(...)` pick the matching
+        /// .lproj / xcstrings entry. Returns nil for `.system`
+        /// (we let UIKit fall back to the OS default).
+        public var localeIdentifier: String? {
+            switch self {
+            case .system: return nil
+            case .en: return "en"
+            case .fr: return "fr"
+            case .pl: return "pl"
             }
         }
     }
