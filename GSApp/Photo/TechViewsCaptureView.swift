@@ -324,16 +324,11 @@ struct TechViewsCaptureView: View {
                     .padding(.vertical, 8)
                     .background(.red.opacity(0.85), in: Capsule())
             }
-            HStack(spacing: 24) {
-                Spacer()
-                if lockedMode == nil {
-                    modeToggleButton
-                } else {
-                    // Keep the layout balanced: same footprint as
-                    // the mode toggle so the shutter stays optically
-                    // centred when the picker is hidden.
-                    Color.clear.frame(width: 56, height: 56)
-                }
+            ZStack {
+                // The shutter sits at the geometric centre of the
+                // screen. The mode toggle (when visible) floats to
+                // its left via .offset — so the shutter is exactly
+                // centered regardless of whether the picker is shown.
                 Button {
                     shutter.capture()
                 } label: {
@@ -344,12 +339,13 @@ struct TechViewsCaptureView: View {
                 }
                 .disabled(shutter.isCapturing || shutter.authorization != .authorized || isSeedingCounter)
                 .accessibilityLabel("Shutter")
-                Spacer()
-                    .overlay(alignment: .leading) {
-                        // Mirror the toggle's width so the shutter
-                        // stays optically centred.
-                        Color.clear.frame(width: 56, height: 56)
-                    }
+
+                if lockedMode == nil {
+                    // Offset = half-shutter + spacing + half-toggle
+                    //       = 38 + 24 + 28 = 90 pt to the left.
+                    modeToggleButton
+                        .offset(x: -90)
+                }
             }
             .padding(.bottom, 32)
         }
