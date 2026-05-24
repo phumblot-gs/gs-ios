@@ -500,13 +500,31 @@ struct ReferenceDetailView: View {
             }
             VStack(alignment: .leading, spacing: 12) {
                 let entries = metadataEntries
-                if entries.isEmpty {
+                let labelPictures = ocrPictures
+                if entries.isEmpty && labelPictures.isEmpty {
                     Label("No metadata yet", systemImage: "list.bullet.rectangle")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(entries, id: \.category) { entry in
                         metadataRow(entry.category, value: entry.value)
+                    }
+                    if !labelPictures.isEmpty {
+                        if !entries.isEmpty {
+                            Divider()
+                        }
+                        VStack(alignment: .leading, spacing: 6) {
+                            Label("Labels", systemImage: "text.viewfinder")
+                                .font(.caption.weight(.medium))
+                                .foregroundStyle(.secondary)
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                LazyHStack(spacing: 10) {
+                                    ForEach(labelPictures) { picture in
+                                        techViewThumbnail(picture)
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -537,16 +555,17 @@ struct ReferenceDetailView: View {
                 Spacer()
             }
             VStack(alignment: .leading, spacing: 12) {
+                let pictures = presentationAndDetailPictures
                 if techViewsLoadStatus != .loaded {
                     techViewsLookupBanner
-                } else if techViewPictures.isEmpty {
+                } else if pictures.isEmpty {
                     Label("No tech-view pictures yet", systemImage: "photo.stack")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 } else {
                     ScrollView(.horizontal, showsIndicators: false) {
                         LazyHStack(spacing: 10) {
-                            ForEach(techViewPictures) { picture in
+                            ForEach(pictures) { picture in
                                 techViewThumbnail(picture)
                             }
                         }
@@ -556,8 +575,8 @@ struct ReferenceDetailView: View {
                     showTechViewsCapture = true
                 } label: {
                     Label(
-                        techViewPictures.isEmpty ? "Capture tech views" : "Add more tech views",
-                        systemImage: techViewPictures.isEmpty ? "camera.viewfinder" : "plus"
+                        pictures.isEmpty ? "Capture tech views" : "Add more tech views",
+                        systemImage: pictures.isEmpty ? "camera.viewfinder" : "plus"
                     )
                     .frame(maxWidth: .infinity)
                 }
@@ -572,6 +591,53 @@ struct ReferenceDetailView: View {
             }
             .padding()
             .background(.background, in: RoundedRectangle(cornerRadius: 12))
+        }
+    }
+
+    /// Pictures uploaded for the current reference that DON'T
+    /// belong to the Measurement or OCR filename patterns —
+    /// effectively the Presentation + Detail captures plus any
+    /// freeform upload that doesn't match either of the two
+    /// dedicated patterns.
+    private var presentationAndDetailPictures: [Picture] {
+        guard let reference = currentReferenceStock?.reference else { return [] }
+        let measurePattern = settings.photoFilenameMeasurePattern
+        let ocrPattern = settings.photoFilenameOCRPattern
+        return techViewPictures.filter { picture in
+            guard let path = picture.filePath ?? picture.path else { return true }
+            let filename = (path as NSString).lastPathComponent
+            let isMeasure = TechViewsFilenameCounter.filename(
+                filename,
+                matches: measurePattern,
+                ean: reference.ean,
+                ref: reference.ref
+            )
+            let isOCR = TechViewsFilenameCounter.filename(
+                filename,
+                matches: ocrPattern,
+                ean: reference.ean,
+                ref: reference.ref
+            )
+            return !isMeasure && !isOCR
+        }
+    }
+
+    /// OCR / label pictures uploaded for the current reference.
+    /// Rendered in the Metadata section so the user sees the
+    /// source material the structured `extra.tech_views` text
+    /// was extracted from.
+    private var ocrPictures: [Picture] {
+        guard let reference = currentReferenceStock?.reference else { return [] }
+        let ocrPattern = settings.photoFilenameOCRPattern
+        return techViewPictures.filter { picture in
+            guard let path = picture.filePath ?? picture.path else { return false }
+            let filename = (path as NSString).lastPathComponent
+            return TechViewsFilenameCounter.filename(
+                filename,
+                matches: ocrPattern,
+                ean: reference.ean,
+                ref: reference.ref
+            )
         }
     }
 
