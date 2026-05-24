@@ -270,8 +270,9 @@ public final class DevSettings {
     /// Renders a filename template using the given identifiers.
     /// Missing EAN falls back to the catalog `ref`, which is
     /// always present. `inc` is the 1-based counter the caller
-    /// increments per upload.
-    public static func renderFilename(
+    /// increments per upload. Pure (no state access) so callers
+    /// in any isolation context can use it directly.
+    nonisolated public static func renderFilename(
         template: String,
         ean: String?,
         ref: String,
