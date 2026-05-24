@@ -26,7 +26,6 @@ struct MeasureSummaryView: View {
     @State private var resolveSheetVisible = false
     @State private var saving = false
     @State private var saveError: String?
-    @State private var savedReferenceRef: String?
 
     var body: some View {
         Form {
@@ -34,13 +33,6 @@ struct MeasureSummaryView: View {
             gsLinkSection
             measurementsSection
             saveSection
-            if let savedReferenceRef {
-                Section {
-                    Label("Saved to \(savedReferenceRef)", systemImage: "checkmark.seal.fill")
-                        .foregroundStyle(.green)
-                    Button("Done") { onDone() }
-                }
-            }
             if let saveError {
                 Section {
                     Label(saveError, systemImage: "exclamationmark.triangle")
@@ -127,39 +119,37 @@ struct MeasureSummaryView: View {
 
     @ViewBuilder
     private var saveSection: some View {
-        if savedReferenceRef == nil {
-            if let attachedTo {
-                Section {
-                    Button {
-                        Task { await save(toReference: attachedTo) }
-                    } label: {
-                        if saving {
-                            HStack { ProgressView(); Text("Saving…") }
-                        } else {
-                            Label("Save measurements", systemImage: "checkmark.seal.fill")
-                        }
+        if let attachedTo {
+            Section {
+                Button {
+                    Task { await save(toReference: attachedTo) }
+                } label: {
+                    if saving {
+                        HStack { ProgressView(); Text("Saving…") }
+                    } else {
+                        Label("Save measurements", systemImage: "checkmark.seal.fill")
                     }
-                    .disabled(saving)
-                } header: {
-                    Text("Reference")
-                } footer: {
-                    Text("Will save these measurements as `extra.measures` on \(attachedTo.ref).")
                 }
-            } else {
-                Section {
-                    Button {
-                        resolveSheetVisible = true
-                    } label: {
-                        if saving {
-                            HStack { ProgressView(); Text("Saving…") }
-                        } else {
-                            Label("Attach to a reference", systemImage: "link.badge.plus")
-                        }
+                .disabled(saving)
+            } header: {
+                Text("Reference")
+            } footer: {
+                Text("Will save these measurements as `extra.measures` on \(attachedTo.ref).")
+            }
+        } else {
+            Section {
+                Button {
+                    resolveSheetVisible = true
+                } label: {
+                    if saving {
+                        HStack { ProgressView(); Text("Saving…") }
+                    } else {
+                        Label("Attach to a reference", systemImage: "link.badge.plus")
                     }
-                    .disabled(saving)
-                } footer: {
-                    Text("Scan or pick a reference to save these measurements as `extra.measures` on Grand Shooting.")
                 }
+                .disabled(saving)
+            } footer: {
+                Text("Scan or pick a reference to save these measurements as `extra.measures` on Grand Shooting.")
             }
         }
     }
@@ -214,7 +204,6 @@ struct MeasureSummaryView: View {
         }
         saving = true
         saveError = nil
-        defer { saving = false }
 
         var payload: [String: ReferenceExtraService.MeasureValue] = [:]
         let unit = settings.measurementUnit
@@ -227,65 +216,95 @@ struct MeasureSummaryView: View {
         let service = ReferenceExtraService(environment: settings.currentEnvironment)
         do {
             try await service.updateMeasures(referenceID: referenceID, measures: payload)
-            savedReferenceRef = reference.ref
-            // Best-effort: also render the illustration and upload
-            // it as a tech-view photo so the measurement snapshot
-            // ships to GS alongside the values. Failures are
-            // logged but don't block the success path — the
-            // measures themselves saved fine.
-            await uploadIllustration(for: reference)
+            saving = false
+
+            // Fire the illustration render + upload after we hand
+            // control back to the parent. Captures everything by
+            // value so the closure doesn't need the view to stay
+            // alive past `onDone()`.
+            let env = settings.currentEnvironment
+            let methodID = settings.techViewsShootingMethodID
+            let pattern = settings.photoFilenameMeasurePattern
+            let measureUnit = settings.measurementUnit
+            let frame = referenceFrame
+            let subjectsSnapshot = includedSubjects
+            let capturesSnapshot = captures
+            let refSnapshot = reference
+            Task { @MainActor in
+                await Self.renderAndUploadIllustration(
+                    environment: env,
+                    shootingMethodID: methodID,
+                    filenamePattern: pattern,
+                    unit: measureUnit,
+                    frame: frame,
+                    subjects: subjectsSnapshot,
+                    captures: capturesSnapshot,
+                    reference: refSnapshot
+                )
+            }
+
+            // Auto-dismiss back to the reference detail — the
+            // success state is conveyed by the refreshed
+            // `extra.measures` row showing up there.
+            onDone()
         } catch let err as GSHTTPClient.HTTPError {
+            saving = false
             saveError = err.userMessage
         } catch {
+            saving = false
             saveError = error.localizedDescription
         }
     }
 
+    /// Static so the background task doesn't keep the view alive.
+    /// Renders the illustration on the main actor (UIKit-bound),
+    /// then hops off-main for the multipart upload.
     @MainActor
-    private func uploadIllustration(for reference: Reference) async {
-        guard let shootingMethodID = settings.techViewsShootingMethodID else {
-            // Without a shooting method we can't resolve the
-            // production to upload into. Surface no error — the
-            // user might be running the measure flow without
-            // tech-view setup, and that's fine.
+    private static func renderAndUploadIllustration(
+        environment: GSEnvironment,
+        shootingMethodID: Int?,
+        filenamePattern: String,
+        unit: DevSettings.MeasurementUnit,
+        frame: CapturedFrame,
+        subjects: [DetectedSubject],
+        captures: [MeasurementCapture],
+        reference: Reference
+    ) async {
+        guard let shootingMethodID else {
+            // No shooting method configured — silently skip the
+            // upload. The measures themselves are already saved.
             return
         }
-        // Re-render the cutout + illustration here (the form's
-        // `cutoutImage` may not be hydrated yet if the user hit
-        // Save fast).
         let cutout = MeasureSubjectCutout.make(
-            frame: referenceFrame,
-            includedSubjects: includedSubjects
+            frame: frame,
+            includedSubjects: subjects
         )
         let illustration = MeasureIllustration.render(
             cutout: cutout,
-            frame: referenceFrame,
+            frame: frame,
             captures: captures,
-            unit: settings.measurementUnit
+            unit: unit
         )
         let resized = illustration.resized(toMaxDimension: 1200)
         guard let jpegData = resized.jpegData(compressionQuality: 0.9) else { return }
 
         let filename = DevSettings.renderFilename(
-            template: settings.photoFilenameMeasurePattern,
+            template: filenamePattern,
             ean: reference.ean,
             ref: reference.ref,
             inc: 1
         )
 
         do {
-            let productionService = ProductionService(environment: settings.currentEnvironment)
+            let productionService = ProductionService(environment: environment)
             let production = try await productionService.findOrCreateToday(shootingMethodID: shootingMethodID)
-            let uploadService = ProductionUploadService(environment: settings.currentEnvironment)
+            let uploadService = ProductionUploadService(environment: environment)
             try await uploadService.upload(
                 jpegData: jpegData,
                 filename: filename,
                 productionRootID: production.rootID
             )
         } catch {
-            // Non-fatal — surface to the console for debugging.
-            // The measures themselves are already in GS, so the
-            // user gets the green confirmation banner regardless.
             print("[Measure] illustration upload failed: \(error.localizedDescription)")
         }
     }
