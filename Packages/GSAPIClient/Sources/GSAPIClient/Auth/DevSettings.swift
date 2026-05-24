@@ -404,7 +404,14 @@ public final class DevSettings {
         if let measure = UserDefaults.standard.object(forKey: Self.measureEnabledKey) as? Bool {
             self.isMeasureEnabled = measure
         } else {
+            // GSDeviceSupport is iOS-only (depends on ARKit/AVF).
+            // On macOS unit-test builds the Measure flow doesn't
+            // exist anyway, so default off.
+            #if os(iOS)
             self.isMeasureEnabled = GSDeviceSupport.hasLiDAR
+            #else
+            self.isMeasureEnabled = false
+            #endif
         }
         self.techViewsLastCaptureModeRaw = UserDefaults.standard.string(forKey: Self.lastCaptureModeKey)
         self.techViewsWhiteBalanceRaw = UserDefaults.standard.string(forKey: Self.whiteBalanceKey) ?? "auto"
