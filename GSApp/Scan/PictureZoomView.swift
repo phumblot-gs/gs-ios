@@ -13,6 +13,10 @@ import GSAPIClient
 /// zoom transition when scale == 1.
 struct PictureZoomView: View {
     let picture: Picture
+    /// JPEG bytes captured locally when the picture was just
+    /// uploaded — used as a fallback while GS hasn't yet generated
+    /// `thumbnail`. Nil for pictures already served by the CDN.
+    let localData: Data?
     let onDismiss: () -> Void
 
     @State private var scale: CGFloat = 1
@@ -20,41 +24,16 @@ struct PictureZoomView: View {
     @State private var offset: CGSize = .zero
     @State private var lastOffset: CGSize = .zero
 
-    private var imageURL: URL? {
-        picture.thumbnailURL ?? picture.path.flatMap { URL(string: $0) }
-    }
-
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
 
-            if let url = imageURL {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFit()
-                            .scaleEffect(scale)
-                            .offset(offset)
-                            .gesture(zoomGesture)
-                            .simultaneousGesture(panGesture)
-                            .onTapGesture(count: 2, perform: toggleZoom)
-                    case .failure:
-                        Image(systemName: "photo")
-                            .font(.system(size: 60))
-                            .foregroundStyle(.secondary)
-                    case .empty:
-                        ProgressView().tint(.white)
-                    @unknown default:
-                        ProgressView().tint(.white)
-                    }
-                }
-            } else {
-                Image(systemName: "photo")
-                    .font(.system(size: 60))
-                    .foregroundStyle(.secondary)
-            }
+            zoomableContent
+                .scaleEffect(scale)
+                .offset(offset)
+                .gesture(zoomGesture)
+                .simultaneousGesture(panGesture)
+                .onTapGesture(count: 2, perform: toggleZoom)
 
             VStack {
                 HStack {
@@ -70,6 +49,41 @@ struct PictureZoomView: View {
                 }
                 Spacer()
             }
+        }
+    }
+
+    @ViewBuilder
+    private var zoomableContent: some View {
+        if let url = picture.thumbnailURL {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let image):
+                    image.resizable().scaledToFit()
+                case .failure:
+                    localOrMissing
+                case .empty:
+                    if localData != nil {
+                        localOrMissing
+                    } else {
+                        ProgressView().tint(.white)
+                    }
+                @unknown default:
+                    ProgressView().tint(.white)
+                }
+            }
+        } else {
+            localOrMissing
+        }
+    }
+
+    @ViewBuilder
+    private var localOrMissing: some View {
+        if let localData, let ui = UIImage(data: localData) {
+            Image(uiImage: ui).resizable().scaledToFit()
+        } else {
+            Image(systemName: "photo")
+                .font(.system(size: 60))
+                .foregroundStyle(.secondary)
         }
     }
 

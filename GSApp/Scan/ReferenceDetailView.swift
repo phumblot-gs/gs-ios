@@ -41,6 +41,15 @@ struct ReferenceDetailView: View {
     @State private var techViewsLoadStatus: LoadStatus = .loaded
     @State private var techViewsRetryTask: Task<Void, Never>?
 
+    /// JPEG bytes for pictures the user just uploaded via the
+    /// capture flow, keyed by filename. Used as a render fallback
+    /// while GS finishes generating the CDN thumbnail URL — once
+    /// `picture.thumbnail` arrives on a subsequent `loadTechViews`,
+    /// the CDN copy takes over. Survives for the lifetime of this
+    /// screen; the cost (a handful of JPEGs in memory) is bounded
+    /// by how many shots the user takes in one sitting.
+    @State private var localCapturePreviews: [String: Data] = [:]
+
     /// The picture currently presented in full-screen zoom. Set by
     /// tapping any thumbnail on the screen; the `fullScreenCover`
     /// binding clears it back to nil on dismiss.
@@ -171,8 +180,16 @@ struct ReferenceDetailView: View {
                 TechViewsCaptureView(
                     settings: settings,
                     reference: reference,
-                    onExit: {
+                    onExit: { previews in
                         showTechViewsCapture = false
+                        // Keep just-uploaded JPEGs in memory keyed
+                        // by filename so the gallery can render them
+                        // until GS finishes generating CDN
+                        // thumbnails (otherwise the latest shot
+                        // shows as an empty slot for ~30s).
+                        for preview in previews {
+                            localCapturePreviews[preview.filename] = preview.jpegData
+                        }
                         // The capture flow pushed fresh
                         // `extra.tech_views` to GS AND uploaded
                         // new tech-view pictures — refresh both
@@ -190,8 +207,13 @@ struct ReferenceDetailView: View {
             metadataEditorSheet
         }
         .fullScreenCover(item: $zoomedPicture) { picture in
-            PictureZoomView(picture: picture) { zoomedPicture = nil }
-                .navigationTransition(.zoom(sourceID: picture.id, in: pictureZoomNamespace))
+            let filename = (picture.filePath ?? picture.path)
+                .map { ($0 as NSString).lastPathComponent }
+            let localData = filename.flatMap { localCapturePreviews[$0] }
+            PictureZoomView(picture: picture, localData: localData) {
+                zoomedPicture = nil
+            }
+            .navigationTransition(.zoom(sourceID: picture.id, in: pictureZoomNamespace))
         }
     }
 
@@ -438,38 +460,16 @@ struct ReferenceDetailView: View {
 
     @ViewBuilder
     private func measurementIllustrationThumb(_ picture: Picture) -> some View {
-        let placeholder = RoundedRectangle(cornerRadius: 8, style: .continuous)
-            .fill(Color.secondary.opacity(0.12))
-        let url = picture.thumbnailURL
-            ?? picture.path.flatMap { URL(string: $0) }
-        if let url {
-            Button {
-                zoomedPicture = picture
-            } label: {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFit()
-                    case .failure:
-                        placeholder.overlay(
-                            Image(systemName: "photo")
-                                .foregroundStyle(.secondary)
-                        )
-                    case .empty:
-                        placeholder.overlay(ProgressView().controlSize(.small))
-                    @unknown default:
-                        placeholder
-                    }
-                }
+        Button {
+            zoomedPicture = picture
+        } label: {
+            pictureThumbnailContent(picture, contentMode: .fit)
                 .frame(maxWidth: .infinity)
                 .frame(maxHeight: 320)
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-            }
-            .buttonStyle(.plain)
-            .matchedTransitionSource(id: picture.id, in: pictureZoomNamespace)
         }
+        .buttonStyle(.plain)
+        .matchedTransitionSource(id: picture.id, in: pictureZoomNamespace)
     }
 
     // MARK: - Metadata (extra.tech_views structured text)
@@ -661,42 +661,84 @@ struct ReferenceDetailView: View {
 
     @ViewBuilder
     private func techViewThumbnail(_ picture: Picture) -> some View {
-        let placeholder = RoundedRectangle(cornerRadius: 8, style: .continuous)
-            .fill(Color.secondary.opacity(0.12))
-        // GS may take a moment to generate the `thumbnail` URL after
-        // upload — fall back to `path` so the just-shot picture still
-        // displays on return rather than a placeholder.
-        let url = picture.thumbnailURL
-            ?? picture.path.flatMap { URL(string: $0) }
-        if let url {
-            Button {
-                zoomedPicture = picture
-            } label: {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFill()
-                    case .failure:
-                        placeholder.overlay(
-                            Image(systemName: "photo")
-                                .foregroundStyle(.secondary)
-                        )
-                    case .empty:
-                        placeholder.overlay(ProgressView().controlSize(.small))
-                    @unknown default:
-                        placeholder
-                    }
-                }
+        Button {
+            zoomedPicture = picture
+        } label: {
+            pictureThumbnailContent(picture, contentMode: .fill)
                 .frame(width: 120, height: 120)
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .matchedTransitionSource(id: picture.id, in: pictureZoomNamespace)
+    }
+
+    /// Resolves a thumbnail image for `picture`. Preference order:
+    /// 1. The GS CDN `thumbnail` URL when GS has finished generating it.
+    /// 2. A locally-cached JPEG from a just-completed upload, so the
+    ///    user sees their shot the instant they exit the capture flow.
+    /// 3. A grey placeholder as a last resort.
+    @ViewBuilder
+    private func pictureThumbnailContent(
+        _ picture: Picture,
+        contentMode: ContentMode
+    ) -> some View {
+        let placeholder = RoundedRectangle(cornerRadius: 8, style: .continuous)
+            .fill(Color.secondary.opacity(0.12))
+        let filename = (picture.filePath ?? picture.path)
+            .map { ($0 as NSString).lastPathComponent }
+        let localData = filename.flatMap { localCapturePreviews[$0] }
+        if let url = picture.thumbnailURL {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let image):
+                    image.resizable().aspectRatio(contentMode: contentMode)
+                case .failure:
+                    fallbackLocalOrPlaceholder(localData: localData, contentMode: contentMode, placeholder: placeholder)
+                case .empty:
+                    if let localData {
+                        localImage(localData, contentMode: contentMode)
+                    } else {
+                        placeholder.overlay(ProgressView().controlSize(.small))
+                    }
+                @unknown default:
+                    placeholder
+                }
             }
-            .buttonStyle(.plain)
-            .matchedTransitionSource(id: picture.id, in: pictureZoomNamespace)
+        } else if let localData {
+            localImage(localData, contentMode: contentMode)
         } else {
-            placeholder
-                .frame(width: 120, height: 120)
+            placeholder.overlay(
+                Image(systemName: "photo")
+                    .foregroundStyle(.secondary)
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func fallbackLocalOrPlaceholder<P: View>(
+        localData: Data?,
+        contentMode: ContentMode,
+        placeholder: P
+    ) -> some View {
+        if let localData {
+            localImage(localData, contentMode: contentMode)
+        } else {
+            placeholder.overlay(
+                Image(systemName: "photo")
+                    .foregroundStyle(.secondary)
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func localImage(_ data: Data, contentMode: ContentMode) -> some View {
+        if let ui = UIImage(data: data) {
+            Image(uiImage: ui)
+                .resizable()
+                .aspectRatio(contentMode: contentMode)
+        } else {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color.secondary.opacity(0.12))
                 .overlay(
                     Image(systemName: "photo")
                         .foregroundStyle(.secondary)

@@ -22,7 +22,11 @@ import UIKit
 struct TechViewsCaptureView: View {
     @Bindable var settings: DevSettings
     let reference: Reference
-    let onExit: @MainActor () -> Void
+    /// Called when the capture flow is dismissed. Receives the list
+    /// of successful uploads (filename + JPEG data) so the parent
+    /// can paint them locally while GS finishes generating CDN
+    /// thumbnail URLs.
+    let onExit: @MainActor ([LocalCapturePreview]) -> Void
 
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \LearnedPictogram.createdAt, order: .reverse) private var learnedPictograms: [LearnedPictogram]
@@ -46,6 +50,10 @@ struct TechViewsCaptureView: View {
     @State private var filenameCounter = TechViewsFilenameCounter()
     @State private var isSeedingCounter = true
     @State private var uploads: [UploadStatus] = []
+    /// Successful uploads collected to hand back on exit so the
+    /// reference detail can render them locally until GS exposes
+    /// CDN thumbnail URLs for them.
+    @State private var successfulPreviews: [LocalCapturePreview] = []
 
     private struct PendingShot: Identifiable {
         let id = UUID()
@@ -235,7 +243,7 @@ struct TechViewsCaptureView: View {
     private var topBar: some View {
         HStack {
             Button {
-                onExit()
+                onExit(successfulPreviews)
             } label: {
                 Image(systemName: "xmark")
                     .font(.title3.weight(.semibold))
@@ -569,6 +577,9 @@ struct TechViewsCaptureView: View {
                 productionRootID: production.rootID
             )
             updateStatus(id: statusID, to: .succeeded)
+            successfulPreviews.append(
+                LocalCapturePreview(filename: filename, jpegData: data)
+            )
         } catch let err as GSHTTPClient.HTTPError {
             updateStatus(id: statusID, to: .failed(err.userMessage))
         } catch {

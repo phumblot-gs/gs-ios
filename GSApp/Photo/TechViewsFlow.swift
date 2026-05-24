@@ -47,7 +47,7 @@ struct TechViewsFlow: View {
             TechViewsCaptureView(
                 settings: settings,
                 reference: reference,
-                onExit: {
+                onExit: { _ in
                     step = .scanning
                 }
             )
