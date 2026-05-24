@@ -169,10 +169,26 @@ struct ReferenceDetailView: View {
         }
         .fullScreenCover(isPresented: $showMeasureFlow) {
             if let reference = currentReferenceStock?.reference {
-                MeasureFlowView(settings: settings, attachedTo: reference) {
-                    showMeasureFlow = false
-                    Task { await refreshReferenceAfterMeasures() }
-                }
+                MeasureFlowView(
+                    settings: settings,
+                    attachedTo: reference,
+                    onDone: {
+                        showMeasureFlow = false
+                        // Same dual-refresh as the tech-views exit:
+                        // the reference picks up `extra.measures`,
+                        // the picture gallery picks up the just-
+                        // uploaded illustration so it appears in
+                        // the Measures section without a manual
+                        // pull-to-refresh.
+                        Task {
+                            await refreshReferenceAfterMeasures()
+                            await loadTechViews(triggeredByUser: true)
+                        }
+                    },
+                    onIllustrationReady: { preview in
+                        localCapturePreviews[preview.filename] = preview.jpegData
+                    }
+                )
             }
         }
         .fullScreenCover(isPresented: $showTechViewsCapture) {

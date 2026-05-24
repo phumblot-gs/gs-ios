@@ -21,6 +21,12 @@ struct MeasureSummaryView: View {
     /// that opened this flow already knows which reference we're on.
     let attachedTo: Reference?
     let onDone: @MainActor () -> Void
+    /// Called as soon as the illustration JPEG + filename are
+    /// computed, BEFORE the multipart upload to GS. Lets the
+    /// reference detail cache the local preview so the just-saved
+    /// shot renders immediately on return, even if the upload is
+    /// still in flight or GS hasn't generated the CDN thumbnail yet.
+    let onIllustrationReady: @MainActor (LocalCapturePreview) -> Void
 
     @State private var cutoutImage: UIImage?
     @State private var resolveSheetVisible = false
@@ -231,6 +237,7 @@ struct MeasureSummaryView: View {
             let subjectsSnapshot = includedSubjects
             let capturesSnapshot = captures
             let refSnapshot = reference
+            let onReady = onIllustrationReady
             Task { @MainActor in
                 await Self.renderAndUploadIllustration(
                     environment: env,
@@ -241,7 +248,8 @@ struct MeasureSummaryView: View {
                     frame: frame,
                     subjects: subjectsSnapshot,
                     captures: capturesSnapshot,
-                    reference: refSnapshot
+                    reference: refSnapshot,
+                    onIllustrationReady: onReady
                 )
             }
 
@@ -271,7 +279,8 @@ struct MeasureSummaryView: View {
         frame: CapturedFrame,
         subjects: [DetectedSubject],
         captures: [MeasurementCapture],
-        reference: Reference
+        reference: Reference,
+        onIllustrationReady: @MainActor (LocalCapturePreview) -> Void
     ) async {
         guard let shootingMethodID else {
             // No shooting method configured — silently skip the
@@ -315,6 +324,14 @@ struct MeasureSummaryView: View {
             pattern: filenamePattern,
             ean: reference.ean,
             ref: reference.ref
+        )
+
+        // Hand the local preview up to the reference detail BEFORE
+        // we wait on the network — even if the upload is slow or
+        // GS is slow to generate the CDN thumbnail, the gallery
+        // can paint pixels straight away.
+        onIllustrationReady(
+            LocalCapturePreview(filename: filename, jpegData: jpegData)
         )
 
         do {

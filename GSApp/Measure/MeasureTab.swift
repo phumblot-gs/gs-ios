@@ -131,9 +131,16 @@ struct MeasureCategoryListView: View {
             }
         }
         .fullScreenCover(isPresented: $showFlow) {
-            MeasureFlowView(settings: settings, attachedTo: nil) {
-                showFlow = false
-            }
+            // No-op for the standalone Measure tab — there's no
+            // reference detail upstream to cache an illustration
+            // preview for. The category-creation flow doesn't
+            // upload an illustration anyway.
+            MeasureFlowView(
+                settings: settings,
+                attachedTo: nil,
+                onDone: { showFlow = false },
+                onIllustrationReady: { _ in }
+            )
         }
     }
 }

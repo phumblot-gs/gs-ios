@@ -26,6 +26,10 @@ struct MeasureFlowView: View {
     let settings: DevSettings
     let attachedTo: Reference?
     let onDone: @MainActor () -> Void
+    /// Forwarded to `MeasureSummaryView` so the parent (typically
+    /// `ReferenceDetailView`) can cache the rendered illustration
+    /// locally while GS finishes generating its CDN thumbnail.
+    let onIllustrationReady: @MainActor (LocalCapturePreview) -> Void
 
     @Environment(\.modelContext) private var modelContext
     @StateObject private var coordinator = MeasureFlowCoordinator()
@@ -228,7 +232,8 @@ struct MeasureFlowView: View {
                         includedSubjects: subjects,
                         captures: captures,
                         attachedTo: attachedTo,
-                        onDone: { onDone() }
+                        onDone: { onDone() },
+                        onIllustrationReady: onIllustrationReady
                     )
                     .toolbar {
                         ToolbarItem(placement: .topBarLeading) {

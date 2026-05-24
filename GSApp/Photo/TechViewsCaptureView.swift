@@ -518,6 +518,16 @@ struct TechViewsCaptureView: View {
         let statusID = status.id
         let referenceID = reference.id
 
+        // Cache the JPEG locally *before* the upload Task fires.
+        // The user can tap X any time after this, even while the
+        // multipart upload is still on the wire — `onExit` then
+        // hands the local preview back to the parent so the
+        // gallery can paint pixels while GS finishes generating
+        // the CDN thumbnail.
+        successfulPreviews.append(
+            LocalCapturePreview(filename: filename, jpegData: uploadData)
+        )
+
         self.pending = nil
         observations = []
         assignments = [:]
@@ -577,9 +587,6 @@ struct TechViewsCaptureView: View {
                 productionRootID: production.rootID
             )
             updateStatus(id: statusID, to: .succeeded)
-            successfulPreviews.append(
-                LocalCapturePreview(filename: filename, jpegData: data)
-            )
         } catch let err as GSHTTPClient.HTTPError {
             updateStatus(id: statusID, to: .failed(err.userMessage))
         } catch {
