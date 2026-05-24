@@ -32,12 +32,28 @@ struct SettingsPhotoView: View {
     private var filenamePatternsSection: some View {
         Section {
             patternRow(
-                label: "Tech view",
+                label: "Presentation",
                 value: Binding(
-                    get: { settings.photoFilenameTechViewPattern },
-                    set: { settings.photoFilenameTechViewPattern = $0 }
+                    get: { settings.photoFilenamePresentationPattern },
+                    set: { settings.photoFilenamePresentationPattern = $0 }
                 ),
-                fallback: DevSettings.defaultTechViewFilenamePattern
+                fallback: DevSettings.defaultPresentationFilenamePattern
+            )
+            patternRow(
+                label: "Detail",
+                value: Binding(
+                    get: { settings.photoFilenameDetailPattern },
+                    set: { settings.photoFilenameDetailPattern = $0 }
+                ),
+                fallback: DevSettings.defaultDetailFilenamePattern
+            )
+            patternRow(
+                label: "OCR",
+                value: Binding(
+                    get: { settings.photoFilenameOCRPattern },
+                    set: { settings.photoFilenameOCRPattern = $0 }
+                ),
+                fallback: DevSettings.defaultOCRFilenamePattern
             )
             patternRow(
                 label: "Measurement",
@@ -50,7 +66,7 @@ struct SettingsPhotoView: View {
         } header: {
             Text("Filename patterns")
         } footer: {
-            Text("Available placeholders: `{EAN}` (falls back to `{REF}` when the reference has no EAN), `{REF}` (catalog reference), `{INC}` (1-based capture counter). Always end with `.jpg`.")
+            Text("Available placeholders: `{EAN}` (falls back to `{REF}` when the reference has no EAN), `{REF}` (catalog reference), `{INC}` (1-based capture counter, seeded from today's GS production so a re-capture on a different day starts back at 1). Always end with `.jpg`. Patterns that resolve to the same filename family share the counter — uploads never overwrite each other.")
         }
     }
 

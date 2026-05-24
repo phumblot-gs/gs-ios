@@ -48,4 +48,33 @@ public struct PictureService: Sendable {
             as: [Picture].self
         )
     }
+
+    /// Filenames (`lastPathComponent` of each picture's `file_path`)
+    /// already uploaded against the given reference + shooting
+    /// method during today's local-time window. Used to seed the
+    /// `{INC}` counter on capture-flow startup so re-entering the
+    /// flow on the same day doesn't overwrite existing uploads.
+    /// A re-capture on a different day starts back at `1`.
+    public func filenamesUploadedToday(
+        forRef ref: String,
+        shootingMethodName: String,
+        calendar: Calendar = .autoupdatingCurrent,
+        now: Date = .init()
+    ) async throws -> [String] {
+        let pictures = try await listTechViews(
+            forRef: ref,
+            shootingMethodName: shootingMethodName
+        )
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.timeZone = calendar.timeZone
+        formatter.dateFormat = "yyyy-MM-dd"
+        let todayPrefix = formatter.string(from: now)
+        return pictures.compactMap { picture -> String? in
+            guard let dateCre = picture.dateCre,
+                  dateCre.hasPrefix(todayPrefix),
+                  let path = picture.filePath ?? picture.path else { return nil }
+            return (path as NSString).lastPathComponent
+        }
+    }
 }

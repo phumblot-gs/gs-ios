@@ -39,7 +39,12 @@ struct TechViewsCaptureView: View {
     @State private var candidates: [TechViewsPictoDetection.Candidate] = []
     @State private var pictoAnnotations: [UUID: PictoAnnotation] = [:]
     @State private var analysisTask: Task<Void, Never>?
-    @State private var nextInc: Int = 1
+    /// Seeded from today's GS production at `.task` time, then
+    /// incremented per capture. Per-pattern slot so the same
+    /// counter is shared across modes whose user-customised
+    /// patterns happen to produce the same filename family.
+    @State private var filenameCounter = TechViewsFilenameCounter()
+    @State private var isSeedingCounter = true
     @State private var uploads: [UploadStatus] = []
 
     private struct PendingShot: Identifiable {
@@ -104,6 +109,23 @@ struct TechViewsCaptureView: View {
         case .detail: return settings.techViewsDetailFocal
         case .ocr: return settings.techViewsOCRFocal
         }
+    }
+
+    /// Filename template to use for a given capture mode.
+    private func filenamePattern(for mode: CaptureMode) -> String {
+        switch mode {
+        case .presentation: return settings.photoFilenamePresentationPattern
+        case .detail: return settings.photoFilenameDetailPattern
+        case .ocr: return settings.photoFilenameOCRPattern
+        }
+    }
+
+    private var allFilenamePatterns: [String] {
+        [
+            settings.photoFilenamePresentationPattern,
+            settings.photoFilenameDetailPattern,
+            settings.photoFilenameOCRPattern
+        ]
     }
 
     /// True when the currently-active mode's focal target requires
@@ -172,6 +194,40 @@ struct TechViewsCaptureView: View {
         .animation(.easeInOut(duration: 0.15), value: pending?.id)
         .navigationBarBackButtonHidden()
         .navigationBarTitleDisplayMode(.inline)
+        .task {
+            await seedFilenameCounter()
+        }
+    }
+
+    /// Pulls today's already-uploaded filenames from GS and feeds
+    /// them into `filenameCounter` so the first capture's `{INC}`
+    /// continues from whatever's already in the production rather
+    /// than restarting at 1 (which would overwrite). Skipped
+    /// silently when no shooting method is configured — the
+    /// upload itself would fail in that case anyway.
+    @MainActor
+    private func seedFilenameCounter() async {
+        defer { isSeedingCounter = false }
+        guard let methodName = settings.techViewsShootingMethodName else { return }
+        let service = PictureService(environment: settings.currentEnvironment)
+        do {
+            let existing = try await service.filenamesUploadedToday(
+                forRef: reference.ref,
+                shootingMethodName: methodName
+            )
+            filenameCounter.seed(
+                from: existing,
+                patterns: allFilenamePatterns,
+                ean: reference.ean,
+                ref: reference.ref
+            )
+        } catch {
+            // Non-fatal: an inability to seed just means the
+            // counter starts at 1 for each pattern. Worst case:
+            // first capture overwrites an existing file. Logged
+            // so we can investigate in dev.
+            print("[TechViews] counter seed failed: \(error.localizedDescription)")
+        }
     }
 
     // MARK: - Top bar
@@ -251,7 +307,7 @@ struct TechViewsCaptureView: View {
                         Circle().stroke(.white, lineWidth: 4).frame(width: 88, height: 88)
                     }
                 }
-                .disabled(shutter.isCapturing || shutter.authorization != .authorized)
+                .disabled(shutter.isCapturing || shutter.authorization != .authorized || isSeedingCounter)
                 .accessibilityLabel("Shutter")
                 Spacer()
                     .overlay(alignment: .leading) {
@@ -398,13 +454,15 @@ struct TechViewsCaptureView: View {
     }
 
     private func save(pending: PendingShot) {
-        let inc = nextInc
-        nextInc += 1
-        let filename = DevSettings.renderFilename(
-            template: settings.photoFilenameTechViewPattern,
+        // Pick the pattern that matches the mode this shot was
+        // taken in (NOT the current mode — the user may have
+        // toggled while reviewing). Then ask the counter for the
+        // next filename in that pattern's family.
+        let pattern = filenamePattern(for: pendingMode)
+        let filename = filenameCounter.take(
+            pattern: pattern,
             ean: reference.ean,
-            ref: reference.ref,
-            inc: inc
+            ref: reference.ref
         )
         let resized = pending.image.resized(toMaxDimension: 1200)
         // `UIImage.jpegData(compressionQuality:)` writes a minimal

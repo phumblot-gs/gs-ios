@@ -235,25 +235,37 @@ public final class DevSettings {
         didSet { UserDefaults.standard.set(techViewsOCRFocal, forKey: Self.ocrFocalKey) }
     }
 
-    /// Filename template used when uploading a tech-view photo to
-    /// Grand Shooting. Supports the placeholders `{EAN}`, `{REF}`
-    /// and `{INC}` (a 1-based per-capture-session counter).
+    /// Filename template for **Presentation**-mode tech-view
+    /// photos. Supports the placeholders `{EAN}`, `{REF}` and
+    /// `{INC}` (1-based counter seeded from today's GS production).
     /// Default: `{EAN}_Article_{INC}.jpg`.
-    public var photoFilenameTechViewPattern: String {
-        didSet { UserDefaults.standard.set(photoFilenameTechViewPattern, forKey: Self.techViewPatternKey) }
+    public var photoFilenamePresentationPattern: String {
+        didSet { UserDefaults.standard.set(photoFilenamePresentationPattern, forKey: Self.presentationPatternKey) }
+    }
+
+    /// Filename template for **Detail**-mode tech-view photos.
+    /// Default: `{EAN}_Detail_{INC}.jpg`.
+    public var photoFilenameDetailPattern: String {
+        didSet { UserDefaults.standard.set(photoFilenameDetailPattern, forKey: Self.detailPatternKey) }
+    }
+
+    /// Filename template for **OCR**-mode tech-view photos.
+    /// Default: `{EAN}_Label_{INC}.jpg`.
+    public var photoFilenameOCRPattern: String {
+        didSet { UserDefaults.standard.set(photoFilenameOCRPattern, forKey: Self.ocrPatternKey) }
     }
 
     /// Filename template for measurement illustrations uploaded
     /// alongside `extra.measures`. Same placeholders as the
-    /// tech-view template. Default: `{EAN}_Mesurement_{INC}.jpg`.
+    /// tech-view templates. Default: `{EAN}_Measurement_{INC}.jpg`.
     public var photoFilenameMeasurePattern: String {
         didSet { UserDefaults.standard.set(photoFilenameMeasurePattern, forKey: Self.measurePatternKey) }
     }
 
-    /// Default filename template for tech-view captures.
-    public static let defaultTechViewFilenamePattern = "{EAN}_Article_{INC}.jpg"
-    /// Default filename template for measurement illustrations.
-    public static let defaultMeasureFilenamePattern = "{EAN}_Mesurement_{INC}.jpg"
+    public static let defaultPresentationFilenamePattern = "{EAN}_Article_{INC}.jpg"
+    public static let defaultDetailFilenamePattern = "{EAN}_Detail_{INC}.jpg"
+    public static let defaultOCRFilenamePattern = "{EAN}_Label_{INC}.jpg"
+    public static let defaultMeasureFilenamePattern = "{EAN}_Measurement_{INC}.jpg"
 
     /// Renders a filename template using the given identifiers.
     /// Missing EAN falls back to the catalog `ref`, which is
@@ -370,8 +382,18 @@ public final class DevSettings {
         self.techViewsDetailFocal = detailFocal == 0 ? 100 : detailFocal
         let ocrFocal = UserDefaults.standard.integer(forKey: Self.ocrFocalKey)
         self.techViewsOCRFocal = ocrFocal == 0 ? 13 : ocrFocal
-        self.photoFilenameTechViewPattern = UserDefaults.standard.string(forKey: Self.techViewPatternKey)
-            ?? Self.defaultTechViewFilenamePattern
+        // Honour a previously-persisted single tech-view pattern
+        // as the new Presentation default — that's where the
+        // user's customisation most likely lived. Detail and OCR
+        // fall back to their own dedicated defaults.
+        let legacyTechView = UserDefaults.standard.string(forKey: Self.legacyTechViewPatternKey)
+        self.photoFilenamePresentationPattern = UserDefaults.standard.string(forKey: Self.presentationPatternKey)
+            ?? legacyTechView
+            ?? Self.defaultPresentationFilenamePattern
+        self.photoFilenameDetailPattern = UserDefaults.standard.string(forKey: Self.detailPatternKey)
+            ?? Self.defaultDetailFilenamePattern
+        self.photoFilenameOCRPattern = UserDefaults.standard.string(forKey: Self.ocrPatternKey)
+            ?? Self.defaultOCRFilenamePattern
         self.photoFilenameMeasurePattern = UserDefaults.standard.string(forKey: Self.measurePatternKey)
             ?? Self.defaultMeasureFilenamePattern
 
@@ -403,6 +425,9 @@ public final class DevSettings {
     private static let presentationFocalKey = "dev.techViews.focal.presentation"
     private static let detailFocalKey = "dev.techViews.focal.detail"
     private static let ocrFocalKey = "dev.techViews.focal.ocr"
-    private static let techViewPatternKey = "dev.photo.filename.techView"
+    private static let legacyTechViewPatternKey = "dev.photo.filename.techView"
+    private static let presentationPatternKey = "dev.photo.filename.presentation"
+    private static let detailPatternKey = "dev.photo.filename.detail"
+    private static let ocrPatternKey = "dev.photo.filename.ocr"
     private static let measurePatternKey = "dev.photo.filename.measure"
 }

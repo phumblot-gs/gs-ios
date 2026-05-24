@@ -224,6 +224,7 @@ struct MeasureSummaryView: View {
             // alive past `onDone()`.
             let env = settings.currentEnvironment
             let methodID = settings.techViewsShootingMethodID
+            let methodName = settings.techViewsShootingMethodName
             let pattern = settings.photoFilenameMeasurePattern
             let measureUnit = settings.measurementUnit
             let frame = referenceFrame
@@ -234,6 +235,7 @@ struct MeasureSummaryView: View {
                 await Self.renderAndUploadIllustration(
                     environment: env,
                     shootingMethodID: methodID,
+                    shootingMethodName: methodName,
                     filenamePattern: pattern,
                     unit: measureUnit,
                     frame: frame,
@@ -263,6 +265,7 @@ struct MeasureSummaryView: View {
     private static func renderAndUploadIllustration(
         environment: GSEnvironment,
         shootingMethodID: Int?,
+        shootingMethodName: String?,
         filenamePattern: String,
         unit: DevSettings.MeasurementUnit,
         frame: CapturedFrame,
@@ -288,11 +291,30 @@ struct MeasureSummaryView: View {
         let resized = illustration.resized(toMaxDimension: 1200)
         guard let jpegData = resized.jpegData(compressionQuality: 0.9) else { return }
 
-        let filename = DevSettings.renderFilename(
-            template: filenamePattern,
+        // Seed the inc counter against today's existing GS
+        // uploads for this reference + shooting method so the
+        // measurement image doesn't overwrite a previously
+        // captured shot (tech-view or otherwise) when the user
+        // configured the same pattern for several modes.
+        var counter = TechViewsFilenameCounter()
+        if let shootingMethodName {
+            let pictureService = PictureService(environment: environment)
+            if let existing = try? await pictureService.filenamesUploadedToday(
+                forRef: reference.ref,
+                shootingMethodName: shootingMethodName
+            ) {
+                counter.seed(
+                    from: existing,
+                    patterns: [filenamePattern],
+                    ean: reference.ean,
+                    ref: reference.ref
+                )
+            }
+        }
+        let filename = counter.take(
+            pattern: filenamePattern,
             ean: reference.ean,
-            ref: reference.ref,
-            inc: 1
+            ref: reference.ref
         )
 
         do {
