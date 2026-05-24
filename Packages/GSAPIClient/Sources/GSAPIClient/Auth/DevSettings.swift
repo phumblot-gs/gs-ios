@@ -235,6 +235,46 @@ public final class DevSettings {
         didSet { UserDefaults.standard.set(techViewsOCRFocal, forKey: Self.ocrFocalKey) }
     }
 
+    /// Filename template used when uploading a tech-view photo to
+    /// Grand Shooting. Supports the placeholders `{EAN}`, `{REF}`
+    /// and `{INC}` (a 1-based per-capture-session counter).
+    /// Default: `{EAN}_Article_{INC}.jpg`.
+    public var photoFilenameTechViewPattern: String {
+        didSet { UserDefaults.standard.set(photoFilenameTechViewPattern, forKey: Self.techViewPatternKey) }
+    }
+
+    /// Filename template for measurement illustrations uploaded
+    /// alongside `extra.measures`. Same placeholders as the
+    /// tech-view template. Default: `{EAN}_Mesurement_{INC}.jpg`.
+    public var photoFilenameMeasurePattern: String {
+        didSet { UserDefaults.standard.set(photoFilenameMeasurePattern, forKey: Self.measurePatternKey) }
+    }
+
+    /// Default filename template for tech-view captures.
+    public static let defaultTechViewFilenamePattern = "{EAN}_Article_{INC}.jpg"
+    /// Default filename template for measurement illustrations.
+    public static let defaultMeasureFilenamePattern = "{EAN}_Mesurement_{INC}.jpg"
+
+    /// Renders a filename template using the given identifiers.
+    /// Missing EAN falls back to the catalog `ref`, which is
+    /// always present. `inc` is the 1-based counter the caller
+    /// increments per upload.
+    public static func renderFilename(
+        template: String,
+        ean: String?,
+        ref: String,
+        inc: Int
+    ) -> String {
+        let eanValue: String = {
+            if let ean, !ean.trimmingCharacters(in: .whitespaces).isEmpty { return ean }
+            return ref
+        }()
+        return template
+            .replacingOccurrences(of: "{EAN}", with: eanValue)
+            .replacingOccurrences(of: "{REF}", with: ref)
+            .replacingOccurrences(of: "{INC}", with: String(inc))
+    }
+
     /// Shooting method the technical-views uploads are scoped to.
     /// Required: the Photo tab is gated on this being non-nil.
     public var techViewsShootingMethodID: Int? {
@@ -330,6 +370,10 @@ public final class DevSettings {
         self.techViewsDetailFocal = detailFocal == 0 ? 100 : detailFocal
         let ocrFocal = UserDefaults.standard.integer(forKey: Self.ocrFocalKey)
         self.techViewsOCRFocal = ocrFocal == 0 ? 13 : ocrFocal
+        self.photoFilenameTechViewPattern = UserDefaults.standard.string(forKey: Self.techViewPatternKey)
+            ?? Self.defaultTechViewFilenamePattern
+        self.photoFilenameMeasurePattern = UserDefaults.standard.string(forKey: Self.measurePatternKey)
+            ?? Self.defaultMeasureFilenamePattern
 
         // Safety net: force the default-on-register status to be enabled,
         // even if the user previously persisted a list that excluded it.
@@ -359,4 +403,6 @@ public final class DevSettings {
     private static let presentationFocalKey = "dev.techViews.focal.presentation"
     private static let detailFocalKey = "dev.techViews.focal.detail"
     private static let ocrFocalKey = "dev.techViews.focal.ocr"
+    private static let techViewPatternKey = "dev.photo.filename.techView"
+    private static let measurePatternKey = "dev.photo.filename.measure"
 }

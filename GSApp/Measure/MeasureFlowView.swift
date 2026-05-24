@@ -341,7 +341,8 @@ struct MeasureFlowView: View {
         let illustration = MeasureIllustration.render(
             cutout: cutout,
             frame: capturedFrame,
-            captures: captures
+            captures: captures,
+            unit: settings.measurementUnit
         )
         let illustrationData = illustration.jpegData(compressionQuality: 0.8)
         let newCategory = MeasureCategory(

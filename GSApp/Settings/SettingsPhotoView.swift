@@ -22,8 +22,61 @@ struct SettingsPhotoView: View {
         Form {
             captureBehaviourSection
             focalLengthsSection
+            filenamePatternsSection
         }
         .navigationTitle("Photo")
+    }
+
+    // MARK: - Filename patterns
+
+    private var filenamePatternsSection: some View {
+        Section {
+            patternRow(
+                label: "Tech view",
+                value: Binding(
+                    get: { settings.photoFilenameTechViewPattern },
+                    set: { settings.photoFilenameTechViewPattern = $0 }
+                ),
+                fallback: DevSettings.defaultTechViewFilenamePattern
+            )
+            patternRow(
+                label: "Measurement",
+                value: Binding(
+                    get: { settings.photoFilenameMeasurePattern },
+                    set: { settings.photoFilenameMeasurePattern = $0 }
+                ),
+                fallback: DevSettings.defaultMeasureFilenamePattern
+            )
+        } header: {
+            Text("Filename patterns")
+        } footer: {
+            Text("Available placeholders: `{EAN}` (falls back to `{REF}` when the reference has no EAN), `{REF}` (catalog reference), `{INC}` (1-based capture counter). Always end with `.jpg`.")
+        }
+    }
+
+    private func patternRow(
+        label: LocalizedStringKey,
+        value: Binding<String>,
+        fallback: String
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(label)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Button {
+                    value.wrappedValue = fallback
+                } label: {
+                    Image(systemName: "arrow.uturn.backward")
+                        .font(.caption)
+                }
+                .buttonStyle(.borderless)
+                .help("Reset to default")
+            }
+            TextField(fallback, text: value)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .font(.subheadline.monospaced())
+        }
     }
 
     private var captureBehaviourSection: some View {

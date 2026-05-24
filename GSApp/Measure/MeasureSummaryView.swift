@@ -228,10 +228,78 @@ struct MeasureSummaryView: View {
         do {
             try await service.updateMeasures(referenceID: referenceID, measures: payload)
             savedReferenceRef = reference.ref
+            // Best-effort: also render the illustration and upload
+            // it as a tech-view photo so the measurement snapshot
+            // ships to GS alongside the values. Failures are
+            // logged but don't block the success path — the
+            // measures themselves saved fine.
+            await uploadIllustration(for: reference)
         } catch let err as GSHTTPClient.HTTPError {
             saveError = err.userMessage
         } catch {
             saveError = error.localizedDescription
+        }
+    }
+
+    @MainActor
+    private func uploadIllustration(for reference: Reference) async {
+        guard let shootingMethodID = settings.techViewsShootingMethodID else {
+            // Without a shooting method we can't resolve the
+            // production to upload into. Surface no error — the
+            // user might be running the measure flow without
+            // tech-view setup, and that's fine.
+            return
+        }
+        // Re-render the cutout + illustration here (the form's
+        // `cutoutImage` may not be hydrated yet if the user hit
+        // Save fast).
+        let cutout = MeasureSubjectCutout.make(
+            frame: referenceFrame,
+            includedSubjects: includedSubjects
+        )
+        let illustration = MeasureIllustration.render(
+            cutout: cutout,
+            frame: referenceFrame,
+            captures: captures,
+            unit: settings.measurementUnit
+        )
+        let resized = illustration.resized(toMaxDimension: 1200)
+        guard let jpegData = resized.jpegData(compressionQuality: 0.9) else { return }
+
+        let filename = DevSettings.renderFilename(
+            template: settings.photoFilenameMeasurePattern,
+            ean: reference.ean,
+            ref: reference.ref,
+            inc: 1
+        )
+
+        do {
+            let productionService = ProductionService(environment: settings.currentEnvironment)
+            let production = try await productionService.findOrCreateToday(shootingMethodID: shootingMethodID)
+            let uploadService = ProductionUploadService(environment: settings.currentEnvironment)
+            try await uploadService.upload(
+                jpegData: jpegData,
+                filename: filename,
+                productionRootID: production.rootID
+            )
+        } catch {
+            // Non-fatal — surface to the console for debugging.
+            // The measures themselves are already in GS, so the
+            // user gets the green confirmation banner regardless.
+            print("[Measure] illustration upload failed: \(error.localizedDescription)")
+        }
+    }
+}
+
+private extension UIImage {
+    func resized(toMaxDimension maxDimension: CGFloat) -> UIImage {
+        let longest = max(size.width, size.height)
+        guard longest > maxDimension else { return self }
+        let scale = maxDimension / longest
+        let newSize = CGSize(width: size.width * scale, height: size.height * scale)
+        let renderer = UIGraphicsImageRenderer(size: newSize)
+        return renderer.image { _ in
+            draw(in: CGRect(origin: .zero, size: newSize))
         }
     }
 }

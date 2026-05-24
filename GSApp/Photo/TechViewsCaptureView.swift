@@ -400,7 +400,12 @@ struct TechViewsCaptureView: View {
     private func save(pending: PendingShot) {
         let inc = nextInc
         nextInc += 1
-        let filename = "\(reference.ref)_\(inc).jpg"
+        let filename = DevSettings.renderFilename(
+            template: settings.photoFilenameTechViewPattern,
+            ean: reference.ean,
+            ref: reference.ref,
+            inc: inc
+        )
         let resized = pending.image.resized(toMaxDimension: 1200)
         // `UIImage.jpegData(compressionQuality:)` writes a minimal
         // JPEG — no EXIF, no TIFF, no Maker Note. Use ImageIO to
