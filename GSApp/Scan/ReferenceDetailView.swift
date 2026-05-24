@@ -663,7 +663,12 @@ struct ReferenceDetailView: View {
     private func techViewThumbnail(_ picture: Picture) -> some View {
         let placeholder = RoundedRectangle(cornerRadius: 8, style: .continuous)
             .fill(Color.secondary.opacity(0.12))
-        if let url = picture.thumbnailURL {
+        // GS may take a moment to generate the `thumbnail` URL after
+        // upload — fall back to `path` so the just-shot picture still
+        // displays on return rather than a placeholder.
+        let url = picture.thumbnailURL
+            ?? picture.path.flatMap { URL(string: $0) }
+        if let url {
             Button {
                 zoomedPicture = picture
             } label: {
