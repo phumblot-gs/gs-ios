@@ -50,13 +50,33 @@ struct ReferenceDetailView: View {
     /// by how many shots the user takes in one sitting.
     @State private var localCapturePreviews: [String: Data] = [:]
 
-    /// The picture currently presented in full-screen zoom. Set by
-    /// tapping any thumbnail on the screen; the `fullScreenCover`
-    /// binding clears it back to nil on dismiss.
-    @State private var zoomedPicture: Picture?
+    /// The thumbnail currently presented in full-screen zoom. Can
+    /// be either a GS-backed `Picture` row or a "ghost" preview
+    /// from a just-uploaded shot whose `Picture` row hasn't yet
+    /// surfaced. The `fullScreenCover` binding clears it to nil
+    /// on dismiss.
+    @State private var zoomTarget: ZoomTarget?
     /// Namespace shared by every thumbnail and the zoom destination
     /// so SwiftUI can run a matched-geometry zoom transition.
     @Namespace private var pictureZoomNamespace
+
+    /// Either a real GS Picture (with optional cached local
+    /// bytes as fallback) or a ghost preview that exists only
+    /// locally because GS hasn't yet registered it.
+    enum ZoomTarget: Identifiable, Hashable {
+        case picture(Picture, localData: Data?)
+        case ghost(filename: String, jpegData: Data)
+
+        /// Stable ID used both for `Identifiable` and as the
+        /// `matchedTransitionSource` key on the originating
+        /// thumbnail.
+        var id: String {
+            switch self {
+            case .picture(let p, _): return "picture-\(p.id)"
+            case .ghost(let filename, _): return "ghost-\(filename)"
+            }
+        }
+    }
     /// Inline error surfaced by a user-triggered action that
     /// failed (currently only the status change). Different
     /// channel from the on-load status banners so we don't
@@ -222,14 +242,21 @@ struct ReferenceDetailView: View {
         .sheet(isPresented: $showMetadataEditor) {
             metadataEditorSheet
         }
-        .fullScreenCover(item: $zoomedPicture) { picture in
-            let filename = (picture.filePath ?? picture.path)
-                .map { ($0 as NSString).lastPathComponent }
-            let localData = filename.flatMap { localCapturePreviews[$0] }
-            PictureZoomView(picture: picture, localData: localData) {
-                zoomedPicture = nil
+        .fullScreenCover(item: $zoomTarget) { target in
+            let url: URL? = {
+                if case .picture(let p, _) = target { return p.thumbnailURL }
+                return nil
+            }()
+            let data: Data? = {
+                switch target {
+                case .picture(_, let d): return d
+                case .ghost(_, let d): return d
+                }
+            }()
+            PictureZoomView(imageURL: url, localData: data) {
+                zoomTarget = nil
             }
-            .navigationTransition(.zoom(sourceID: picture.id, in: pictureZoomNamespace))
+            .navigationTransition(.zoom(sourceID: target.id, in: pictureZoomNamespace))
         }
     }
 
@@ -427,6 +454,8 @@ struct ReferenceDetailView: View {
                 }
                 if let illustration = latestMeasurementPicture {
                     measurementIllustrationThumb(illustration)
+                } else if let pending = pendingMeasurementPreview {
+                    measurementIllustrationGhost(pending.filename, pending.data)
                 }
                 Button {
                     showMeasureFlow = true
@@ -474,10 +503,26 @@ struct ReferenceDetailView: View {
         }
     }
 
+    /// Pending measurement-pattern preview rendered while GS is
+    /// still registering the `Picture` row. Nil once GS catches up.
+    private var pendingMeasurementPreview: (filename: String, data: Data)? {
+        guard let reference = currentReferenceStock?.reference else { return nil }
+        let pattern = settings.photoFilenameMeasurePattern
+        return pendingPreviews(matching: { filename in
+            TechViewsFilenameCounter.filename(
+                filename,
+                matches: pattern,
+                ean: reference.ean,
+                ref: reference.ref
+            )
+        }).first
+    }
+
     @ViewBuilder
     private func measurementIllustrationThumb(_ picture: Picture) -> some View {
+        let localData = localData(for: picture)
         Button {
-            zoomedPicture = picture
+            zoomTarget = .picture(picture, localData: localData)
         } label: {
             pictureThumbnailContent(picture, contentMode: .fit)
                 .frame(maxWidth: .infinity)
@@ -485,7 +530,25 @@ struct ReferenceDetailView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .buttonStyle(.plain)
-        .matchedTransitionSource(id: picture.id, in: pictureZoomNamespace)
+        .matchedTransitionSource(id: "picture-\(picture.id)", in: pictureZoomNamespace)
+    }
+
+    @ViewBuilder
+    private func measurementIllustrationGhost(_ filename: String, _ data: Data) -> some View {
+        Button {
+            zoomTarget = .ghost(filename: filename, jpegData: data)
+        } label: {
+            ZStack(alignment: .bottomLeading) {
+                ghostImageContent(data: data, contentMode: .fit)
+                    .frame(maxWidth: .infinity)
+                    .frame(maxHeight: 320)
+                uploadingBadge
+                    .padding(8)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .matchedTransitionSource(id: "ghost-\(filename)", in: pictureZoomNamespace)
     }
 
     // MARK: - Metadata (extra.tech_views structured text)
@@ -535,7 +598,9 @@ struct ReferenceDetailView: View {
             VStack(alignment: .leading, spacing: 12) {
                 let entries = metadataEntries
                 let labelPictures = ocrPictures
-                if entries.isEmpty && labelPictures.isEmpty {
+                let labelGhosts = pendingOCRPreviews
+                let hasLabels = !labelPictures.isEmpty || !labelGhosts.isEmpty
+                if entries.isEmpty && !hasLabels {
                     Label("No metadata yet", systemImage: "list.bullet.rectangle")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
@@ -543,7 +608,7 @@ struct ReferenceDetailView: View {
                     ForEach(entries, id: \.category) { entry in
                         metadataRow(entry.category, value: entry.value)
                     }
-                    if !labelPictures.isEmpty {
+                    if hasLabels {
                         if !entries.isEmpty {
                             Divider()
                         }
@@ -553,6 +618,9 @@ struct ReferenceDetailView: View {
                                 .foregroundStyle(.secondary)
                             ScrollView(.horizontal, showsIndicators: false) {
                                 LazyHStack(spacing: 10) {
+                                    ForEach(labelGhosts, id: \.filename) { ghost in
+                                        techViewGhostThumbnail(filename: ghost.filename, data: ghost.data)
+                                    }
                                     ForEach(labelPictures) { picture in
                                         techViewThumbnail(picture)
                                     }
@@ -590,15 +658,20 @@ struct ReferenceDetailView: View {
             }
             VStack(alignment: .leading, spacing: 12) {
                 let pictures = presentationAndDetailPictures
+                let ghosts = pendingTechViewPreviews
+                let isEmpty = pictures.isEmpty && ghosts.isEmpty
                 if techViewsLoadStatus != .loaded {
                     techViewsLookupBanner
-                } else if pictures.isEmpty {
+                } else if isEmpty {
                     Label("No tech-view pictures yet", systemImage: "photo.stack")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 } else {
                     ScrollView(.horizontal, showsIndicators: false) {
                         LazyHStack(spacing: 10) {
+                            ForEach(ghosts, id: \.filename) { ghost in
+                                techViewGhostThumbnail(filename: ghost.filename, data: ghost.data)
+                            }
                             ForEach(pictures) { picture in
                                 techViewThumbnail(picture)
                             }
@@ -609,8 +682,8 @@ struct ReferenceDetailView: View {
                     showTechViewsCapture = true
                 } label: {
                     Label(
-                        pictures.isEmpty ? "Capture tech views" : "Add more tech views",
-                        systemImage: pictures.isEmpty ? "camera.viewfinder" : "plus"
+                        isEmpty ? "Capture tech views" : "Add more tech views",
+                        systemImage: isEmpty ? "camera.viewfinder" : "plus"
                     )
                     .frame(maxWidth: .infinity)
                 }
@@ -656,6 +729,36 @@ struct ReferenceDetailView: View {
         }
     }
 
+    /// Ghost previews matching the Presentation/Detail patterns
+    /// — i.e. anything that's neither OCR nor Measurement. Mirrors
+    /// the filter on `presentationAndDetailPictures`.
+    private var pendingTechViewPreviews: [(filename: String, data: Data)] {
+        guard let reference = currentReferenceStock?.reference else { return [] }
+        let measurePattern = settings.photoFilenameMeasurePattern
+        let ocrPattern = settings.photoFilenameOCRPattern
+        return pendingPreviews(matching: { filename in
+            let isMeasure = TechViewsFilenameCounter.filename(
+                filename, matches: measurePattern, ean: reference.ean, ref: reference.ref
+            )
+            let isOCR = TechViewsFilenameCounter.filename(
+                filename, matches: ocrPattern, ean: reference.ean, ref: reference.ref
+            )
+            return !isMeasure && !isOCR
+        })
+    }
+
+    /// Ghost previews for the OCR/label pattern, shown in the
+    /// Metadata Labels strip while GS finishes registering them.
+    private var pendingOCRPreviews: [(filename: String, data: Data)] {
+        guard let reference = currentReferenceStock?.reference else { return [] }
+        let ocrPattern = settings.photoFilenameOCRPattern
+        return pendingPreviews(matching: { filename in
+            TechViewsFilenameCounter.filename(
+                filename, matches: ocrPattern, ean: reference.ean, ref: reference.ref
+            )
+        })
+    }
+
     /// OCR / label pictures uploaded for the current reference.
     /// Rendered in the Metadata section so the user sees the
     /// source material the structured `extra.tech_views` text
@@ -677,15 +780,91 @@ struct ReferenceDetailView: View {
 
     @ViewBuilder
     private func techViewThumbnail(_ picture: Picture) -> some View {
+        let localData = localData(for: picture)
         Button {
-            zoomedPicture = picture
+            zoomTarget = .picture(picture, localData: localData)
         } label: {
             pictureThumbnailContent(picture, contentMode: .fill)
                 .frame(width: 120, height: 120)
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .buttonStyle(.plain)
-        .matchedTransitionSource(id: picture.id, in: pictureZoomNamespace)
+        .matchedTransitionSource(id: "picture-\(picture.id)", in: pictureZoomNamespace)
+    }
+
+    /// Renders a local-only "ghost" thumbnail for a freshly-uploaded
+    /// picture whose GS `Picture` row hasn't surfaced yet. Identical
+    /// frame + tap behaviour as `techViewThumbnail` so the user
+    /// doesn't see a layout shift when the row eventually arrives.
+    @ViewBuilder
+    private func techViewGhostThumbnail(filename: String, data: Data) -> some View {
+        Button {
+            zoomTarget = .ghost(filename: filename, jpegData: data)
+        } label: {
+            ZStack(alignment: .bottomLeading) {
+                ghostImageContent(data: data, contentMode: .fill)
+                    .frame(width: 120, height: 120)
+                uploadingBadge
+                    .padding(6)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .matchedTransitionSource(id: "ghost-\(filename)", in: pictureZoomNamespace)
+    }
+
+    /// Small "Envoi…" pill drawn on top of a ghost thumbnail so
+    /// the user understands the picture is uploading and will be
+    /// replaced by the GS-served copy shortly.
+    private var uploadingBadge: some View {
+        HStack(spacing: 4) {
+            ProgressView().controlSize(.mini).tint(.white)
+            Text("Envoi…")
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(.white)
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 3)
+        .background(.black.opacity(0.7), in: Capsule())
+    }
+
+    @ViewBuilder
+    private func ghostImageContent(data: Data, contentMode: ContentMode) -> some View {
+        if let ui = UIImage(data: data) {
+            Image(uiImage: ui)
+                .resizable()
+                .aspectRatio(contentMode: contentMode)
+        } else {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color.secondary.opacity(0.12))
+                .overlay(
+                    Image(systemName: "photo")
+                        .foregroundStyle(.secondary)
+                )
+        }
+    }
+
+    /// Filename → cached JPEG lookup for the picture's stored path.
+    private func localData(for picture: Picture) -> Data? {
+        guard let path = picture.filePath ?? picture.path else { return nil }
+        let filename = (path as NSString).lastPathComponent
+        return localCapturePreviews[filename]
+    }
+
+    /// Returns local-cache entries whose filename satisfies
+    /// `match` AND that don't yet have a corresponding GS Picture
+    /// row in `techViewPictures`. Newest-first by filename suffix.
+    private func pendingPreviews(matching match: (String) -> Bool) -> [(filename: String, data: Data)] {
+        let knownFilenames: Set<String> = Set(
+            techViewPictures.compactMap { picture -> String? in
+                guard let path = picture.filePath ?? picture.path else { return nil }
+                return (path as NSString).lastPathComponent
+            }
+        )
+        return localCapturePreviews
+            .filter { entry in match(entry.key) && !knownFilenames.contains(entry.key) }
+            .map { (filename: $0.key, data: $0.value) }
+            .sorted { $0.filename > $1.filename }
     }
 
     /// Resolves a thumbnail image for `picture`. Preference order:
@@ -867,7 +1046,7 @@ struct ReferenceDetailView: View {
         picturesLoadStatus = .refreshing
         do {
             let service = PictureService(environment: settings.currentEnvironment)
-            pictures = try await service.list(forRef: ref)
+            pictures = try await Self.loadWithRetry { try await service.list(forRef: ref) }
             picturesLoadStatus = .loaded
         } catch {
             picturesLoadStatus = .failed
@@ -875,6 +1054,33 @@ struct ReferenceDetailView: View {
                 schedulePicturesAutoRetry()
             }
         }
+    }
+
+    /// Retries `operation` with short backoff before propagating
+    /// the final error, so transient GS slowness doesn't surface
+    /// a banner the user has to dismiss. Three attempts total
+    /// (initial + two retries spaced 0.8 s / 1.8 s). Any failure
+    /// after the third attempt is bubbled up to the caller and
+    /// the caller's existing banner / auto-retry kicks in.
+    @MainActor
+    static func loadWithRetry<T>(
+        attempts: Int = 3,
+        delays: [Duration] = [.milliseconds(800), .milliseconds(1800)],
+        operation: () async throws -> T
+    ) async throws -> T {
+        var lastError: Error?
+        for attempt in 0..<attempts {
+            do {
+                return try await operation()
+            } catch {
+                lastError = error
+                if attempt < attempts - 1 {
+                    let delay = delays[min(attempt, delays.count - 1)]
+                    try? await Task.sleep(for: delay)
+                }
+            }
+        }
+        throw lastError ?? CancellationError()
     }
 
     private func schedulePicturesAutoRetry() {
@@ -910,10 +1116,12 @@ struct ReferenceDetailView: View {
         techViewsLoadStatus = .refreshing
         let service = PictureService(environment: settings.currentEnvironment)
         do {
-            let raw = try await service.listTechViews(
-                forRef: ref,
-                shootingMethodName: methodName
-            )
+            let raw = try await Self.loadWithRetry {
+                try await service.listTechViews(
+                    forRef: ref,
+                    shootingMethodName: methodName
+                )
+            }
             // The /picture endpoint can return multiple rows per
             // physical file (one per status change). Collapse so
             // we only show one thumbnail per uploaded shot.
@@ -1159,10 +1367,12 @@ struct ReferenceDetailView: View {
         stockLoadStatus = .refreshing
         let service = StockService(environment: settings.currentEnvironment)
         do {
-            let matches = try await service.search(
-                scannedValue: context.payload,
-                by: context.attribute
-            )
+            let matches = try await Self.loadWithRetry {
+                try await service.search(
+                    scannedValue: context.payload,
+                    by: context.attribute
+                )
+            }
             references = references.map { existing in
                 let items = matches.first(where: { $0.reference.ref == existing.reference.ref })?.stockItems ?? []
                 return ReferenceStock(reference: existing.reference, stockItems: items)

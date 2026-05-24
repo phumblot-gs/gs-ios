@@ -1,21 +1,22 @@
 import SwiftUI
-import GSAPIClient
 
-/// Full-screen viewer for a `Picture`. Designed to be presented
-/// from a thumbnail with `.matchedTransitionSource(id:in:)` on the
-/// source and `.navigationTransition(.zoom(sourceID:in:))` on
-/// this destination so the thumbnail visually expands into the
-/// full-screen image.
+/// Full-screen viewer for a thumbnail. Takes a remote URL (from
+/// the GS CDN) and/or local JPEG bytes (for just-uploaded shots
+/// whose CDN thumbnail is still being generated). Designed to be
+/// presented with `.matchedTransitionSource(id:in:)` on the source
+/// + `.navigationTransition(.zoom(sourceID:in:))` on the
+/// destination, so the thumbnail visually expands into full-screen.
 ///
 /// Supports pinch-to-zoom, drag-to-pan when zoomed in, double-tap
 /// to toggle 1×↔2.5×, and a tap on the close button to dismiss.
 /// Pull-to-dismiss is handled natively by `fullScreenCover`'s
 /// zoom transition when scale == 1.
 struct PictureZoomView: View {
-    let picture: Picture
-    /// JPEG bytes captured locally when the picture was just
-    /// uploaded — used as a fallback while GS hasn't yet generated
-    /// `thumbnail`. Nil for pictures already served by the CDN.
+    let imageURL: URL?
+    /// JPEG bytes available locally (just-uploaded picture or
+    /// ghost preview that hasn't reached GS yet). When set, used
+    /// as a fallback while the CDN URL loads (or as the only
+    /// source if `imageURL` is nil).
     let localData: Data?
     let onDismiss: () -> Void
 
@@ -54,7 +55,7 @@ struct PictureZoomView: View {
 
     @ViewBuilder
     private var zoomableContent: some View {
-        if let url = picture.thumbnailURL {
+        if let url = imageURL {
             AsyncImage(url: url) { phase in
                 switch phase {
                 case .success(let image):
