@@ -1042,8 +1042,22 @@ struct ReferenceDetailView: View {
                 picturesLookupBanner
             }
             if picturesLoadStatus == .loaded {
-                ForEach(shotListRows, id: \.id) { row in
-                    ShotListRow(row: row)
+                let rows = shotListRows
+                // One carousel for the whole section: all pictures
+                // present in the rows, in row order. Missing rows
+                // (no picture) don't contribute to the carousel.
+                let pictures = rows.compactMap(\.picture)
+                let items = buildZoomItems(ghosts: [], pictures: pictures)
+                ForEach(rows, id: \.id) { row in
+                    ShotListRow(row: row, namespace: pictureZoomNamespace) {
+                        guard let picture = row.picture,
+                              let idx = pictures.firstIndex(where: { $0.id == picture.id })
+                        else { return }
+                        zoomPresentation = ZoomPresentation(
+                            items: items,
+                            startIndex: idx
+                        )
+                    }
                 }
             }
         }
@@ -1480,10 +1494,16 @@ private struct ShotListRow: View {
     }
 
     let row: Row
+    let namespace: Namespace.ID
+    /// Tap handler for the thumbnail — open the carousel at this
+    /// row's picture. Nil-out by passing a no-op when the row has
+    /// no picture; the thumbnail will render as a placeholder and
+    /// the button is disabled.
+    let onTapThumbnail: () -> Void
 
     var body: some View {
         HStack(spacing: 12) {
-            thumbnail
+            thumbnailButton
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
                     Text(row.title)
@@ -1507,6 +1527,19 @@ private struct ShotListRow: View {
         }
         .padding()
         .background(.background, in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    @ViewBuilder
+    private var thumbnailButton: some View {
+        if let picture = row.picture {
+            Button(action: onTapThumbnail) {
+                thumbnail
+            }
+            .buttonStyle(.plain)
+            .matchedTransitionSource(id: "picture-\(picture.id)", in: namespace)
+        } else {
+            thumbnail
+        }
     }
 
     @ViewBuilder
