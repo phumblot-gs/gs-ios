@@ -1,5 +1,79 @@
 import SwiftUI
 
+/// Process-wide image cache for the carousel. SwiftUI's
+/// `AsyncImage` doesn't keep decoded images in memory, so
+/// navigating through pages re-fetches each time and flashes a
+/// placeholder. This `NSCache` keeps the decoded `UIImage`s
+/// keyed by URL — second visits paint instantly.
+final class ZoomImageCache: @unchecked Sendable {
+    static let shared = ZoomImageCache()
+    private let cache = NSCache<NSURL, UIImage>()
+
+    private init() {
+        cache.countLimit = 60   // ~25 thumbnails * 3 buckets
+    }
+
+    func image(for url: URL) -> UIImage? {
+        cache.object(forKey: url as NSURL)
+    }
+
+    func store(_ image: UIImage, for url: URL) {
+        cache.setObject(image, forKey: url as NSURL)
+    }
+}
+
+/// AsyncImage replacement backed by `ZoomImageCache`. Renders
+/// from cache when available; otherwise fetches via URLSession,
+/// caches the decoded image and renders it. While loading, shows
+/// a spinner — but jumping back to an already-fetched URL
+/// (e.g. tapping a page indicator dot) is instant.
+struct CachedRemoteImage: View {
+    let url: URL
+    let fallbackData: Data?
+
+    @State private var image: UIImage?
+    @State private var failed = false
+
+    var body: some View {
+        Group {
+            if let image {
+                Image(uiImage: image).resizable().scaledToFit()
+            } else if failed, let fallbackData, let ui = UIImage(data: fallbackData) {
+                Image(uiImage: ui).resizable().scaledToFit()
+            } else if failed {
+                Image(systemName: "photo")
+                    .font(.system(size: 60))
+                    .foregroundStyle(.secondary)
+            } else if let fallbackData, let ui = UIImage(data: fallbackData) {
+                // Paint the local copy while the CDN one loads,
+                // so swiping onto a just-uploaded picture isn't
+                // a blank black frame.
+                Image(uiImage: ui).resizable().scaledToFit()
+            } else {
+                ProgressView().tint(.white)
+            }
+        }
+        .task(id: url) {
+            if let cached = ZoomImageCache.shared.image(for: url) {
+                image = cached
+                return
+            }
+            do {
+                let (data, _) = try await URLSession.shared.data(from: url)
+                guard !Task.isCancelled else { return }
+                if let decoded = UIImage(data: data) {
+                    ZoomImageCache.shared.store(decoded, for: url)
+                    image = decoded
+                } else {
+                    failed = true
+                }
+            } catch {
+                if !Task.isCancelled { failed = true }
+            }
+        }
+    }
+}
+
 /// One viewable thumbnail — either a GS-backed `Picture` (which
 /// gives us a CDN URL) or a still-uploading ghost (only local
 /// JPEG bytes). The `id` is the stable `matchedTransitionSource`
@@ -128,30 +202,23 @@ private struct ZoomablePage: View {
         zoomableContent
             .scaleEffect(scale)
             .offset(offset)
-            .gesture(zoomGesture)
-            .simultaneousGesture(panGesture)
             .onTapGesture(count: 2, perform: toggleZoom)
+            // Pinch-to-zoom is always available.
+            .gesture(zoomGesture)
+            // Pan only when zoomed in. Attaching the DragGesture
+            // unconditionally would steal horizontal touches from
+            // the parent TabView's swipe paging — `if scale > 1`
+            // hands them back when at 1×.
+            .modifier(PanWhenZoomed(scale: scale, offset: $offset, lastOffset: $lastOffset))
+            // Swallow any 2-finger rotation events so the image
+            // never tilts — pinch in this app is zoom-only.
+            .simultaneousGesture(RotateGesture().onChanged { _ in })
     }
 
     @ViewBuilder
     private var zoomableContent: some View {
         if let url = item.imageURL {
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case .success(let image):
-                    image.resizable().scaledToFit()
-                case .failure:
-                    localOrMissing
-                case .empty:
-                    if item.localData != nil {
-                        localOrMissing
-                    } else {
-                        ProgressView().tint(.white)
-                    }
-                @unknown default:
-                    ProgressView().tint(.white)
-                }
-            }
+            CachedRemoteImage(url: url, fallbackData: item.localData)
         } else {
             localOrMissing
         }
@@ -186,20 +253,6 @@ private struct ZoomablePage: View {
             }
     }
 
-    private var panGesture: some Gesture {
-        DragGesture()
-            .onChanged { value in
-                guard scale > 1 else { return }
-                offset = CGSize(
-                    width: lastOffset.width + value.translation.width,
-                    height: lastOffset.height + value.translation.height
-                )
-            }
-            .onEnded { _ in
-                lastOffset = offset
-            }
-    }
-
     private func toggleZoom() {
         withAnimation(.spring) {
             if scale > 1 {
@@ -212,5 +265,35 @@ private struct ZoomablePage: View {
                 lastScale = 2.5
             }
         }
+    }
+}
+
+/// View modifier that only attaches a pan `DragGesture` when the
+/// host is zoomed in. Lets the parent TabView keep horizontal
+/// swipes for itself at the 1× resting state.
+private struct PanWhenZoomed: ViewModifier {
+    let scale: CGFloat
+    @Binding var offset: CGSize
+    @Binding var lastOffset: CGSize
+
+    func body(content: Content) -> some View {
+        if scale > 1 {
+            content.gesture(panGesture)
+        } else {
+            content
+        }
+    }
+
+    private var panGesture: some Gesture {
+        DragGesture()
+            .onChanged { value in
+                offset = CGSize(
+                    width: lastOffset.width + value.translation.width,
+                    height: lastOffset.height + value.translation.height
+                )
+            }
+            .onEnded { _ in
+                lastOffset = offset
+            }
     }
 }
