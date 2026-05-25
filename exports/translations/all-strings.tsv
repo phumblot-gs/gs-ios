@@ -1,0 +1,306 @@
+iosKey	en	fr	pl	section
+History	History	Historique	Historia	Tabs
+Linked Grand Shooting categories no longer exist	Linked Grand Shooting categories no longer exist	Catégories Grand Shooting introuvables	Powiązane kategorie Grand Shooting już nie istnieją	Tabs
+Measures	Measures	Mesures	Pomiary	Tabs
+Photo	Photo	Photo	Zdjęcie	Tabs
+Scan	Scan	Scanner	Skanuj	Tabs
+Settings	Settings	Paramètres	Ustawienia	Tabs
+Couldn't reach the mobile backend. Check connectivity.	Couldn't reach the mobile backend. Check connectivity.	Impossible de joindre le backend mobile. Vérifiez la connectivité.	Nie można połączyć się z mobilnym backendem. Sprawdź połączenie.	Login
+GS Mobile	GS Mobile	GS Mobile	GS Mobile	Login
+OAuth callback didn't include a session id.	OAuth callback didn't include a session id.	Le retour OAuth n'a pas fourni d'identifiant de session.	Odpowiedź OAuth nie zawierała identyfikatora sesji.	Login
+Sign in to start scanning	Sign in to start scanning	Connectez-vous pour commencer à scanner	Zaloguj się, aby rozpocząć skanowanie	Login
+Sign in with Grand Shooting	Sign in with Grand Shooting	Se connecter avec Grand Shooting	Zaloguj się przez Grand Shooting	Login
+Batches	Batches	Batchs	Partie	Scan
+Browse boxes and shelves. Scan a batch barcode to open it.	Browse boxes and shelves. Scan a batch barcode to open it.	Parcourez vos cartons et étagères. Scannez le code d'un batch pour l'ouvrir.	Przeglądaj kartony i półki. Zeskanuj kod kreskowy partii, aby ją otworzyć.	Scan
+Code (barcode)	Code (barcode)	Code (barcode)	Kod (kreskowy)	Scan
+Configure your API key in Settings to enable lookups.	Configure your API key in Settings to enable lookups.	Renseigne ta clé API dans les Paramètres pour activer les recherches.	Skonfiguruj klucz API w Ustawieniach, aby umożliwić wyszukiwanie.	Scan
+Create	Create	Créer	Utwórz	Scan
+EAN not found in catalog.	EAN not found in catalog.	EAN absent du catalogue.	Nie znaleziono kodu EAN w katalogu.	Scan
+Find a product manually by ref, label, sku or ean.	Find a product manually by ref, label, sku or ean.	Trouve un produit manuellement par ref, libellé, sku ou ean.	Wyszukaj produkt ręcznie po ref, etykiecie, SKU lub EAN.	Scan
+Label	Label	Libellé	Etykieta	Scan
+Look up a reference and update its stock item status.	Look up a reference and update its stock item status.	Recherche une référence et mets à jour le statut de ses échantillons.	Wyszukaj referencję i zaktualizuj status pozycji magazynowej.	Scan
+New batch	New batch	Nouveau batch	Nowa partia	Scan
+Optional. Tap the wand to generate a random EAN-13 you can print and stick on the box.	Optional. Tap the wand to generate a random EAN-13 you can print and stick on the box.	Optionnel. Touchez la baguette pour générer un EAN-13 aléatoire à imprimer et coller sur la boîte.	Opcjonalnie. Dotknij różdżki, aby wygenerować losowy EAN-13 do wydrukowania i naklejenia na pudełko.	Scan
+Other…	Other…	Autre…	Inne…	Scan
+Register products	Register products	Enregistrer des produits	Zarejestruj produkty	Scan
+Scan an item to add it to a batch in your stock.	Scan an item to add it to a batch in your stock.	Scanne un article pour l'ajouter à un batch dans ton stock.	Zeskanuj produkt, aby dodać go do partii w magazynie.	Scan
+Search references	Search references	Rechercher des références	Wyszukaj referencje	Scan
+Tap to view details	Tap to view details	Touche pour voir le détail	Dotknij, aby zobaczyć szczegóły	Scan
+Change status	Change status	Changer le statut	Zmień status	Reference
+Configure a shooting method in Settings → Grand Shooting before capturing tech views.	Configure a shooting method in Settings → Grand Shooting before capturing tech views.	Configurez une méthode de prise de vue dans Réglages → Grand Shooting avant de capturer des vues techniques.	Skonfiguruj metodę zdjęciową w Ustawienia → Grand Shooting przed wykonaniem ujęć technicznych.	Reference
+EAN	EAN	EAN	EAN	Reference
+Match	Match	Correspondance	Dopasowanie	Reference
+Metadata	Metadata	Métadonnées	Metadane	Reference
+Missing	Missing	Manquant	Brakujący	Reference
+No measurements yet	No measurements yet	Aucune mesure pour l'instant	Brak pomiarów	Reference
+Pictures	Pictures	Pictures	Zdjęcia	Reference
+Pull to refresh, or tap Retry.	Pull to refresh, or tap Retry.	Tirez pour actualiser, ou touchez Réessayer.	Przeciągnij, aby odświeżyć, lub dotknij Spróbuj ponownie.	Reference
+Retake measurements	Retake measurements	Reprendre les mesures	Powtórz pomiary	Reference
+Retry	Retry	Réessayer	Spróbuj ponownie	Reference
+Scan products	Scan products	Scanner des produits	Skanuj produkty	Reference
+Status	Status	Statut	Status	Reference
+Take measurements	Take measurements	Prendre les mesures	Wykonaj pomiary	Reference
+Tech views	Tech views	Vues techniques	Ujęcia techniczne	Reference
+Updating…	Updating…	Mise à jour…	Aktualizowanie…	Reference
+Uploading…	Uploading…	Envoi…	Wysyłanie…	Reference
+—	—	—	—	Reference
+Add to stock	Add to stock	Ajout au stock	Dodaj do magazynu	Stock
+Back in warehouse	Back in warehouse	Retour entrepôt	Powrót do magazynu	Stock
+Client return	Client return	Retour client	Zwrot od klienta	Stock
+Enriched	Enriched	Enrichi	Wzbogacony	Stock
+Error	Error	Erreur	Błąd	Stock
+Inventory	Inventory	Inventaire	Inwentaryzacja	Stock
+Lost	Lost	Perdu	Utracony	Stock
+Mark as dispatched	Mark as dispatched	Marquer expédié	Oznacz jako wysłany	Stock
+Picking	Picking	Préparation	Wybór	Stock
+Prepare	Prepare	Préparation	Przygotuj	Stock
+Receive	Receive	Réception	Odbierz	Stock
+Sent	Sent	Envoyé	Wysłano	Stock
+Sent from warehouse	Sent from warehouse	Envoyé depuis l'entrepôt	Wysłano z magazynu	Stock
+Transfer	Transfer	Transfert	Transfer	Stock
+Warehouse stock	Warehouse stock	Stock entrepôt	Stan magazynu	Stock
+Batch info	Batch info	Détails du lot	Informacje o partii	Batches
+Code	Code	Code	Kod	Batches
+Contents	Contents	Contenu	Zawartość	Batches
+Edit batch	Edit batch	Modifier le batch	Edytuj partię	Batches
+Tap + to create your first batch, or scan one to open it.	Tap + to create your first batch, or scan one to open it.	Touchez + pour créer votre premier lot, ou scannez-en un pour l'ouvrir.	Dotknij +, aby utworzyć pierwszą partię, lub zeskanuj jedną, by ją otworzyć.	Batches
+This batch is empty.	This batch is empty.	Ce lot est vide.	Ta partia jest pusta.	Batches
+Type	Type	Type	Typ	Batches
+Zone	Zone	Zone	Strefa	Batches
+Add another	Add another	En ajouter un autre	Dodaj kolejny	Register
+Already in stock	Already in stock	Déjà en stock	Już w magazynie	Register
+Choose a batch first	Choose a batch first	Choisis un batch d'abord	Najpierw wybierz partię	Register
+Close	Close	Fermer	Zamknij	Register
+Create a new batch	Create a new batch	Créer un nouveau batch	Utwórz nową partię	Register
+EAN not in catalog	EAN not in catalog	EAN absent du catalogue	Brak EAN w katalogu	Register
+No batches yet.	No batches yet.	Aucun lot pour l'instant.	Brak partii.	Register
+Select a batch	Select a batch	Sélectionner un batch	Wybierz partię	Register
+Select batch	Select batch	Sélectionner un batch	Wybierz partię	Register
+Skip	Skip	Passer	Pomiń	Register
+Stock items are always linked to a batch. Pick the box, shelf or pallet you're registering into.	Stock items are always linked to a batch. Pick the box, shelf or pallet you're registering into.	Les articles sont toujours liés à un lot. Choisissez la boîte, l'étagère ou la palette concernée.	Pozycje magazynowe są zawsze powiązane z partią. Wybierz pudełko, półkę lub paletę, do której rejestrujesz.	Register
+Always Presentation	Always Presentation	Toujours Présentation	Zawsze Prezentacja	Photo
+Available placeholders: `{EAN}` (falls back to `{REF}` when the reference has no EAN), `{REF}` (catalog reference), `{INC}` (1-based capture counter, seeded from today's GS production so a re-capture on a different day starts back at 1). Always end with `.jpg`. Patterns that resolve to the same filename family share the counter — uploads never overwrite each other.	Available placeholders: `{EAN}` (falls back to `{REF}` when the reference has no EAN), `{REF}` (catalog reference), `{INC}` (1-based capture counter, seeded from today's GS production so a re-capture on a different day starts back at 1). Always end with `.jpg`. Patterns that resolve to the same filename family share the counter — uploads never overwrite each other.	Champs disponibles : `{EAN}` (retombe sur `{REF}` quand la référence n'a pas d'EAN), `{REF}` (référence catalogue), `{INC}` (compteur de capture commençant à 1, initialisé depuis la production GS du jour pour qu'une nouvelle capture un autre jour reparte de 1). Terminez toujours par `.jpg`. Les patterns produisant la même famille de noms partagent le compteur — aucun upload n'écrase un autre.	Dostępne pola: `{EAN}` (przechodzi na `{REF}`, gdy referencja nie ma EAN), `{REF}` (referencja katalogowa), `{INC}` (licznik ujęć od 1, zaczerpnięty z dzisiejszej produkcji GS, aby ponowne ujęcie w inny dzień rozpoczynało się od 1). Zawsze zakończ `.jpg`. Wzorce dające tę samą rodzinę nazw współdzielą licznik — uploady się nie nadpisują.	Photo
+Capture behaviour	Capture behaviour	Mode de capture	Zachowanie aparatu	Photo
+Coming soon	Coming soon	Bientôt disponible	Wkrótce dostępne	Photo
+Features	Features	Fonctionnalités	Funkcje	Photo
+Filename patterns	Filename patterns	Nommage des fichiers	Wzorce nazw plików	Photo
+Focal length (35mm equivalent)	Focal length (35mm equivalent)	Focale (équivalent 35 mm)	Ogniskowa (ekwiwalent 35 mm)	Photo
+Lookup failed	Lookup failed	Recherche échouée	Wyszukiwanie nie powiodło się	Photo
+Measurement	Measurement	Mesure	Pomiar	Photo
+Remember last	Remember last	Mémoriser le dernier	Zapamiętaj ostatni	Photo
+Scan reference	Scan reference	Scanner une référence	Skanuj referencję	Photo
+Shutter	Shutter	Déclencheur	Migawka	Photo
+Tech-view captures now live on the reference detail screen (Scanner tab).	Tech-view captures now live on the reference detail screen (Scanner tab).	La prise de vues techniques se fait désormais depuis la fiche d'une référence (onglet Scanner).	Ujęcia techniczne wykonuje się teraz z poziomu strony referencji (zakładka Skaner).	Photo
+Turn OCR off on devices where Vision is slow or unreliable. Turn Measures off on devices without LiDAR to fall back to plain photo capture under the Measurement filename pattern.	Turn OCR off on devices where Vision is slow or unreliable. Turn Measures off on devices without LiDAR to fall back to plain photo capture under the Measurement filename pattern.	Désactivez l'OCR sur les appareils où Vision est lent ou imprécis. Désactivez Mesures sur les appareils sans LiDAR pour basculer en capture photo simple sous le pattern Measurement.	Wyłącz OCR na urządzeniach, gdzie Vision działa wolno lub niepewnie. Wyłącz Pomiary na urządzeniach bez LiDAR, aby przełączyć się na zwykłe zdjęcia pod wzorcem nazewnictwa Measurement.	Photo
+Cancel	Cancel	Annuler	Anuluj	OCR
+Care	Care	Entretien	Pielęgnacja	OCR
+Category	Category	Catégorie	Kategoria	OCR
+Choose label	Choose label	Choisir une étiquette	Wybierz etykietę	OCR
+Composition	Composition	Composition	Skład	OCR
+Delete	Delete	Supprimer	Usuń	OCR
+Detected text	Detected text	Texte détecté	Wykryty tekst	OCR
+Done	Done	Terminé	Gotowe	OCR
+New label	New label	Nouvelle étiquette	Nowa etykieta	OCR
+New pictogram label	New pictogram label	Nouveau libellé de pictogramme	Nowa etykieta piktogramu	OCR
+No text detected on this shot.	No text detected on this shot.	Aucun texte détecté sur cette photo.	Nie wykryto tekstu na tym zdjęciu.	OCR
+Notes	Notes	Notes	Notatki	OCR
+Origin	Origin	Provenance	Pochodzenie	OCR
+Reading…	Reading…	Lecture…	Wczytywanie…	OCR
+Restrictions	Restrictions	Restrictions	Ograniczenia	OCR
+Retake	Retake	Reprendre	Powtórz	OCR
+Save	Save	Enregistrer	Zapisz	OCR
+Standards	Standards	Normes	Normy	OCR
+Tap to categorise	Tap to categorise	Touchez pour catégoriser	Dotknij, aby skategoryzować	OCR
+Text	Text	Texte	Tekst	OCR
+Add a measurement	Add a measurement	Ajouter une mesure	Dodaj pomiar	Measures
+All measurements captured.	All measurements captured.	Toutes les mesures sont capturées.	Wszystkie pomiary wykonane.	Measures
+All measurements defined under this category will also be removed. This cannot be undone.	All measurements defined under this category will also be removed. This cannot be undone.	Toutes les mesures définies dans cette catégorie seront également supprimées. Cette action est irréversible.	Wszystkie pomiary z tej kategorii również zostaną usunięte. Tej operacji nie można cofnąć.	Measures
+Attach to a reference	Attach to a reference	Lier à une référence	Powiąż z referencją	Measures
+Attach to reference	Attach to reference	Lier à une référence	Powiąż z referencją	Measures
+Back	Back	Retour	Wstecz	Measures
+Capture frame	Capture frame	Capturer l'image	Wykonaj ujęcie	Measures
+Catalog not loaded	Catalog not loaded	Catalogue non chargé	Katalog nie został załadowany	Measures
+Category name	Category name	Nom de la catégorie	Nazwa kategorii	Measures
+Category name (e.g. Dress, Shirt, Game box)	Category name (e.g. Dress, Shirt, Game box)	Nom de la catégorie (ex. robe, chemise, boîte de jeu)	Nazwa kategorii (np. Sukienka, Koszula, Pudełko gry)	Measures
+Choose a measure category	Choose a measure category	Choisis une catégorie Mesure	Wybierz kategorię pomiarową	Measures
+Clear association	Clear association	Annuler l'association	Usuń powiązanie	Measures
+Code (optional, e.g. ERP / catalog code)	Code (optional, e.g. ERP / catalog code)	Code (optionnel, ex. code ERP / catalogue)	Kod (opcjonalny, np. ERP / katalog)	Measures
+Continue	Continue	Continuer	Kontynuuj	Measures
+Couldn't detect any object	Couldn't detect any object	Aucun objet détecté	Nie wykryto żadnego obiektu	Measures
+Delete category	Delete category	Supprimer la catégorie	Usuń kategorię	Measures
+Delete this category?	Delete this category?	Supprimer cette catégorie ?	Usunąć tę kategorię?	Measures
+Detecting…	Detecting…	Détection…	Wykrywanie…	Measures
+Disable Z guide	Disable Z guide	Désactiver le guide Z	Wyłącz prowadnicę Z	Measures
+Enable Z guide	Enable Z guide	Activer le guide Z	Włącz prowadnicę Z	Measures
+Filter by name	Filter by name	Filtrer par nom	Filtruj po nazwie	Measures
+Grand Shooting category	Grand Shooting category	Catégorie Grand Shooting	Kategoria Grand Shooting	Measures
+Grand Shooting link	Grand Shooting link	Lien Grand Shooting	Powiązanie Grand Shooting	Measures
+Identity	Identity	Identité	Tożsamość	Measures
+Lay the product flat on a clean surface and frame it in the camera.	Lay the product flat on a clean surface and frame it in the camera.	Pose le produit à plat sur une surface dégagée et cadre-le dans la caméra.	Połóż produkt płasko na czystej powierzchni i wykadruj go w aparacie.	Measures
+Link to a Grand Shooting category	Link to a Grand Shooting category	Lier à une catégorie Grand Shooting	Powiąż z kategorią Grand Shooting	Measures
+List the dimensions you want to capture. At the next step you'll place the points for each measurement on the test product — the number of points you place becomes the schema for this category.	List the dimensions you want to capture. At the next step you'll place the points for each measurement on the test product — the number of points you place becomes the schema for this category.	Liste les dimensions à capturer. À l'étape suivante, tu placeras les points de chaque mesure sur le produit test — le nombre de points placés devient le schéma de cette catégorie.	Wymień wymiary do uchwycenia. W następnym kroku umieść punkty dla każdego pomiaru na produkcie testowym — liczba punktów stanie się schematem tej kategorii.	Measures
+Look up	Look up	Rechercher	Wyszukaj	Measures
+Looking up…	Looking up…	Recherche…	Wyszukiwanie…	Measures
+Measure works only on devices with a LiDAR scanner — iPhone Pro / Pro Max and iPad Pro.	Measure works only on devices with a LiDAR scanner — iPhone Pro / Pro Max and iPad Pro.	L'onglet Mesures fonctionne uniquement sur les appareils équipés d'un scanner LiDAR — iPhone Pro / Pro Max et iPad Pro.	Pomiar działa tylko na urządzeniach z LiDAR — iPhone Pro / Pro Max oraz iPad Pro.	Measures
+Measurement name (e.g. sleeve)	Measurement name (e.g. sleeve)	Nom de la mesure (ex. manche)	Nazwa pomiaru (np. rękaw)	Measures
+Measurements	Measurements	Mesures	Pomiary	Measures
+Measures need LiDAR	Measures need LiDAR	Les mesures nécessitent un LiDAR	Pomiary wymagają LiDAR	Measures
+Name	Name	Nom	Nazwa	Measures
+Names listed in capture order. At capture time you'll place 2 or more points per measurement.	Names listed in capture order. At capture time you'll place 2 or more points per measurement.	Listées dans l'ordre de capture. Au moment de la capture, tu placeras 2 points ou plus par mesure.	Nazwy w kolejności przechwytywania. Podczas pomiaru umieść 2 lub więcej punktów dla każdego.	Measures
+New category	New category	Nouvelle catégorie	Nowa kategoria	Measures
+New measurement (e.g. sleeve)	New measurement (e.g. sleeve)	Nouvelle mesure (ex. manche)	Nowy pomiar (np. rękaw)	Measures
+No categories yet	No categories yet	Aucune catégorie pour l'instant	Brak kategorii	Measures
+No measure category yet	No measure category yet	Aucune catégorie Mesure	Brak kategorii pomiarowych	Measures
+No object was found in the frame. Move closer or check the lighting.	No object was found in the frame. Move closer or check the lighting.	Aucun objet n'a été trouvé dans le cadre. Rapproche-toi ou vérifie l'éclairage.	Nie znaleziono obiektu w kadrze. Podejdź bliżej lub sprawdź oświetlenie.	Measures
+Not in catalog — will be cleared on next refresh	Not in catalog — will be cleared on next refresh	Absente du catalogue — sera effacée au prochain rafraîchissement	Nie ma w katalogu — zostanie wyczyszczone przy następnym odświeżeniu	Measures
+Open the Measures tab and create a category that matches this product first.	Open the Measures tab and create a category that matches this product first.	Ouvre l'onglet Mesures et crée d'abord une catégorie qui correspond à ce produit.	Otwórz zakładkę Pomiary i najpierw utwórz kategorię pasującą do tego produktu.	Measures
+Optional. Linking this category to a Grand Shooting one lets the app cross-check the link at startup.	Optional. Linking this category to a Grand Shooting one lets the app cross-check the link at startup.	Optionnel. Lier cette catégorie à une catégorie Grand Shooting permet à l'app de vérifier le lien au démarrage.	Opcjonalnie. Powiązanie tej kategorii z kategorią Grand Shooting pozwala aplikacji sprawdzać powiązanie przy starcie.	Measures
+Optional. Links this category to a Grand Shooting catalog category so the app can cross-check the link at startup.	Optional. Links this category to a Grand Shooting catalog category so the app can cross-check the link at startup.	Optionnel. Permet de relier cette catégorie à une catégorie du catalogue Grand Shooting pour vérifier le lien au démarrage.	Opcjonalnie. Łączy tę kategorię z kategorią katalogu Grand Shooting, aby aplikacja mogła sprawdzić powiązanie przy starcie.	Measures
+Or enter ref / EAN manually	Or enter ref / EAN manually	Ou saisis la ref ou l'EAN manuellement	Lub wpisz ref / EAN ręcznie	Measures
+Pick the Grand Shooting catalog category these measurements belong to. The link is saved on the local category for future captures.	Pick the Grand Shooting catalog category these measurements belong to. The link is saved on the local category for future captures.	Choisis la catégorie du catalogue Grand Shooting à laquelle ces mesures appartiennent. Le lien est sauvegardé sur la catégorie locale pour les prochaines captures.	Wybierz kategorię katalogu Grand Shooting, do której należą te pomiary. Powiązanie zostanie zapisane w lokalnej kategorii do przyszłych pomiarów.	Measures
+Reference	Reference	Référence	Referencja	Measures
+Reference is missing a reference_id.	Reference is missing a reference_id.	La référence n'a pas de reference_id.	Referencja nie ma pola reference_id.	Measures
+Reference photo	Reference photo	Photo de référence	Zdjęcie referencyjne	Measures
+Save measurements	Save measurements	Enregistrer les mesures	Zapisz pomiary	Measures
+Saving…	Saving…	Enregistrement…	Zapisywanie…	Measures
+Scan or pick a reference to save these measurements as `extra.measures` on Grand Shooting.	Scan or pick a reference to save these measurements as `extra.measures` on Grand Shooting.	Scanne ou choisis une référence pour enregistrer ces mesures dans `extra.measures` sur Grand Shooting.	Zeskanuj lub wybierz referencję, aby zapisać te pomiary jako `extra.measures` w Grand Shooting.	Measures
+Search by name or code	Search by name or code	Rechercher par nom ou code	Szukaj po nazwie lub kodzie	Measures
+Segments are reprojected onto the original photo from the LiDAR world coordinates captured during placement.	Segments are reprojected onto the original photo from the LiDAR world coordinates captured during placement.	Les segments sont reprojetés sur la photo d'origine à partir des coordonnées monde LiDAR capturées au moment du pointage.	Odcinki są rzutowane na oryginalne zdjęcie z współrzędnych LiDAR zebranych podczas umieszczania punktów.	Measures
+Start a measurement to capture an object. The first capture creates a category; subsequent ones are recognised automatically.	Start a measurement to capture an object. The first capture creates a category; subsequent ones are recognised automatically.	Lance une mesure pour capturer un objet. La première capture crée une catégorie ; les suivantes sont reconnues automatiquement.	Rozpocznij pomiar, aby uchwycić obiekt. Pierwsze ujęcie tworzy kategorię, kolejne są rozpoznawane automatycznie.	Measures
+The Grand Shooting catalog hasn't been pulled yet. Open Settings → Workflow → Refresh catalog.	The Grand Shooting catalog hasn't been pulled yet. Open Settings → Workflow → Refresh catalog.	Le catalogue Grand Shooting n'a pas encore été récupéré. Ouvre Réglages → Workflow → Rafraîchir le catalogue.	Katalog Grand Shooting nie został jeszcze pobrany. Otwórz Ustawienia → Workflow → Odśwież katalog.	Measures
+The captured photo will become the category's illustration after you've taken the test measurements.	The captured photo will become the category's illustration after you've taken the test measurements.	La photo capturée deviendra l'illustration de la catégorie après que tu auras pris les mesures du produit test.	Wykonane zdjęcie stanie się ilustracją kategorii po wykonaniu pomiarów testowych.	Measures
+The code lets you link this category to your internal coding system. It's free-form and optional.	The code lets you link this category to your internal coding system. It's free-form and optional.	Le code permet de relier cette catégorie à ton système de codification interne. Libre et optionnel.	Kod pozwala powiązać tę kategorię z wewnętrznym systemem kodowania. Pole jest dowolne i opcjonalne.	Measures
+Undo	Undo	Annuler	Cofnij	Measures
+Validate	Validate	Valider	Zatwierdź	Measures
+Visual reference used to suggest this category on future captures.	Visual reference used to suggest this category on future captures.	Référence visuelle utilisée pour suggérer cette catégorie lors des prochaines captures.	Wizualna referencja używana do sugerowania tej kategorii przy kolejnych pomiarach.	Measures
+Z	Z	Z	Z	Measures
+nil	nil	nil	nil	Measures
+References you scan or open from search will appear here.	References you scan or open from search will appear here.	Les références scannées ou ouvertes depuis la recherche apparaîtront ici.	Tutaj pojawią się referencje skanowane lub otwierane z wyszukiwarki.	History
+Account	Account	Compte	Konto	Settings
+Active zone	Active zone	Zone active	Aktywna strefa	Settings
+Backend	Backend	Backend	Backend	Settings
+Batch types	Batch types	Types de batch	Typy partii	Settings
+Default status applied to newly-registered stock items. Refresh pulls fresh zones, categories, and batch types from Grand Shooting.	Default status applied to newly-registered stock items. Refresh pulls fresh zones, categories, and batch types from Grand Shooting.	Statut appliqué par défaut aux nouveaux articles. Actualiser récupère les zones, catégories et types de lots depuis Grand Shooting.	Status nadawany domyślnie nowo rejestrowanym pozycjom. Odświeżanie pobiera strefy, kategorie i typy partii z Grand Shooting.	Settings
+Default status on register	Default status on register	Statut par défaut à l'enregistrement	Domyślny status przy rejestracji	Settings
+Enabled statuses	Enabled statuses	Statuts actifs	Włączone statusy	Settings
+Environment	Environment	Environnement	Środowisko	Settings
+Grand Shooting	Grand Shooting	Grand Shooting	Grand Shooting	Settings
+Grand Shooting API (fallback)	Grand Shooting API (fallback)	API Grand Shooting (secours)	Grand Shooting API (zapasowe)	Settings
+Language	Language	Langue	Język	Settings
+Loading shooting methods…	Loading shooting methods…	Chargement des méthodes de shooting…	Wczytywanie metod zdjęciowych…	Settings
+Mobile backend	Mobile backend	Backend mobile	Backend mobilny	Settings
+No batch types known yet. They populate from your account's batches on the next refresh.	No batch types known yet. They populate from your account's batches on the next refresh.	Aucun type de lot connu pour l'instant. Ils apparaîtront à la prochaine actualisation depuis vos lots.	Brak znanych typów partii. Pojawią się po kolejnym odświeżeniu z partii konta.	Settings
+None	None	Aucune	Brak	Settings
+Only enabled statuses appear in the change-status picker. The default-on-register status is always enabled.	Only enabled statuses appear in the change-status picker. The default-on-register status is always enabled.	Seuls les statuts activés apparaissent dans le sélecteur. Le statut par défaut à l'enregistrement reste toujours activé.	W selektorze zmiany statusu pojawiają się tylko statusy włączone. Status domyślny przy rejestracji zawsze pozostaje włączony.	Settings
+Picks the Grand Shooting shooting method the technical-view uploads are scoped to. The Photo tab is disabled until a method is selected.	Picks the Grand Shooting shooting method the technical-view uploads are scoped to. The Photo tab is disabled until a method is selected.	Sélectionne la méthode de shooting Grand Shooting sur laquelle les vues techniques seront chargées. L'onglet Photo est désactivé tant qu'aucune méthode n'est choisie.	Wybiera metodę zdjęciową Grand Shooting, do której są przypisywane ujęcia techniczne. Zakładka Zdjęcie jest wyłączona, dopóki nie wybierzesz metody.	Settings
+Profile	Profile	Profil	Profil	Settings
+Refresh catalog	Refresh catalog	Rafraîchir le catalogue	Odśwież katalog	Settings
+Refresh list	Refresh list	Rafraîchir la liste	Odśwież listę	Settings
+Restart the app for a language change to take full effect.	Restart the app for a language change to take full effect.	Redémarrez l'application pour appliquer pleinement le changement de langue.	Uruchom aplikację ponownie, aby zmiana języka zadziałała w pełni.	Settings
+Saved	Saved	Enregistré	Zapisano	Settings
+Scan lookup	Scan lookup	Recherche par scan	Wyszukiwanie skanem	Settings
+Scanner	Scanner	Scanner	Skaner	Settings
+Selects which deployed Lambda backend the app talks to.	Selects which deployed Lambda backend the app talks to.	Choisit le backend Lambda déployé que l'application interroge.	Wybiera, z którym wdrożonym backendem Lambda komunikuje się aplikacja.	Settings
+Shard	Shard	Shard	Shard	Settings
+Shooting method	Shooting method	Méthode de shooting	Metoda zdjęciowa	Settings
+Sign out	Sign out	Se déconnecter	Wyloguj się	Settings
+Studio area you are currently working in. Newly-created batches default to this zone.	Studio area you are currently working in. Newly-created batches default to this zone.	Espace studio où vous travaillez actuellement. Les nouveaux lots y sont rattachés par défaut.	Strefa studia, w której obecnie pracujesz. Nowo utworzone partie domyślnie trafiają do tej strefy.	Settings
+Technical views	Technical views	Vues techniques	Ujęcia techniczne	Settings
+Unit	Unit	Unité	Jednostka	Settings
+Unit used when capturing dimensions in the Measures tab and storing them on the reference.	Unit used when capturing dimensions in the Measures tab and storing them on the reference.	Unité utilisée pour les dimensions capturées dans l'onglet Mesures et enregistrées sur la référence.	Jednostka używana podczas pomiarów w zakładce Pomiary i zapisywana w referencji.	Settings
+Used as a Bearer token when no OAuth session is active. Stored in the Keychain.	Used as a Bearer token when no OAuth session is active. Stored in the Keychain.	Utilisé comme jeton Bearer en l'absence de session OAuth. Stocké dans le trousseau.	Używany jako token Bearer, gdy brak aktywnej sesji OAuth. Przechowywany w Pęku kluczy.	Settings
+Values offered when creating or editing a batch. Seeded from your existing batches; you can remove unwanted entries here.	Values offered when creating or editing a batch. Seeded from your existing batches; you can remove unwanted entries here.	Valeurs proposées à la création ou à l'édition d'un lot. Initialisées depuis vos lots existants — supprimez ici celles qui ne servent pas.	Wartości proponowane przy tworzeniu lub edycji partii. Pochodzą z istniejących partii — możesz tu usunąć niepotrzebne pozycje.	Settings
+Which catalog attribute the scanned value is looked up against. Use `ean` unless your products are barcoded by their `ref` instead.	Which catalog attribute the scanned value is looked up against. Use `ean` unless your products are barcoded by their `ref` instead.	Attribut du catalogue interrogé pour chaque scan. Utilisez `ean` sauf si vos produits sont étiquetés par leur `ref`.	Atrybut katalogu, względem którego zeskanowana wartość jest wyszukiwana. Użyj `ean`, chyba że produkty są oznaczane kodem `ref`.	Settings
+Workflow	Workflow	Workflow	Workflow	Settings
+#%@	#%@	#%@	#%@	Misc
+#%@ · %@	#%1$@ · %2$@	#%1$@ · %2$@	#%1$@ · %2$@	Misc
+%@	%@	%@	%@	Misc
+%@ already has %@ stock item(s) in this batch.	%1$@ already has %2$@ stock item(s) in this batch.	%@ possède déjà %@ article(s) dans ce lot.	%@ ma już %@ pozycji w tej partii.	Misc
+%@ measurements	%@ measurements	%@ mesures	%@ pomiarów	Misc
+%@ mm	%@ mm	%@ mm	%@ mm	Misc
+%@ point(s)	%@ point(s)	%@ point(s)	%@ punktów	Misc
+%@ view(s) expected	%@ view(s) expected	%@ vue(s) attendue(s)	Oczekiwane ujęć: %@	Misc
+%@ — %lld point(s)	%@ — %lld point(s)	%@ — %lld point(s)	%@ — %lld punktów	Misc
+%@ — point %lld of %lld	%@ — point %lld of %lld	%@ — point %lld sur %lld	%@ — punkt %lld z %lld	Misc
+%@%%	%@%%	%@ %%	%@ %%	Misc
+%@×	%@×	%@×	%@×	Misc
+%lld measurements	%lld measurements	%lld mesures	%lld pomiarów	Misc
+%lld object(s) kept	%lld object(s) kept	%lld objet(s) conservé(s)	Zachowano: %lld	Misc
+%lld point(s)	%lld point(s)	%lld point(s)	%lld punktów	Misc
+%lld points — tap the image to add more, drag a point to adjust, or move to the next measurement.	%lld points — tap the image to add more, drag a point to adjust, or move to the next measurement.	%lld points — touche l'image pour en ajouter, glisse un point pour l'ajuster, ou passe à la mesure suivante.	%lld punktów — dotknij zdjęcia, aby dodać kolejne, przeciągnij punkt, aby go przesunąć, lub przejdź do następnego pomiaru.	Misc
+%lld view(s) expected	%lld view(s) expected	%lld vue(s) attendue(s)	Oczekiwane: %lld ujęć	Misc
+Add another measurement	Add another measurement	Ajouter une autre mesure	Dodaj kolejny pomiar	Misc
+Added · %@	Added · %@	Ajouté · %@	Dodano · %@	Misc
+All measurements captured. Validate to review.	All measurements captured. Validate to review.	Toutes les mesures sont capturées. Valide pour vérifier.	Wszystkie pomiary wykonane. Zatwierdź, aby zobaczyć podsumowanie.	Misc
+Backend returned %lld. %@	Backend returned %lld. %@	Le backend a répondu %lld. %@	Backend zwrócił %lld. %@	Misc
+Capture	Capture	Capture	Wykonaj	Misc
+Categories	Categories	Catégories	Kategorie	Misc
+Category #%@	Category #%@	Catégorie #%@	Kategoria #%@	Misc
+Category #%lld	Category #%lld	Catégorie n°%lld	Kategoria #%lld	Misc
+Centimeters	Centimeters	Centimètres	Centymetry	Misc
+Choose a category	Choose a category	Choisir une catégorie	Wybierz kategorię	Misc
+Distance = sum of the segments between successive points. Minimum 2 points = 1 segment.	Distance = sum of the segments between successive points. Minimum 2 points = 1 segment.	Distance = somme des segments entre les points successifs. Minimum 2 points = 1 segment.	Odległość = suma odcinków między kolejnymi punktami. Minimum 2 punkty = 1 odcinek.	Misc
+Distant — likely different	Distant — likely different	Éloignée — probablement différente	Odległe — prawdopodobnie inne	Misc
+Désactive l'OCR sur les devices où Vision est lent ou imprécis. Désactive Mesures sur les devices sans LiDAR pour basculer en capture photo simple sous le pattern Measurement.	Désactive l'OCR sur les devices où Vision est lent ou imprécis. Désactive Mesures sur les devices sans LiDAR pour basculer en capture photo simple sous le pattern Measurement.			Misc
+EAN %@	EAN %@	EAN %@	EAN %@	Misc
+Envoi…	Envoi…			Misc
+Fonctionnalités	Fonctionnalités			Misc
+If none of the suggestions fit, define a new category using this capture as the example.	If none of the suggestions fit, define a new category using this capture as the example.	Si aucune suggestion ne correspond, définis une nouvelle catégorie à partir de cette capture.	Jeśli żadna z propozycji nie pasuje, utwórz nową kategorię, używając tego ujęcia jako wzoru.	Misc
+Ignore	Ignore	Ignorer	Pomiń	Misc
+Inches	Inches	Pouces	Cale	Misc
+Keep	Keep	Garder	Zachowaj	Misc
+La prise de vues techniques se fait désormais depuis la fiche d'une référence (onglet Scanner).	La prise de vues techniques se fait désormais depuis la fiche d'une référence (onglet Scanner).			Misc
+LiDAR	LiDAR	LiDAR	LiDAR	Misc
+List the dimensions you want to capture for this category. At capture time you'll place 2 or more points per measurement; the distance is the sum of the segments.	List the dimensions you want to capture for this category. At capture time you'll place 2 or more points per measurement; the distance is the sum of the segments.	Liste les dimensions à capturer pour cette catégorie. Au moment de la capture, tu placeras 2 points ou plus par mesure ; la distance est la somme des segments.	Wymień wymiary, które chcesz mierzyć w tej kategorii. Podczas pomiaru umieść 2 lub więcej punktów dla każdego — odległość to suma odcinków.	Misc
+Live distance: %@	Live distance: %@	Distance en cours : %@	Aktualna odległość: %@	Misc
+Looking for similar objects…	Looking for similar objects…	Recherche d'objets similaires…	Wyszukiwanie podobnych obiektów…	Misc
+Measurements need a LiDAR device.	Measurements need a LiDAR device.	Les mesures nécessitent un appareil LiDAR.	Pomiary wymagają urządzenia z LiDAR.	Misc
+Multiple objects detected	Multiple objects detected	Plusieurs objets détectés	Wykryto wiele obiektów	Misc
+Next measurement	Next measurement	Mesure suivante	Następny pomiar	Misc
+No reference for %@.	No reference for %@.	Aucune référence pour %@.	Brak referencji dla %@.	Misc
+No reference image yet	No reference image yet	Pas encore d'image de référence	Brak zdjęcia referencyjnego	Misc
+OCR confidence: %@%%	OCR confidence: %@%%	Confiance OCR : %@ %%	Pewność OCR: %@ %%	Misc
+Optional. Linking this category to a Grand Shooting one lets the app cross-check the link at startup and clear it if the GS category disappears.	Optional. Linking this category to a Grand Shooting one lets the app cross-check the link at startup and clear it if the GS category disappears.	Optionnel. Lier cette catégorie à une catégorie Grand Shooting permet à l'app de vérifier le lien au démarrage et de le supprimer si la catégorie GS disparaît.	Opcjonalnie. Powiązanie tej kategorii z kategorią Grand Shooting pozwala aplikacji sprawdzać powiązanie przy starcie i czyścić je, gdy kategoria GS zniknie.	Misc
+Password	Password	Mot de passe	Hasło	Misc
+Pick a shooting method in Settings → Technical views to enable technical-view uploads.	Pick a shooting method in Settings → Technical views to enable technical-view uploads.	Choisis une méthode de shooting dans Réglages → Vues techniques pour activer le chargement des vues techniques.	Wybierz metodę zdjęciową w Ustawienia → Ujęcia techniczne, aby umożliwić przesyłanie zdjęć.	Misc
+Plausible match	Plausible match	Correspondance probable	Możliwe dopasowanie	Misc
+Point %@ — hold steady, or tap anywhere to lock.	Point %@ — hold steady, or tap anywhere to lock.	Point %@ — maintenez l'appareil immobile, ou touchez l'écran pour verrouiller.	Punkt %@ — trzymaj nieruchomo lub dotknij ekranu, aby zablokować.	Misc
+Point %lld of %lld — hold steady, or tap anywhere to lock.	Point %lld of %lld — hold steady, or tap anywhere to lock.	Point %1$lld sur %2$lld — tiens immobile, ou touche l'écran pour figer.	Punkt %lld z %lld — trzymaj nieruchomo lub dotknij ekranu, aby zablokować.	Misc
+Point %lld of %lld — hold the device still on the target.	Point %lld of %lld — hold the device still on the target.	Point %1$lld sur %2$lld — tiens l'appareil immobile sur la cible.	Punkt %lld z %lld — trzymaj urządzenie nieruchomo na celu.	Misc
+Point %lld — hold steady, or tap anywhere to lock.	Point %lld — hold steady, or tap anywhere to lock.	Point %lld — tiens immobile, ou touche l'écran pour figer.	Punkt %lld — trzymaj nieruchomo lub dotknij ekranu, aby zablokować.	Misc
+Points	Points	Points	Punkty	Misc
+Rank %@	Rank %@	Position %@	Pozycja %@	Misc
+Rank %lld	Rank %lld	Rang %lld	Pozycja %lld	Misc
+Reference (ref)	Reference (ref)	Référence (ref)	Referencja (ref)	Misc
+Registering %@…	Registering %@…	Enregistrement de %@…	Rejestrowanie %@…	Misc
+Registering to %@	Registering to %@	Enregistrement dans %@	Rejestrowanie w %@	Misc
+Remove last measurement	Remove last measurement	Supprimer la dernière mesure	Usuń ostatni pomiar	Misc
+Save category	Save category	Enregistrer la catégorie	Zapisz kategorię	Misc
+Saved to %@	Saved to %@	Enregistré sur %@	Zapisano do %@	Misc
+Shooting method not set	Shooting method not set	Méthode de shooting non configurée	Nie wybrano metody zdjęciowej	Misc
+Sign in	Sign in	Se connecter	Zaloguj się	Misc
+Sign in with dev credentials	Sign in with dev credentials	Se connecter en mode dev	Zaloguj się danymi dev	Misc
+Sign-in failed: %@	Sign-in failed: %@	Échec de connexion : %@	Logowanie nie powiodło się: %@	Misc
+Sorted by visual similarity. The closer to the top, the better the match.	Sorted by visual similarity. The closer to the top, the better the match.	Triées par similarité visuelle. Plus en haut, meilleure est la correspondance.	Posortowane według podobieństwa wizualnego. Im wyżej, tym lepsze dopasowanie.	Misc
+Stock items (%@)	Stock items (%@)	Articles (%@)	Pozycje magazynowe (%@)	Misc
+Strong match	Strong match	Forte correspondance	Mocne dopasowanie	Misc
+System	System	Système	Systemowy	Misc
+Tap any object you don't want to measure to exclude it. Only the included objects are used for the measurement.	Tap any object you don't want to measure to exclude it. Only the included objects are used for the measurement.	Touche un objet pour l'exclure de la mesure. Seuls les objets inclus sont pris en compte.	Dotknij obiektu, którego nie chcesz mierzyć, aby go wykluczyć. Tylko dołączone obiekty są używane do pomiaru.	Misc
+Tap the image to place points. A measurement needs at least 2.	Tap the image to place points. A measurement needs at least 2.	Touche l'image pour placer des points. Il faut au moins 2 points par mesure.	Dotknij zdjęcia, aby umieścić punkty. Pomiar wymaga co najmniej 2.	Misc
+This image becomes the visual reference for this category. Future captures matching it will suggest this category automatically.	This image becomes the visual reference for this category. Future captures matching it will suggest this category automatically.	Cette image devient la référence visuelle pour cette catégorie. Les prochaines captures qui lui ressemblent te proposeront ce nom automatiquement.	To zdjęcie staje się wizualną referencją kategorii. Przyszłe ujęcia podobne do niego będą automatycznie sugerować tę kategorię.	Misc
+Username	Username	Identifiant	Nazwa użytkownika	Misc
+Uses %@ (%@ mm) × %@.	Uses %1$@ (%2$@ mm) × %3$@.	Utilise %@ (%@ mm) × %@.	Używa %@ (%@ mm) × %@.	Misc
+Will save these measurements as `extra.measures` on %@.	Will save these measurements as `extra.measures` on %@.	Ces mesures seront enregistrées dans `extra.measures` sur %@.	Zapisze te pomiary jako `extra.measures` w %@.	Misc
+· %@	· %@	· %@	· %@	Misc
+· %@ points	· %@ points	· %@ points	· %@ punktów	Misc
+· EAN %@	· EAN %@	· EAN %@	· EAN %@	Misc
+
+# Total entries: 295
+# Entries with all 3 locales: 291
+# Missing fr (4): Désactive l'OCR sur les devices où Vision est lent ou imprécis. Désactive Mesures sur les devices sans LiDAR pour basculer en capture photo simple sous le pattern Measurement., Envoi…, Fonctionnalités, La prise de vues techniques se fait désormais depuis la fiche d'une référence (onglet Scanner).
+# Missing pl (4): Désactive l'OCR sur les devices où Vision est lent ou imprécis. Désactive Mesures sur les devices sans LiDAR pour basculer en capture photo simple sous le pattern Measurement., Envoi…, Fonctionnalités, La prise de vues techniques se fait désormais depuis la fiche d'une référence (onglet Scanner).
+# Note: no `.one`/`.other` rows emitted — the iOS catalog
+# uses inline `point(s)` pseudo-plurals, not Apple variations.
+# Every key from the catalog is included (no exclusion of
+# `extractionState: stale` since Xcode's auto-extractor is
+# unreliable — many flagged-stale entries are still live).
