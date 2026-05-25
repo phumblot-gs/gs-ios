@@ -3234,7 +3234,8 @@
             "value": "Opcjonalnie. Dotknij różdżki, aby wygenerować losowy EAN-13 do wydrukowania i naklejenia na pudełko."
           }
         }
-      }
+      },
+      "extractionState": "stale"
     },
     "Or enter ref / EAN manually": {
       "localizations": {
@@ -5298,6 +5299,74 @@
           "stringUnit": {
             "state": "translated",
             "value": "Strefa"
+          }
+        }
+      }
+    },
+    "Scan a code": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scanner un code"
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skanuj kod"
+          }
+        }
+      }
+    },
+    "Scan code": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scanner un code"
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skanuj kod"
+          }
+        }
+      }
+    },
+    "Aim at a barcode": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Visez un code-barres"
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wyceluj w kod kreskowy"
+          }
+        }
+      }
+    },
+    "Optional. Tap the scanner to read an existing barcode, or the wand to generate a random EAN-13 you can print and stick on the box.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Optionnel. Touchez le scanner pour lire un code-barres existant, ou la baguette pour générer un EAN-13 aléatoire à imprimer et coller sur la boîte."
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opcjonalnie. Dotknij skanera, aby odczytać istniejący kod, lub różdżki, aby wygenerować losowy EAN-13 do wydrukowania i naklejenia na pudełko."
           }
         }
       }

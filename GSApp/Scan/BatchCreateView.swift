@@ -1,4 +1,5 @@
 import SwiftUI
+import GSScanner
 import GSAPIClient
 import GSCore
 
@@ -14,6 +15,7 @@ struct BatchCreateView: View {
     @State private var zone: String?
     @State private var isSaving = false
     @State private var errorMessage: String?
+    @State private var showCodeScanner = false
 
     @Environment(\.dismiss) private var dismiss
 
@@ -30,22 +32,30 @@ struct BatchCreateView: View {
                     TextField("Label", text: $smalltext)
                 }
                 Section {
-                    HStack {
+                    HStack(spacing: 12) {
                         TextField("Code (barcode)", text: $code)
                             .autocorrectionDisabled()
                             .textInputAutocapitalization(.never)
                             .keyboardType(.numbersAndPunctuation)
                         Button {
+                            showCodeScanner = true
+                        } label: {
+                            Image(systemName: "barcode.viewfinder")
+                        }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel("Scan a code")
+                        Button {
                             code = generateBarcode()
                         } label: {
                             Image(systemName: "wand.and.stars")
                         }
+                        .buttonStyle(.borderless)
                         .accessibilityLabel("Generate random code")
                     }
                 } header: {
                     Text("Code")
                 } footer: {
-                    Text("Optional. Tap the wand to generate a random EAN-13 you can print and stick on the box.")
+                    Text("Optional. Tap the scanner to read an existing barcode, or the wand to generate a random EAN-13 you can print and stick on the box.")
                 }
                 Section("Type") {
                     BatchTypePicker(selection: $type, settings: settings)
@@ -88,9 +98,16 @@ struct BatchCreateView: View {
                     }
                 }
             }
+            .sheet(isPresented: $showCodeScanner) {
+                BatchCodeScannerSheet { scanned in
+                    code = scanned
+                    showCodeScanner = false
+                }
+            }
         }
     }
 
+    @MainActor
     private func save() async {
         errorMessage = nil
         isSaving = true
@@ -111,6 +128,45 @@ struct BatchCreateView: View {
             dismiss()
         } catch {
             errorMessage = error.localizedDescription
+        }
+    }
+}
+
+/// Modal barcode reader used by `BatchCreateView` to fill the
+/// "Code" field from a physical barcode. Unlike `BatchScanView`
+/// it doesn't try to resolve the code against an existing batch
+/// — we're creating a new one, the code is just text to store.
+private struct BatchCodeScannerSheet: View {
+    let onScanned: @MainActor (String) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var lastScanned: String?
+
+    var body: some View {
+        NavigationStack {
+            ZStack(alignment: .bottom) {
+                LiveBarcodeScannerView(resetDelaySeconds: 0.6) { code in
+                    guard lastScanned != code.payload else { return }
+                    lastScanned = code.payload
+                    onScanned(code.payload)
+                }
+                .ignoresSafeArea()
+
+                Text("Aim at a barcode")
+                    .font(.headline)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(.black.opacity(0.6), in: Capsule())
+                    .padding(.bottom, 40)
+            }
+            .navigationTitle("Scan code")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Cancel") { dismiss() }
+                }
+            }
         }
     }
 }
