@@ -234,10 +234,14 @@ struct BatchBulkStatusFlow: View {
             lastScan = .notInBatch(code.payload)
         case 1:
             let item = matchesInBatch[0]
-            feedback.didFindReference()
             if item.status == targetStatus {
+                // The reference IS in the batch but the action
+                // would be a no-op — warning cue, not a full
+                // success ding.
+                feedback.didFailLookup(reason: .notFound)
                 lastScan = .sameStatus(reference, item)
             } else {
+                feedback.didFindReference()
                 lastScan = .matchedSingle(reference, item)
             }
         default:

@@ -348,6 +348,7 @@ private struct BatchContentsEANScanner: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var lastScanned: String?
+    @State private var feedback = ScannerFeedback()
 
     var body: some View {
         NavigationStack {
@@ -355,6 +356,11 @@ private struct BatchContentsEANScanner: View {
                 LiveBarcodeScannerView(resetDelaySeconds: 0.6) { code in
                     guard lastScanned != code.payload else { return }
                     lastScanned = code.payload
+                    // Fill-the-text-field scanner: every readable
+                    // code is a success at this layer (filtering
+                    // happens later via the actual /stock request).
+                    feedback.didDetectCode()
+                    feedback.didFindReference()
                     onScanned(code.payload)
                 }
                 .ignoresSafeArea()

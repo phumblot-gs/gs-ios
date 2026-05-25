@@ -141,6 +141,7 @@ private struct BatchCodeScannerSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var lastScanned: String?
+    @State private var feedback = ScannerFeedback()
 
     var body: some View {
         NavigationStack {
@@ -148,6 +149,11 @@ private struct BatchCodeScannerSheet: View {
                 LiveBarcodeScannerView(resetDelaySeconds: 0.6) { code in
                     guard lastScanned != code.payload else { return }
                     lastScanned = code.payload
+                    // Fill-the-text-field scanners: every readable
+                    // code is a success, so a confirmation cue is
+                    // appropriate (no lookup to fail on).
+                    feedback.didDetectCode()
+                    feedback.didFindReference()
                     onScanned(code.payload)
                 }
                 .ignoresSafeArea()
