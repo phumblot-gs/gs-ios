@@ -50,33 +50,15 @@ struct ReferenceDetailView: View {
     /// by how many shots the user takes in one sitting.
     @State private var localCapturePreviews: [String: Data] = [:]
 
-    /// The thumbnail currently presented in full-screen zoom. Can
-    /// be either a GS-backed `Picture` row or a "ghost" preview
-    /// from a just-uploaded shot whose `Picture` row hasn't yet
-    /// surfaced. The `fullScreenCover` binding clears it to nil
+    /// Carousel currently presented full-screen. Built when the
+    /// user taps a thumbnail — captures the whole bucket (Measures
+    /// / Labels / Tech views) so the user can swipe between
+    /// siblings. The `fullScreenCover` binding clears it to nil
     /// on dismiss.
-    @State private var zoomTarget: ZoomTarget?
+    @State private var zoomPresentation: ZoomPresentation?
     /// Namespace shared by every thumbnail and the zoom destination
     /// so SwiftUI can run a matched-geometry zoom transition.
     @Namespace private var pictureZoomNamespace
-
-    /// Either a real GS Picture (with optional cached local
-    /// bytes as fallback) or a ghost preview that exists only
-    /// locally because GS hasn't yet registered it.
-    enum ZoomTarget: Identifiable, Hashable {
-        case picture(Picture, localData: Data?)
-        case ghost(filename: String, jpegData: Data)
-
-        /// Stable ID used both for `Identifiable` and as the
-        /// `matchedTransitionSource` key on the originating
-        /// thumbnail.
-        var id: String {
-            switch self {
-            case .picture(let p, _): return "picture-\(p.id)"
-            case .ghost(let filename, _): return "ghost-\(filename)"
-            }
-        }
-    }
     /// Inline error surfaced by a user-triggered action that
     /// failed (currently only the status change). Different
     /// channel from the on-load status banners so we don't
@@ -268,21 +250,14 @@ struct ReferenceDetailView: View {
         .sheet(isPresented: $showMetadataEditor) {
             metadataEditorSheet
         }
-        .fullScreenCover(item: $zoomTarget) { target in
-            let url: URL? = {
-                if case .picture(let p, _) = target { return p.thumbnailURL }
-                return nil
-            }()
-            let data: Data? = {
-                switch target {
-                case .picture(_, let d): return d
-                case .ghost(_, let d): return d
-                }
-            }()
-            PictureZoomView(imageURL: url, localData: data) {
-                zoomTarget = nil
+        .fullScreenCover(item: $zoomPresentation) { presentation in
+            PictureZoomView(
+                items: presentation.items,
+                startIndex: presentation.startIndex
+            ) {
+                zoomPresentation = nil
             }
-            .navigationTransition(.zoom(sourceID: target.id, in: pictureZoomNamespace))
+            .navigationTransition(.zoom(sourceID: presentation.id, in: pictureZoomNamespace))
         }
     }
 
@@ -479,9 +454,16 @@ struct ReferenceDetailView: View {
                     }
                 }
                 if let illustration = latestMeasurementPicture {
-                    measurementIllustrationThumb(illustration)
+                    measurementIllustrationThumb(illustration) {
+                        // Measures section has at most one thumbnail.
+                        let items = buildZoomItems(ghosts: [], pictures: [illustration])
+                        zoomPresentation = ZoomPresentation(items: items, startIndex: 0)
+                    }
                 } else if let pending = pendingMeasurementPreview {
-                    measurementIllustrationGhost(pending.filename, pending.data)
+                    measurementIllustrationGhost(pending.filename, pending.data) {
+                        let items = buildZoomItems(ghosts: [pending], pictures: [])
+                        zoomPresentation = ZoomPresentation(items: items, startIndex: 0)
+                    }
                 }
                 Button {
                     showMeasureFlow = true
@@ -538,11 +520,8 @@ struct ReferenceDetailView: View {
     }
 
     @ViewBuilder
-    private func measurementIllustrationThumb(_ picture: Picture) -> some View {
-        let localData = localData(for: picture)
-        Button {
-            zoomTarget = .picture(picture, localData: localData)
-        } label: {
+    private func measurementIllustrationThumb(_ picture: Picture, onTap: @escaping () -> Void) -> some View {
+        Button(action: onTap) {
             pictureThumbnailContent(picture, contentMode: .fit)
                 .frame(maxWidth: .infinity)
                 .frame(maxHeight: 320)
@@ -553,10 +532,8 @@ struct ReferenceDetailView: View {
     }
 
     @ViewBuilder
-    private func measurementIllustrationGhost(_ filename: String, _ data: Data) -> some View {
-        Button {
-            zoomTarget = .ghost(filename: filename, jpegData: data)
-        } label: {
+    private func measurementIllustrationGhost(_ filename: String, _ data: Data, onTap: @escaping () -> Void) -> some View {
+        Button(action: onTap) {
             ZStack(alignment: .bottomLeading) {
                 ghostImageContent(data: data, contentMode: .fit)
                     .frame(maxWidth: .infinity)
@@ -637,11 +614,25 @@ struct ReferenceDetailView: View {
                                 .foregroundStyle(.secondary)
                             ScrollView(.horizontal, showsIndicators: false) {
                                 LazyHStack(spacing: 10) {
-                                    ForEach(labelGhosts, id: \.filename) { ghost in
-                                        techViewGhostThumbnail(filename: ghost.filename, data: ghost.data)
+                                    let labelItems = buildZoomItems(
+                                        ghosts: labelGhosts,
+                                        pictures: labelPictures
+                                    )
+                                    ForEach(Array(labelGhosts.enumerated()), id: \.element.filename) { idx, ghost in
+                                        techViewGhostThumbnail(filename: ghost.filename, data: ghost.data) {
+                                            zoomPresentation = ZoomPresentation(
+                                                items: labelItems,
+                                                startIndex: idx
+                                            )
+                                        }
                                     }
-                                    ForEach(labelPictures) { picture in
-                                        techViewThumbnail(picture)
+                                    ForEach(Array(labelPictures.enumerated()), id: \.element.id) { idx, picture in
+                                        techViewThumbnail(picture) {
+                                            zoomPresentation = ZoomPresentation(
+                                                items: labelItems,
+                                                startIndex: labelGhosts.count + idx
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -688,11 +679,22 @@ struct ReferenceDetailView: View {
                 } else {
                     ScrollView(.horizontal, showsIndicators: false) {
                         LazyHStack(spacing: 10) {
-                            ForEach(ghosts, id: \.filename) { ghost in
-                                techViewGhostThumbnail(filename: ghost.filename, data: ghost.data)
+                            let techItems = buildZoomItems(ghosts: ghosts, pictures: pictures)
+                            ForEach(Array(ghosts.enumerated()), id: \.element.filename) { idx, ghost in
+                                techViewGhostThumbnail(filename: ghost.filename, data: ghost.data) {
+                                    zoomPresentation = ZoomPresentation(
+                                        items: techItems,
+                                        startIndex: idx
+                                    )
+                                }
                             }
-                            ForEach(pictures) { picture in
-                                techViewThumbnail(picture)
+                            ForEach(Array(pictures.enumerated()), id: \.element.id) { idx, picture in
+                                techViewThumbnail(picture) {
+                                    zoomPresentation = ZoomPresentation(
+                                        items: techItems,
+                                        startIndex: ghosts.count + idx
+                                    )
+                                }
                             }
                         }
                     }
@@ -799,6 +801,34 @@ struct ReferenceDetailView: View {
         return sortedDedupedForDisplay(filtered)
     }
 
+    /// Builds the carousel item list shown when the user taps a
+    /// thumbnail in a section. Ghosts come first (matching the
+    /// on-screen render order), then the GS-backed pictures.
+    private func buildZoomItems(
+        ghosts: [(filename: String, data: Data)],
+        pictures: [Picture]
+    ) -> [ZoomableItem] {
+        var items: [ZoomableItem] = []
+        items.reserveCapacity(ghosts.count + pictures.count)
+        for ghost in ghosts {
+            items.append(ZoomableItem(
+                id: "ghost-\(ghost.filename)",
+                filename: ghost.filename,
+                imageURL: nil,
+                localData: ghost.data
+            ))
+        }
+        for picture in pictures {
+            items.append(ZoomableItem(
+                id: "picture-\(picture.id)",
+                filename: picture.matchableFilename,
+                imageURL: picture.thumbnailURL,
+                localData: localData(for: picture)
+            ))
+        }
+        return items
+    }
+
     /// Collapses duplicate-filename entries to the newest one (we
     /// rely on `techViewPictures` being newest-first) and returns
     /// the survivors sorted by ascending `smalltext`. The user
@@ -821,11 +851,8 @@ struct ReferenceDetailView: View {
     }
 
     @ViewBuilder
-    private func techViewThumbnail(_ picture: Picture) -> some View {
-        let localData = localData(for: picture)
-        Button {
-            zoomTarget = .picture(picture, localData: localData)
-        } label: {
+    private func techViewThumbnail(_ picture: Picture, onTap: @escaping () -> Void) -> some View {
+        Button(action: onTap) {
             pictureThumbnailContent(picture, contentMode: .fill)
                 .frame(width: 120, height: 120)
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -839,10 +866,8 @@ struct ReferenceDetailView: View {
     /// frame + tap behaviour as `techViewThumbnail` so the user
     /// doesn't see a layout shift when the row eventually arrives.
     @ViewBuilder
-    private func techViewGhostThumbnail(filename: String, data: Data) -> some View {
-        Button {
-            zoomTarget = .ghost(filename: filename, jpegData: data)
-        } label: {
+    private func techViewGhostThumbnail(filename: String, data: Data, onTap: @escaping () -> Void) -> some View {
+        Button(action: onTap) {
             ZStack(alignment: .bottomLeading) {
                 ghostImageContent(data: data, contentMode: .fill)
                     .frame(width: 120, height: 120)

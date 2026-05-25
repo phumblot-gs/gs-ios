@@ -1,40 +1,75 @@
 import SwiftUI
 
-/// Full-screen viewer for a thumbnail. Takes a remote URL (from
-/// the GS CDN) and/or local JPEG bytes (for just-uploaded shots
-/// whose CDN thumbnail is still being generated). Designed to be
-/// presented with `.matchedTransitionSource(id:in:)` on the source
-/// + `.navigationTransition(.zoom(sourceID:in:))` on the
-/// destination, so the thumbnail visually expands into full-screen.
-///
-/// Supports pinch-to-zoom, drag-to-pan when zoomed in, double-tap
-/// to toggle 1×↔2.5×, and a tap on the close button to dismiss.
-/// Pull-to-dismiss is handled natively by `fullScreenCover`'s
-/// zoom transition when scale == 1.
-struct PictureZoomView: View {
+/// One viewable thumbnail — either a GS-backed `Picture` (which
+/// gives us a CDN URL) or a still-uploading ghost (only local
+/// JPEG bytes). The `id` is the stable `matchedTransitionSource`
+/// key on the originating thumbnail.
+struct ZoomableItem: Identifiable, Hashable {
+    let id: String
+    /// `smalltext` for GS-backed rows, the local upload filename
+    /// for ghosts. Rendered under the image so the user knows
+    /// what they're looking at.
+    let filename: String?
     let imageURL: URL?
-    /// JPEG bytes available locally (just-uploaded picture or
-    /// ghost preview that hasn't reached GS yet). When set, used
-    /// as a fallback while the CDN URL loads (or as the only
-    /// source if `imageURL` is nil).
     let localData: Data?
+}
+
+/// Snapshot handed to the full-screen cover when the user taps a
+/// thumbnail. Carries the full ordered list of siblings in the
+/// originating bucket (Measures / Labels / Tech views) so the
+/// user can swipe between them.
+struct ZoomPresentation: Identifiable, Hashable {
+    let items: [ZoomableItem]
+    let startIndex: Int
+
+    /// Identifies the presentation by the initially-tapped item.
+    /// Used by `.fullScreenCover(item:)` to detect new
+    /// presentations vs. updates of the same one.
+    var id: String {
+        guard items.indices.contains(startIndex) else { return "empty" }
+        return items[startIndex].id
+    }
+}
+
+/// Full-screen carousel for the reference detail's thumbnails.
+/// Horizontal swipe pages between siblings; each page supports
+/// pinch-to-zoom, double-tap toggle, and pan-when-zoomed. A
+/// monospaced filename pill sits at the bottom of every page so
+/// the user can identify the shot.
+///
+/// Presented via `.fullScreenCover(item: $zoomPresentation)`. The
+/// originating thumbnail uses
+/// `.matchedTransitionSource(id: item.id, in: namespace)`; the
+/// destination's `.navigationTransition(.zoom(sourceID:in:))`
+/// matches the **starting** item only — swiping then dismissing
+/// from a different page falls back to a standard slide.
+struct PictureZoomView: View {
+    let items: [ZoomableItem]
     let onDismiss: () -> Void
 
-    @State private var scale: CGFloat = 1
-    @State private var lastScale: CGFloat = 1
-    @State private var offset: CGSize = .zero
-    @State private var lastOffset: CGSize = .zero
+    @State private var currentIndex: Int
+
+    init(items: [ZoomableItem], startIndex: Int, onDismiss: @escaping () -> Void) {
+        self.items = items
+        self._currentIndex = State(initialValue: min(max(startIndex, 0), max(items.count - 1, 0)))
+        self.onDismiss = onDismiss
+    }
 
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
 
-            zoomableContent
-                .scaleEffect(scale)
-                .offset(offset)
-                .gesture(zoomGesture)
-                .simultaneousGesture(panGesture)
-                .onTapGesture(count: 2, perform: toggleZoom)
+            // TabView's `.page` style gives us the carousel
+            // gestures + a dot indicator for free. Each page
+            // owns its own zoom state (see `ZoomablePage`).
+            TabView(selection: $currentIndex) {
+                ForEach(Array(items.enumerated()), id: \.offset) { idx, item in
+                    ZoomablePage(item: item)
+                        .tag(idx)
+                }
+            }
+            .tabViewStyle(.page(indexDisplayMode: items.count > 1 ? .always : .never))
+            .indexViewStyle(.page(backgroundDisplayMode: .interactive))
 
             VStack {
                 HStack {
@@ -49,13 +84,58 @@ struct PictureZoomView: View {
                     .padding(.trailing, 16)
                 }
                 Spacer()
+                filenameBadge
             }
         }
     }
 
+    /// Monospaced pill at the bottom showing the current page's
+    /// filename (smalltext / upload name). Hidden when the
+    /// current item has no filename for some reason.
+    @ViewBuilder
+    private var filenameBadge: some View {
+        if items.indices.contains(currentIndex),
+           let filename = items[currentIndex].filename {
+            Text(filename)
+                .font(.caption.monospaced())
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(.black.opacity(0.6), in: Capsule())
+                // Sit above the page-indicator dots when present.
+                .padding(.bottom, items.count > 1 ? 44 : 24)
+                .id(currentIndex)
+                .transition(.opacity)
+                .animation(.easeInOut(duration: 0.15), value: currentIndex)
+        }
+    }
+}
+
+/// One page of the zoom carousel. Owns its own scale + offset
+/// state so the user can pinch this page without affecting the
+/// others when they swipe back.
+private struct ZoomablePage: View {
+    let item: ZoomableItem
+
+    @State private var scale: CGFloat = 1
+    @State private var lastScale: CGFloat = 1
+    @State private var offset: CGSize = .zero
+    @State private var lastOffset: CGSize = .zero
+
+    var body: some View {
+        zoomableContent
+            .scaleEffect(scale)
+            .offset(offset)
+            .gesture(zoomGesture)
+            .simultaneousGesture(panGesture)
+            .onTapGesture(count: 2, perform: toggleZoom)
+    }
+
     @ViewBuilder
     private var zoomableContent: some View {
-        if let url = imageURL {
+        if let url = item.imageURL {
             AsyncImage(url: url) { phase in
                 switch phase {
                 case .success(let image):
@@ -63,7 +143,7 @@ struct PictureZoomView: View {
                 case .failure:
                     localOrMissing
                 case .empty:
-                    if localData != nil {
+                    if item.localData != nil {
                         localOrMissing
                     } else {
                         ProgressView().tint(.white)
@@ -79,7 +159,7 @@ struct PictureZoomView: View {
 
     @ViewBuilder
     private var localOrMissing: some View {
-        if let localData, let ui = UIImage(data: localData) {
+        if let localData = item.localData, let ui = UIImage(data: localData) {
             Image(uiImage: ui).resizable().scaledToFit()
         } else {
             Image(systemName: "photo")
