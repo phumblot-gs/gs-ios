@@ -19,11 +19,18 @@ GET /v3/picture
   &shootingmethod=<shootingMethodName>
   &benchsteptype=10
   &picturestatus=gte:10
-  &sort_by=date_cre
+  &sort_by=-date_cre
 ```
 
 (`picturestatus=gte:10` is unchanged — it keeps only stored /
 validated rows, dropping in-flight upload states.)
+
+**Sort direction**: `-date_cre` (descending) so that when GS
+returns several rows with the same `smalltext` — e.g. the user
+re-shot a filename, or status transitions duplicated the row —
+the newest one comes first. Downstream code (`first(where:)`
+for the Measurement illustration, dedup-by-filename for the
+gallery) assumes newest-first.
 
 ## 2. Bucket pictures by `smalltext`, not `file_path`
 
@@ -98,7 +105,10 @@ fun filename(filename: String, matchesPattern pattern: String, ean: String?, ref
     return Regex("^$regexBody$").matches(filename)
 }
 
-// Bucketing
+// Bucketing — `pictures` is expected newest-first
+// (that's what `sort_by=-date_cre` gives us). We dedupe per
+// filename keeping the FIRST occurrence (newest), then sort the
+// final list by ascending filename for display.
 fun bucket(pictures: List<Picture>, ean: String?, ref: String, patterns: Patterns): Buckets {
     val measure = mutableListOf<Picture>()
     val ocr = mutableListOf<Picture>()
@@ -111,7 +121,17 @@ fun bucket(pictures: List<Picture>, ean: String?, ref: String, patterns: Pattern
             else -> techviews.add(p)
         }
     }
-    return Buckets(measure, ocr, techviews)
+    return Buckets(
+        // For the Measure block we only ever show the latest one
+        // — `.firstOrNull()` against the date-descending list.
+        measure = measure.firstOrNull(),
+        // Galleries: dedupe (keep first = newest), then sort
+        // ascending by filename for display.
+        ocr = ocr.distinctBy { it.matchableFilename }
+                 .sortedBy { it.matchableFilename.orEmpty() },
+        techviews = techviews.distinctBy { it.matchableFilename }
+                             .sortedBy { it.matchableFilename.orEmpty() },
+    )
 }
 ```
 

@@ -729,7 +729,7 @@ struct ReferenceDetailView: View {
         guard let reference = currentReferenceStock?.reference else { return [] }
         let measurePattern = settings.photoFilenameMeasurePattern
         let ocrPattern = settings.photoFilenameOCRPattern
-        return techViewPictures.filter { picture in
+        let filtered = techViewPictures.filter { picture in
             // No matchable filename → keep the picture in the
             // Tech-views bucket (safer than dropping it silently).
             guard let filename = picture.matchableFilename else { return true }
@@ -747,6 +747,7 @@ struct ReferenceDetailView: View {
             )
             return !isMeasure && !isOCR
         }
+        return sortedDedupedForDisplay(filtered)
     }
 
     /// Ghost previews matching the Presentation/Detail patterns
@@ -786,7 +787,7 @@ struct ReferenceDetailView: View {
     private var ocrPictures: [Picture] {
         guard let reference = currentReferenceStock?.reference else { return [] }
         let ocrPattern = settings.photoFilenameOCRPattern
-        return techViewPictures.filter { picture in
+        let filtered = techViewPictures.filter { picture in
             guard let filename = picture.matchableFilename else { return false }
             return TechViewsFilenameCounter.filename(
                 filename,
@@ -794,6 +795,28 @@ struct ReferenceDetailView: View {
                 ean: reference.ean,
                 ref: reference.ref
             )
+        }
+        return sortedDedupedForDisplay(filtered)
+    }
+
+    /// Collapses duplicate-filename entries to the newest one (we
+    /// rely on `techViewPictures` being newest-first) and returns
+    /// the survivors sorted by ascending `smalltext`. The user
+    /// wanted the gallery to read in filename order rather than
+    /// in upload-time order.
+    private func sortedDedupedForDisplay(_ pictures: [Picture]) -> [Picture] {
+        var seen: Set<String> = []
+        var deduped: [Picture] = []
+        for picture in pictures {
+            // No filename → treat each row as unique (can't
+            // dedupe). Use a sentinel keyed by id.
+            let key = picture.matchableFilename ?? "picture_id:\(picture.id)"
+            if seen.insert(key).inserted {
+                deduped.append(picture)
+            }
+        }
+        return deduped.sorted { lhs, rhs in
+            (lhs.matchableFilename ?? "") < (rhs.matchableFilename ?? "")
         }
     }
 
@@ -872,7 +895,8 @@ struct ReferenceDetailView: View {
 
     /// Returns local-cache entries whose filename satisfies
     /// `match` AND that don't yet have a corresponding GS Picture
-    /// row in `techViewPictures`. Newest-first by filename suffix.
+    /// row in `techViewPictures`. Sorted by ascending filename to
+    /// match the display order of the GS-backed gallery.
     private func pendingPreviews(matching match: (String) -> Bool) -> [(filename: String, data: Data)] {
         let knownFilenames: Set<String> = Set(
             techViewPictures.compactMap { $0.matchableFilename }
@@ -880,7 +904,7 @@ struct ReferenceDetailView: View {
         return localCapturePreviews
             .filter { entry in match(entry.key) && !knownFilenames.contains(entry.key) }
             .map { (filename: $0.key, data: $0.value) }
-            .sorted { $0.filename > $1.filename }
+            .sorted { $0.filename < $1.filename }
     }
 
     /// Resolves a thumbnail image for `picture`. Preference order:

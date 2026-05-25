@@ -47,7 +47,11 @@ public struct PictureService: Sendable {
                 // workflow (vs packshot finals / colour proofs).
                 "benchsteptype": "10",
                 "picturestatus": "gte:\(minStatus)",
-                "sort_by": "date_cre"
+                // Newest first so when GS returns several rows
+                // with the same `smalltext` (e.g. a re-shot
+                // filename), the most recent one is picked up
+                // first downstream.
+                "sort_by": "-date_cre"
             ],
             as: [Picture].self
         )
