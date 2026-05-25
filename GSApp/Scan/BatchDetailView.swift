@@ -170,9 +170,14 @@ struct BatchDetailView: View {
         Section {
             // ref search — substring match, no scanner (scanner is
             // for EAN below).
-            TextField("Ref", text: $refQuery)
-                .autocorrectionDisabled()
-                .textInputAutocapitalization(.never)
+            HStack(spacing: 8) {
+                TextField("Ref", text: $refQuery)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                if !refQuery.isEmpty {
+                    clearButton { refQuery = "" }
+                }
+            }
             // EAN search — exact match. Scanner button fills the
             // text field with the scanned payload.
             HStack(spacing: 8) {
@@ -180,6 +185,9 @@ struct BatchDetailView: View {
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
                     .keyboardType(.numbersAndPunctuation)
+                if !eanQuery.isEmpty {
+                    clearButton { eanQuery = "" }
+                }
                 Button {
                     showEANScanner = true
                 } label: {
@@ -192,6 +200,18 @@ struct BatchDetailView: View {
         } header: {
             Text("Filters")
         }
+    }
+
+    /// Trailing `xmark.circle.fill` shown when a filter text
+    /// field has content — taps reset it to empty, the debounced
+    /// state catches up and rebuilds the loader.
+    private func clearButton(action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: "xmark.circle.fill")
+                .foregroundStyle(.secondary)
+        }
+        .buttonStyle(.borderless)
+        .accessibilityLabel("Clear")
     }
 
     /// Status multi-select dropdown. Each enabled status appears
