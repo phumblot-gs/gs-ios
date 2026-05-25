@@ -12,6 +12,12 @@ struct BatchDetailView: View {
     @State private var currentBatch: Batch
     @State private var loader: PaginatedLoader<ReferenceStockRow>
     @State private var showEdit = false
+    /// True after the first `onAppear` fires, so subsequent
+    /// re-appearances (i.e. the user popped back from a pushed
+    /// reference detail) can trigger a refresh — needed because
+    /// moving a stock item to a different batch in the child
+    /// view leaves this list stale otherwise.
+    @State private var didFirstAppear = false
 
     init(batch: Batch, settings: DevSettings) {
         self.initialBatch = batch
@@ -43,6 +49,16 @@ struct BatchDetailView: View {
         }
         .task {
             if loader.items.isEmpty { await loader.refresh() }
+        }
+        .onAppear {
+            if didFirstAppear {
+                // Returning from a pushed detail (e.g. after a
+                // batch move): refetch the contents so a removed
+                // stock item disappears.
+                Task { await loader.refresh() }
+            } else {
+                didFirstAppear = true
+            }
         }
         .refreshable { await loader.refresh() }
         .sheet(isPresented: $showEdit) {

@@ -401,7 +401,7 @@ struct ReferenceDetailView: View {
                                 }
                                 .frame(maxWidth: .infinity)
                             } else {
-                                Label("Change batch", systemImage: "shippingbox")
+                                Text("Change batch")
                                     .frame(maxWidth: .infinity)
                             }
                         }
@@ -419,7 +419,7 @@ struct ReferenceDetailView: View {
                                 }
                                 .frame(maxWidth: .infinity)
                             } else {
-                                Label("Change status", systemImage: "arrow.right.circle")
+                                Text("Change status")
                                     .frame(maxWidth: .infinity)
                             }
                         }
