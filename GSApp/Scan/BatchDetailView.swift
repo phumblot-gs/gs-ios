@@ -31,6 +31,13 @@ struct BatchDetailView: View {
     @State private var eanDebounced: String = ""
     @State private var showEANScanner = false
 
+    // MARK: Bulk status change
+    /// Sheet host for the initial "pick the target status" step.
+    @State private var showBulkStatusPicker = false
+    /// Set after the user picks a status from the sheet — drives
+    /// the navigation push into the scanner.
+    @State private var bulkStatusTarget: StockItemStatus?
+
     init(batch: Batch, settings: DevSettings) {
         self.initialBatch = batch
         self.settings = settings
@@ -46,6 +53,7 @@ struct BatchDetailView: View {
     var body: some View {
         List {
             metadataSection
+            bulkActionsSection
             filtersSection
             contentsSection
         }
@@ -86,6 +94,19 @@ struct BatchDetailView: View {
                 eanQuery = scanned
                 showEANScanner = false
             }
+        }
+        .sheet(isPresented: $showBulkStatusPicker) {
+            BulkStatusTargetPicker(settings: settings) { status in
+                showBulkStatusPicker = false
+                bulkStatusTarget = status
+            }
+        }
+        .navigationDestination(item: $bulkStatusTarget) { status in
+            BatchBulkStatusFlow(
+                settings: settings,
+                batch: currentBatch,
+                targetStatus: status
+            )
         }
         // Debounce text inputs: copy to *Debounced after 300 ms of
         // no further typing. The loader observes the debounced
@@ -162,6 +183,25 @@ struct BatchDetailView: View {
             }
         } header: {
             Text("Batch info")
+        }
+    }
+
+    /// Standalone primary action above the filter zone — opens
+    /// the two-step bulk status-change flow (pick target →
+    /// scanner).
+    @ViewBuilder
+    private var bulkActionsSection: some View {
+        Section {
+            Button {
+                showBulkStatusPicker = true
+            } label: {
+                Text("Change status")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.regular)
+            .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+            .listRowBackground(Color.clear)
         }
     }
 
