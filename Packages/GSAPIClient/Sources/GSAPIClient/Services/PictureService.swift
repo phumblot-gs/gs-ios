@@ -42,6 +42,10 @@ public struct PictureService: Sendable {
             query: [
                 "reference_ref": ref,
                 "shootingmethod": shootingMethodName,
+                // `benchsteptype=10` keeps only pictures that
+                // belong to the technical-view step of the bench
+                // workflow (vs packshot finals / colour proofs).
+                "benchsteptype": "10",
                 "picturestatus": "gte:\(minStatus)",
                 "sort_by": "date_cre"
             ],
@@ -72,9 +76,13 @@ public struct PictureService: Sendable {
         let todayPrefix = formatter.string(from: now)
         return pictures.compactMap { picture -> String? in
             guard let dateCre = picture.dateCre,
-                  dateCre.hasPrefix(todayPrefix),
-                  let path = picture.filePath ?? picture.path else { return nil }
-            return (path as NSString).lastPathComponent
+                  dateCre.hasPrefix(todayPrefix) else { return nil }
+            // Use `smalltext` (the upload filename, preserved
+            // verbatim by GS) rather than `file_path` — GS
+            // rewrites the storage path on ingest
+            // (underscore → hyphen, `JPG/` prefix) which would
+            // make our pattern matching miss.
+            return picture.smalltext
         }
     }
 }

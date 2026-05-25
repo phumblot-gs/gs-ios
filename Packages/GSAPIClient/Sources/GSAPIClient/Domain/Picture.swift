@@ -111,6 +111,23 @@ public struct Picture: Sendable, Hashable, Identifiable, Codable {
     public var thumbnailURL: URL? {
         thumbnail.flatMap { URL(string: $0) }
     }
+
+    /// The filename to use when matching this picture against a
+    /// local filename pattern (`{EAN}_Article_{INC}.jpg`, etc.).
+    ///
+    /// GS rewrites the storage path on ingest — the last `_N` in
+    /// the upload filename becomes `-N`, and the file lands under
+    /// a `JPG/` prefix — so `file_path` no longer carries the
+    /// original name. `smalltext` is preserved verbatim, so it's
+    /// the only field we can pattern-match against. Falls back to
+    /// `lastPathComponent(filePath)` only when `smalltext` is
+    /// missing (legacy uploads, mostly).
+    public var matchableFilename: String? {
+        if let smalltext, !smalltext.isEmpty { return smalltext }
+        if let filePath { return (filePath as NSString).lastPathComponent }
+        if let path { return (path as NSString).lastPathComponent }
+        return nil
+    }
 }
 
 /// Helpers for collapsing a raw `[Picture]` from the API into the per-file

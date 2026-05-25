@@ -512,8 +512,7 @@ struct ReferenceDetailView: View {
         guard let reference = currentReferenceStock?.reference else { return nil }
         let pattern = settings.photoFilenameMeasurePattern
         return techViewPictures.first { picture in
-            guard let path = picture.filePath ?? picture.path else { return false }
-            let filename = (path as NSString).lastPathComponent
+            guard let filename = picture.matchableFilename else { return false }
             return TechViewsFilenameCounter.filename(
                 filename,
                 matches: pattern,
@@ -731,8 +730,9 @@ struct ReferenceDetailView: View {
         let measurePattern = settings.photoFilenameMeasurePattern
         let ocrPattern = settings.photoFilenameOCRPattern
         return techViewPictures.filter { picture in
-            guard let path = picture.filePath ?? picture.path else { return true }
-            let filename = (path as NSString).lastPathComponent
+            // No matchable filename → keep the picture in the
+            // Tech-views bucket (safer than dropping it silently).
+            guard let filename = picture.matchableFilename else { return true }
             let isMeasure = TechViewsFilenameCounter.filename(
                 filename,
                 matches: measurePattern,
@@ -787,8 +787,7 @@ struct ReferenceDetailView: View {
         guard let reference = currentReferenceStock?.reference else { return [] }
         let ocrPattern = settings.photoFilenameOCRPattern
         return techViewPictures.filter { picture in
-            guard let path = picture.filePath ?? picture.path else { return false }
-            let filename = (path as NSString).lastPathComponent
+            guard let filename = picture.matchableFilename else { return false }
             return TechViewsFilenameCounter.filename(
                 filename,
                 matches: ocrPattern,
@@ -864,10 +863,10 @@ struct ReferenceDetailView: View {
         }
     }
 
-    /// Filename → cached JPEG lookup for the picture's stored path.
+    /// Filename → cached JPEG lookup for the picture. Keyed by
+    /// `smalltext` (preserved by GS) — see `Picture.matchableFilename`.
     private func localData(for picture: Picture) -> Data? {
-        guard let path = picture.filePath ?? picture.path else { return nil }
-        let filename = (path as NSString).lastPathComponent
+        guard let filename = picture.matchableFilename else { return nil }
         return localCapturePreviews[filename]
     }
 
@@ -876,10 +875,7 @@ struct ReferenceDetailView: View {
     /// row in `techViewPictures`. Newest-first by filename suffix.
     private func pendingPreviews(matching match: (String) -> Bool) -> [(filename: String, data: Data)] {
         let knownFilenames: Set<String> = Set(
-            techViewPictures.compactMap { picture -> String? in
-                guard let path = picture.filePath ?? picture.path else { return nil }
-                return (path as NSString).lastPathComponent
-            }
+            techViewPictures.compactMap { $0.matchableFilename }
         )
         return localCapturePreviews
             .filter { entry in match(entry.key) && !knownFilenames.contains(entry.key) }
@@ -899,9 +895,7 @@ struct ReferenceDetailView: View {
     ) -> some View {
         let placeholder = RoundedRectangle(cornerRadius: 8, style: .continuous)
             .fill(Color.secondary.opacity(0.12))
-        let filename = (picture.filePath ?? picture.path)
-            .map { ($0 as NSString).lastPathComponent }
-        let localData = filename.flatMap { localCapturePreviews[$0] }
+        let localData = self.localData(for: picture)
         if let url = picture.thumbnailURL {
             AsyncImage(url: url) { phase in
                 switch phase {
