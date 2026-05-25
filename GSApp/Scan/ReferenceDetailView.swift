@@ -481,21 +481,42 @@ struct ReferenceDetailView: View {
     private var statusPicker: some View {
         NavigationStack {
             List {
-                ForEach(StockItemStatus.orderedCases, id: \.rawValue) { status in
-                    if settings.enabledStockItemStatuses.contains(status.rawValue) {
+                // One-tap shortcut to the next enabled status in
+                // the workflow order — the most common move (e.g.
+                // 30 Add to stock → 40 Inventory). Hidden when
+                // the current status is already the last enabled
+                // one, so the user falls back to the full list.
+                if let next = nextEnabledStatus {
+                    Section {
                         Button {
-                            Task { await updateStatus(to: status) }
+                            Task { await updateStatus(to: next) }
                         } label: {
-                            HStack {
-                                Text(status.displayName)
-                                Spacer()
-                                if currentStockItem?.status == status {
-                                    Image(systemName: "checkmark")
-                                        .foregroundStyle(.tint)
+                            Text(next.displayName)
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.regular)
+                        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                        .listRowBackground(Color.clear)
+                    }
+                }
+                Section {
+                    ForEach(StockItemStatus.orderedCases, id: \.rawValue) { status in
+                        if settings.enabledStockItemStatuses.contains(status.rawValue) {
+                            Button {
+                                Task { await updateStatus(to: status) }
+                            } label: {
+                                HStack {
+                                    Text(status.displayName)
+                                    Spacer()
+                                    if currentStockItem?.status == status {
+                                        Image(systemName: "checkmark")
+                                            .foregroundStyle(.tint)
+                                    }
                                 }
                             }
+                            .foregroundStyle(.primary)
                         }
-                        .foregroundStyle(.primary)
                     }
                 }
             }
@@ -508,6 +529,22 @@ struct ReferenceDetailView: View {
             }
         }
         .presentationDetents([.medium, .large])
+    }
+
+    /// The next enabled status after the current one in
+    /// `StockItemStatus.orderedCases` order — used by the
+    /// quick-action CTA at the top of the status picker. Nil
+    /// when the current status is already the last enabled one
+    /// (or when there is no current status at all).
+    private var nextEnabledStatus: StockItemStatus? {
+        guard let current = currentStockItem?.status else { return nil }
+        let enabledOrdered = StockItemStatus.orderedCases.filter {
+            settings.enabledStockItemStatuses.contains($0.rawValue)
+        }
+        guard let idx = enabledOrdered.firstIndex(of: current),
+              idx + 1 < enabledOrdered.count
+        else { return nil }
+        return enabledOrdered[idx + 1]
     }
 
     // MARK: - Measurements
