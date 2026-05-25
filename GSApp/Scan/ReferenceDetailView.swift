@@ -27,6 +27,17 @@ struct ReferenceDetailView: View {
     @State private var pictures: [Picture] = []
     @State private var statusSheetVisible = false
     @State private var statusUpdating = false
+    /// Sheet host for the "Change batch" picker — opened from the
+    /// stock-item card's secondary button.
+    @State private var showBatchPicker = false
+    /// PATCH /stock/<id> in flight to move the stock item to a
+    /// new batch. Mirrors `statusUpdating` so the buttons both
+    /// disable while a request is on the wire.
+    @State private var batchUpdating = false
+    /// Per-screen cache of batches looked up so we can render the
+    /// stock item's current batch by name (the GS API doesn't
+    /// have a GET /stock/batch/<id> endpoint, only the listing).
+    @State private var batchByID: [Int: Batch] = [:]
     @State private var showMeasureFlow = false
     @State private var showTechViewsCapture = false
     @State private var showMetadataEditor = false
@@ -148,6 +159,7 @@ struct ReferenceDetailView: View {
             if let ref = currentReferenceStock?.reference {
                 ReferenceHistoryStore.shared.record(ref)
             }
+            await loadBatchesForLookup()
             await loadPictures(triggeredByUser: false)
             await loadTechViews(triggeredByUser: false)
             // If the upstream /stock GET failed during the scan,
@@ -175,6 +187,18 @@ struct ReferenceDetailView: View {
         )
         .sheet(isPresented: $statusSheetVisible) {
             statusPicker
+        }
+        .sheet(isPresented: $showBatchPicker) {
+            BatchPickerSheet(
+                settings: settings,
+                currentBatchID: currentStockItem?.batchID
+            ) { batch in
+                showBatchPicker = false
+                // Cache the freshly-picked batch so the row label
+                // updates even before /stock refetches.
+                batchByID[batch.id] = batch
+                Task { await moveToBatch(batch) }
+            }
         }
         .fullScreenCover(isPresented: $showMeasureFlow) {
             if let reference = currentReferenceStock?.reference {
@@ -360,36 +384,98 @@ struct ReferenceDetailView: View {
                         Text(item.status.displayName)
                             .font(.headline)
                     }
-                    if let ean = item.ean {
-                        HStack {
-                            Label("EAN", systemImage: "barcode")
-                                .foregroundStyle(.secondary)
-                            Spacer()
-                            Text(ean).font(.subheadline.monospaced())
-                        }
+                    HStack {
+                        Label("Batch", systemImage: "shippingbox")
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        batchLabel(for: item)
                     }
-                    Button {
-                        statusSheetVisible = true
-                    } label: {
-                        if statusUpdating {
-                            HStack {
-                                ProgressView().controlSize(.small)
-                                Text("Updating…")
-                            }
-                            .frame(maxWidth: .infinity)
-                        } else {
-                            Label("Change status", systemImage: "arrow.right.circle")
+                    HStack(spacing: 12) {
+                        Button {
+                            showBatchPicker = true
+                        } label: {
+                            if batchUpdating {
+                                HStack {
+                                    ProgressView().controlSize(.small)
+                                    Text("Moving…")
+                                }
                                 .frame(maxWidth: .infinity)
+                            } else {
+                                Label("Change batch", systemImage: "shippingbox")
+                                    .frame(maxWidth: .infinity)
+                            }
                         }
+                        .buttonStyle(.bordered)
+                        .controlSize(.regular)
+                        .disabled(batchUpdating || statusUpdating)
+
+                        Button {
+                            statusSheetVisible = true
+                        } label: {
+                            if statusUpdating {
+                                HStack {
+                                    ProgressView().controlSize(.small)
+                                    Text("Updating…")
+                                }
+                                .frame(maxWidth: .infinity)
+                            } else {
+                                Label("Change status", systemImage: "arrow.right.circle")
+                                    .frame(maxWidth: .infinity)
+                            }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.regular)
+                        .disabled(statusUpdating || batchUpdating)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.regular)
-                    .disabled(statusUpdating)
                 }
                 .padding()
                 .background(.background, in: RoundedRectangle(cornerRadius: 12))
             }
         }
+    }
+
+    /// Renders the cached batch name for the stock item, falling
+    /// back to `Batch #<id>` while the lookup is still loading or
+    /// when the batch couldn't be found in the first pages.
+    @ViewBuilder
+    private func batchLabel(for item: StockItem) -> some View {
+        if let bid = item.batchID {
+            if let batch = batchByID[bid] {
+                Text(batch.displayName).font(.subheadline)
+            } else {
+                Text("Batch #\(bid)")
+                    .font(.subheadline.monospaced())
+                    .foregroundStyle(.secondary)
+            }
+        } else {
+            Text("—").foregroundStyle(.secondary)
+        }
+    }
+
+    /// Lazy-fills `batchByID` from the first pages of `/stock/batch`
+    /// so we can display the stock item's current batch name. The
+    /// GS API has no `GET /stock/batch/<id>` endpoint, so we cache
+    /// the listing once per screen lifetime.
+    @MainActor
+    private func loadBatchesForLookup() async {
+        // Idempotent: already loaded → skip.
+        guard batchByID.isEmpty else { return }
+        let service = BatchService(environment: settings.currentEnvironment)
+        var collected: [Int: Batch] = [:]
+        var offset = 0
+        // Cap at 2 pages (~200 batches) so we don't burn requests
+        // for power users. Falls back to "Batch #<id>" beyond that.
+        for _ in 0..<2 {
+            do {
+                let (items, pagination) = try await service.page(offset: offset)
+                for batch in items { collected[batch.id] = batch }
+                guard pagination.hasMore else { break }
+                offset = pagination.nextOffset
+            } catch {
+                break
+            }
+        }
+        batchByID = collected
     }
 
     private var statusPicker: some View {
@@ -1342,7 +1428,46 @@ struct ReferenceDetailView: View {
         }
     }
 
+    /// PATCH `/stock/<id>` with the current status preserved and
+    /// the new `batch_id`. Same splice-into-local-state pattern
+    /// as `updateStatus(to:)`.
     @MainActor
+    private func moveToBatch(_ newBatch: Batch) async {
+        guard let item = currentStockItem else { return }
+        batchUpdating = true
+        defer { batchUpdating = false }
+        do {
+            let service = StockService(environment: settings.currentEnvironment)
+            let updated = try await service.update(
+                id: item.id,
+                payload: .init(
+                    status: item.status,
+                    batchID: newBatch.id
+                )
+            )
+            spliceUpdatedStockItem(updated)
+        } catch let err as GSHTTPClient.HTTPError {
+            actionErrorMessage = err.userMessage
+        } catch {
+            actionErrorMessage = error.localizedDescription
+        }
+    }
+
+    /// Updates `references[selectedIndex]` so the on-screen card
+    /// reflects an updated `StockItem` (status change, batch
+    /// move, …) without a full `/stock` re-fetch.
+    @MainActor
+    private func spliceUpdatedStockItem(_ updated: StockItem) {
+        guard references.indices.contains(selectedIndex) else { return }
+        var refStock = references[selectedIndex]
+        guard let stockIndex = refStock.stockItems.firstIndex(where: { $0.id == updated.id })
+        else { return }
+        var items = refStock.stockItems
+        items[stockIndex] = updated
+        refStock = ReferenceStock(reference: refStock.reference, stockItems: items)
+        references[selectedIndex] = refStock
+    }
+
     private func updateStatus(to newStatus: StockItemStatus) async {
         guard let item = currentStockItem else { return }
         statusSheetVisible = false
@@ -1354,17 +1479,7 @@ struct ReferenceDetailView: View {
                 id: item.id,
                 payload: .init(status: newStatus)
             )
-            // Splice the updated stock item back into `references` so the
-            // displayed status changes immediately, without a re-fetch.
-            if references.indices.contains(selectedIndex) {
-                var refStock = references[selectedIndex]
-                if let stockIndex = refStock.stockItems.firstIndex(where: { $0.id == updated.id }) {
-                    var items = refStock.stockItems
-                    items[stockIndex] = updated
-                    refStock = ReferenceStock(reference: refStock.reference, stockItems: items)
-                    references[selectedIndex] = refStock
-                }
-            }
+            spliceUpdatedStockItem(updated)
         } catch let err as GSHTTPClient.HTTPError {
             actionErrorMessage = err.userMessage
         } catch {

@@ -49,7 +49,10 @@ struct RegisterProductFlow: View {
             }
         }
         .sheet(isPresented: $showBatchPicker) {
-            BatchPickerSheet(settings: settings) { selected in
+            BatchPickerSheet(
+                settings: settings,
+                currentBatchID: activeBatch?.id
+            ) { selected in
                 activeBatch = selected
                 showBatchPicker = false
             }
@@ -307,87 +310,4 @@ private struct ExistingPrompt: Identifiable {
     let scannedEAN: String?
 }
 
-// MARK: - Batch picker sheet
-
-private struct BatchPickerSheet: View {
-    let settings: DevSettings
-    let onSelected: @MainActor (Batch) -> Void
-
-    @State private var loader: PaginatedLoader<Batch>
-    @State private var showCreate = false
-    @Environment(\.dismiss) private var dismiss
-
-    init(settings: DevSettings, onSelected: @escaping @MainActor (Batch) -> Void) {
-        self.settings = settings
-        self.onSelected = onSelected
-        let service = BatchService(environment: settings.currentEnvironment)
-        _loader = State(initialValue: PaginatedLoader { offset in
-            try await service.page(offset: offset)
-        })
-    }
-
-    var body: some View {
-        NavigationStack {
-            List {
-                Section {
-                    Button {
-                        showCreate = true
-                    } label: {
-                        Label("Create a new batch", systemImage: "plus.circle.fill")
-                    }
-                }
-                Section("Existing") {
-                    if loader.items.isEmpty && !loader.isLoading {
-                        Text("No batches yet.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                    ForEach(loader.items) { batch in
-                        Button {
-                            onSelected(batch)
-                            dismiss()
-                        } label: {
-                            HStack {
-                                VStack(alignment: .leading) {
-                                    Text(batch.displayName).foregroundStyle(.primary)
-                                    if let type = batch.type {
-                                        Text(type)
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                }
-                                Spacer()
-                                if let code = batch.code {
-                                    Text(code)
-                                        .font(.caption.monospaced())
-                                        .foregroundStyle(.tertiary)
-                                }
-                            }
-                        }
-                        .task { await loader.loadNextPageIfNeeded(at: batch) }
-                    }
-                    if loader.isLoading {
-                        HStack { Spacer(); ProgressView(); Spacer() }
-                    }
-                }
-            }
-            .navigationTitle("Select batch")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Close") { dismiss() }
-                }
-            }
-            .task {
-                if loader.items.isEmpty { await loader.refresh() }
-            }
-            .refreshable { await loader.refresh() }
-            .sheet(isPresented: $showCreate) {
-                BatchCreateView(settings: settings) { batch in
-                    onSelected(batch)
-                    dismiss()
-                }
-            }
-        }
-    }
-}
+// MARK: - Batch picker sheet — see `BatchPickerSheet.swift`.
