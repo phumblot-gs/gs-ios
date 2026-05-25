@@ -3,24 +3,34 @@ import GSScanner
 import GSAPIClient
 import GSCore
 
-/// Option 3: scan products and add them to a batch as new stock items.
+/// Scan products and add them to a batch as new stock items.
 ///
 /// Flow:
-///   1. Pick (or create) the batch we're registering into. Required —
-///      `batch_id` can't be null on `POST /stock`.
-///   2. Camera comes live; each successful scan looks up the reference,
-///      checks whether a stock item already exists, and either creates
-///      a new stock item with the default status or surfaces an
-///      "already in stock" dialog.
+///   1. Pick (or create) the batch we're registering into — `batch_id`
+///      can't be null on `POST /stock`.
+///   2. Camera comes live. Scanning a barcode looks up the catalog and
+///      surfaces a reference card under the reticle, exactly like
+///      `ScanProductFlow`. Tapping that card registers a new stock
+///      item in the active batch.
+///   3. If the reference already has stock items in the batch, an
+///      "Already in stock" alert lets the user confirm a duplicate
+///      or skip.
+///   4. The success state persists below the reticle until the next
+///      scan replaces it — visual confirmation that the registration
+///      completed.
 struct RegisterProductFlow: View {
     let settings: DevSettings
 
     @State private var activeBatch: Batch?
     @State private var showBatchPicker = false
     @State private var feedback = ScannerFeedback()
-    @State private var lastResult: RegisterResult = .idle
+    @State private var lastScan: RegisterScanState = .idle
     @State private var inflight = false
+    /// Set when tapping the matched card finds the reference already
+    /// has stock items in the active batch. Drives the alert below.
     @State private var existingPrompt: ExistingPrompt?
+    /// Last scanned EAN that didn't resolve to any catalog reference.
+    /// Surfaced as an alert so the user gets a clear "not found".
     @State private var notFoundPayload: String?
 
     var body: some View {
@@ -105,7 +115,7 @@ struct RegisterProductFlow: View {
         .background(Color(.systemGroupedBackground))
     }
 
-    // MARK: - Scanner
+    // MARK: - Scanner + banner
 
     @ViewBuilder
     private func scannerView(for batch: Batch) -> some View {
@@ -130,67 +140,107 @@ struct RegisterProductFlow: View {
                     .padding(.vertical, 6)
                     .background(.thinMaterial, in: Capsule())
                 }
-                resultBanner
+                banner(for: batch)
             }
             .padding(.horizontal)
             .padding(.bottom, 24)
-            .animation(.spring(duration: 0.25), value: resultBannerKey)
+            .animation(.spring(duration: 0.25), value: stateID)
         }
     }
 
-    private var resultBannerKey: String {
-        switch lastResult {
-        case .idle: return "idle"
-        case .lookingUp(let p): return "lookup-\(p)"
-        case .created(let ref, _): return "created-\(ref.ref)"
-        case .failed(let m): return "failed-\(m)"
-        }
-    }
-
+    /// Banner under the reticle. Mirrors the visual language of
+    /// `ScanProductFlow`: gray for in-flight lookups, green for a
+    /// confirmed registration, red for network failure, and a
+    /// tappable green-bordered card when a reference is awaiting
+    /// confirmation.
     @ViewBuilder
-    private var resultBanner: some View {
-        switch lastResult {
+    private func banner(for batch: Batch) -> some View {
+        switch lastScan {
         case .idle:
             EmptyView()
         case .lookingUp(let payload):
-            HStack {
-                ProgressView().controlSize(.small)
-                Text("Registering \(payload)…")
-                    .font(.subheadline)
+            BannerCard(
+                title: "Looking up \(payload)…",
+                systemImage: "magnifyingglass",
+                accent: .gray,
+                showProgress: true
+            )
+        case .matched(let match):
+            // Tap-to-register card — the central change vs the
+            // previous flow. The reference is shown, the user
+            // confirms by tapping.
+            Button {
+                Task { await confirmRegistration(of: match, batch: batch) }
+            } label: {
+                BannerCard(
+                    title: match.reference.displayName,
+                    subtitle: matchedSubtitle(for: match),
+                    systemImage: "plus.circle.fill",
+                    accent: .blue,
+                    chevron: true
+                )
             }
-            .padding(.horizontal, 14).padding(.vertical, 10)
-            .background(.thinMaterial, in: Capsule())
+            .buttonStyle(.plain)
+            .disabled(inflight)
+        case .creating(let payload):
+            BannerCard(
+                title: "Registering \(payload)…",
+                systemImage: "tray.and.arrow.down.fill",
+                accent: .gray,
+                showProgress: true
+            )
         case .created(let reference, let item):
-            HStack {
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
-                VStack(alignment: .leading) {
-                    Text(reference.displayName).font(.headline)
-                    Text("Added · \(item.status.displayName)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-            }
-            .padding()
-            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
-        case .failed(let message):
-            Label(message, systemImage: "exclamationmark.triangle.fill")
-                .foregroundStyle(.red)
-                .padding()
-                .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
+            BannerCard(
+                title: reference.displayName,
+                subtitle: String(localized: "Added · \(item.status.displayName)"),
+                systemImage: "checkmark.circle.fill",
+                accent: .green
+            )
+        case .transportError(let message):
+            BannerCard(
+                title: "Network error",
+                subtitle: message,
+                systemImage: "exclamationmark.triangle.fill",
+                accent: .red
+            )
+        }
+    }
+
+    /// Helper text under the matched reference name. Indicates
+    /// what would happen on tap (register), and warns when the
+    /// reference is already stocked in this batch.
+    private func matchedSubtitle(for match: MatchedForRegister) -> String {
+        if match.existingCount > 0 {
+            return String(localized: "Tap to add (already \(match.existingCount) in this batch)")
+        }
+        return String(localized: "Tap to add to this batch")
+    }
+
+    /// Stable identity per state — used by `.animation(_:value:)`
+    /// so SwiftUI knows when to interpolate between banner shapes.
+    private var stateID: String {
+        switch lastScan {
+        case .idle: return "idle"
+        case .lookingUp(let p): return "lookup-\(p)"
+        case .matched(let m): return "matched-\(m.reference.ref)"
+        case .creating(let p): return "creating-\(p)"
+        case .created(let r, _): return "created-\(r.ref)"
+        case .transportError(let m): return "err-\(m)"
         }
     }
 
     // MARK: - Scan handling
 
+    /// Step 1: a fresh code lands. Look up the catalog + count
+    /// existing stock items in the active batch. Result drives the
+    /// state into either `.matched(...)` (showing the card) or one
+    /// of the error states / alerts.
     @MainActor
     private func handle(_ code: ScannedCode, batch: Batch) async {
-        guard !inflight else { return }
         feedback.didDetectCode()
         inflight = true
-        lastResult = .lookingUp(code.payload)
         defer { inflight = false }
+        lastScan = .lookingUp(code.payload)
 
         let refLookup = ReferenceLookupService(environment: settings.currentEnvironment)
         let stockService = StockService(environment: settings.currentEnvironment)
@@ -202,21 +252,20 @@ struct RegisterProductFlow: View {
                 by: settings.searchAttribute
             )
         } catch {
-            lastResult = .failed(error.localizedDescription)
             feedback.didFailLookup(reason: .transport)
+            lastScan = .transportError(error.localizedDescription)
             return
         }
 
         guard let reference = references.first else {
             feedback.didFailLookup(reason: .notFound)
-            lastResult = .idle
+            lastScan = .idle
             notFoundPayload = code.payload
             return
         }
 
-        // Check if there's already a stock_item for this ref. We call /stock
-        // with the same search attribute and filter on this batch_id to
-        // count existing rows.
+        // Count existing items in this batch — used to decide
+        // whether the "Already in stock" alert fires on tap.
         let existingCount: Int
         do {
             let matches = try await stockService.search(
@@ -228,24 +277,29 @@ struct RegisterProductFlow: View {
             existingCount = 0
         }
 
-        if existingCount > 0 {
-            // Hold the user's hand: show alert, they choose to add a new
-            // sample or skip. Audio cue = warning.
-            feedback.didFailLookup(reason: .notFound)
+        feedback.didFindReference()
+        lastScan = .matched(MatchedForRegister(
+            reference: reference,
+            payload: code.payload,
+            existingCount: existingCount
+        ))
+    }
+
+    /// Step 2: user tapped the matched card. If there's already
+    /// stock for this reference in the batch, surface the
+    /// confirmation alert; otherwise create directly.
+    @MainActor
+    private func confirmRegistration(of match: MatchedForRegister, batch: Batch) async {
+        let ean = settings.searchAttribute == .ean ? match.payload : match.reference.ean
+        if match.existingCount > 0 {
             existingPrompt = ExistingPrompt(
-                reference: reference,
-                existingCount: existingCount,
-                scannedEAN: settings.searchAttribute == .ean ? code.payload : reference.ean
+                reference: match.reference,
+                existingCount: match.existingCount,
+                scannedEAN: ean
             )
-            lastResult = .idle
             return
         }
-
-        await create(
-            reference: reference,
-            ean: settings.searchAttribute == .ean ? code.payload : reference.ean,
-            batch: batch
-        )
+        await create(reference: match.reference, ean: ean, batch: batch)
     }
 
     @MainActor
@@ -259,12 +313,16 @@ struct RegisterProductFlow: View {
         // lookup response didn't include one.
         guard let referenceID = reference.id else {
             feedback.didFailLookup(reason: .other)
-            lastResult = .failed("Reference \(reference.ref) is missing a reference_id, can't register.")
+            lastScan = .transportError(String(localized: "Reference \(reference.ref) is missing a reference_id, can't register."))
             return
         }
         let stockService = StockService(environment: settings.currentEnvironment)
         let status = StockItemStatus(rawValue: settings.defaultStockItemStatusOnRegister)
             ?? .addToStock
+
+        inflight = true
+        defer { inflight = false }
+        lastScan = .creating(reference.ref)
 
         do {
             let response = try await stockService.create(.init(
@@ -274,33 +332,47 @@ struct RegisterProductFlow: View {
                 ean: ean
             ))
             feedback.didFindReference()
-            // The newly-created stock item is the most recent one of the
-            // response. Fall back to a locally-built placeholder if the
-            // response unexpectedly carries no items.
+            // The newly-created stock item is the most recent one of
+            // the response. Fall back to a locally-built placeholder
+            // if the response unexpectedly carries no items.
             let createdItem = response.stockItems.last ?? StockItem(
                 id: 0,
                 batchID: resolvedBatch.id,
                 status: status,
                 ean: ean
             )
-            lastResult = .created(reference: reference, item: createdItem)
+            lastScan = .created(reference: reference, item: createdItem)
         } catch let err as GSHTTPClient.HTTPError {
             feedback.didFailLookup(reason: .other)
-            lastResult = .failed(err.userMessage)
+            lastScan = .transportError(err.userMessage)
         } catch {
             feedback.didFailLookup(reason: .other)
-            lastResult = .failed(error.localizedDescription)
+            lastScan = .transportError(error.localizedDescription)
         }
     }
 }
 
 // MARK: - Supporting types
 
-private enum RegisterResult {
+/// State machine for the scanner banner. The `.matched` arm is
+/// the click-to-register surface — `.created` is the persistent
+/// success state shown until the next scan.
+private enum RegisterScanState {
     case idle
     case lookingUp(String)
+    case matched(MatchedForRegister)
+    case creating(String)
     case created(reference: Reference, item: StockItem)
-    case failed(String)
+    case transportError(String)
+}
+
+/// Snapshot of the scan + lookup, awaiting the user's tap to
+/// confirm the registration. Carries the existing-count so the
+/// banner subtitle can warn about duplicates before the alert.
+private struct MatchedForRegister: Hashable {
+    let reference: Reference
+    let payload: String
+    let existingCount: Int
 }
 
 private struct ExistingPrompt: Identifiable {

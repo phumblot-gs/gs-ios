@@ -5485,6 +5485,74 @@
           }
         }
       }
+    },
+    "Tap to add to this batch": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Toucher pour ajouter à ce lot"
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dotknij, aby dodać do tej partii"
+          }
+        }
+      }
+    },
+    "Tap to add (already %lld in this batch)": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Toucher pour ajouter (déjà %lld dans ce lot)"
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dotknij, aby dodać (już %lld w tej partii)"
+          }
+        }
+      }
+    },
+    "Network error": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erreur réseau"
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Błąd sieci"
+          }
+        }
+      }
+    },
+    "Reference %@ is missing a reference_id, can't register.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La référence %@ n'a pas de reference_id, impossible de l'enregistrer."
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Referencja %@ nie ma pola reference_id, nie można zarejestrować."
+          }
+        }
+      }
     }
   },
   "version": "1.1"
