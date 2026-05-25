@@ -1050,7 +1050,19 @@ struct ReferenceDetailView: View {
     }
 
     private var picturesLatest: [Picture] {
-        pictures.latestByFilePath()
+        // Exclude rows that belong to the tech-views shooting
+        // method — those are already surfaced in the Tech views /
+        // Labels / Measures sections above. The `/picture` API
+        // doesn't filter by shooting-method id, only by name; we
+        // already have the matching name in DevSettings so the
+        // client-side filter has zero extra cost.
+        let techViewsMethod = settings.techViewsShootingMethodName
+        return pictures
+            .latestByFilePath()
+            .filter { picture in
+                guard let techViewsMethod else { return true }
+                return picture.shootingmethod != techViewsMethod
+            }
     }
 
     /// Build a row per view_type (in `rang` order) + extra picture rows

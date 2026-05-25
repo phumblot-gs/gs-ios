@@ -19,6 +19,12 @@ public struct Picture: Sendable, Hashable, Identifiable, Codable {
     public let dateCre: String?
     public let dateMod: String?
     public let validationDate: String?
+    /// Name of the GS shooting method this row was uploaded
+    /// under. The `/picture` endpoint only accepts this field as
+    /// a query (no id-based filter), and we use it client-side
+    /// to exclude tech-view uploads from the generic Pictures
+    /// section on the reference detail.
+    public let shootingmethod: String?
 
     public init(
         id: Int,
@@ -35,7 +41,8 @@ public struct Picture: Sendable, Hashable, Identifiable, Codable {
         fileSize: Int? = nil,
         dateCre: String? = nil,
         dateMod: String? = nil,
-        validationDate: String? = nil
+        validationDate: String? = nil,
+        shootingmethod: String? = nil
     ) {
         self.id = id
         self.ref = ref
@@ -52,6 +59,7 @@ public struct Picture: Sendable, Hashable, Identifiable, Codable {
         self.dateCre = dateCre
         self.dateMod = dateMod
         self.validationDate = validationDate
+        self.shootingmethod = shootingmethod
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -70,6 +78,7 @@ public struct Picture: Sendable, Hashable, Identifiable, Codable {
         case dateCre = "date_cre"
         case dateMod = "date_mod"
         case validationDate = "validation_date"
+        case shootingmethod
     }
 
     /// Custom decoder so `reference_id` survives the schema's
@@ -106,6 +115,7 @@ public struct Picture: Sendable, Hashable, Identifiable, Codable {
         self.dateCre = try c.decodeIfPresent(String.self, forKey: .dateCre)
         self.dateMod = try c.decodeIfPresent(String.self, forKey: .dateMod)
         self.validationDate = try c.decodeIfPresent(String.self, forKey: .validationDate)
+        self.shootingmethod = try c.decodeIfPresent(String.self, forKey: .shootingmethod)
     }
 
     public var thumbnailURL: URL? {
