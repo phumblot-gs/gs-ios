@@ -13,17 +13,6 @@ struct BatchListView: View {
     @State private var showCreate = false
     @State private var presentedBatch: Batch?
     @State private var scanError: String?
-    /// Per-batch stock-item count, lazily fetched the first time
-    /// the row appears. Lives for the lifetime of the screen; on
-    /// pull-to-refresh we wipe and refetch.
-    @State private var counts: [Int: BatchCountState] = [:]
-
-    /// State of a single batch's count fetch.
-    enum BatchCountState: Equatable {
-        case loading
-        case loaded(count: Int, partial: Bool)
-        case failed
-    }
 
     init(settings: DevSettings) {
         self.settings = settings
@@ -46,16 +35,9 @@ struct BatchListView: View {
                     NavigationLink {
                         BatchDetailView(batch: batch, settings: settings)
                     } label: {
-                        BatchRow(
-                            batch: batch,
-                            catalog: CatalogCache.shared,
-                            countState: counts[batch.id]
-                        )
+                        BatchRow(batch: batch, catalog: CatalogCache.shared)
                     }
-                    .task {
-                        await loader.loadNextPageIfNeeded(at: batch)
-                        await loadCountIfNeeded(for: batch)
-                    }
+                    .task { await loader.loadNextPageIfNeeded(at: batch) }
                 }
                 if loader.isLoading {
                     HStack { Spacer(); ProgressView(); Spacer() }
@@ -86,10 +68,7 @@ struct BatchListView: View {
                 .accessibilityLabel("Create batch")
             }
         }
-        .refreshable {
-            counts.removeAll()
-            await loader.refresh()
-        }
+        .refreshable { await loader.refresh() }
         .task {
             if loader.items.isEmpty { await loader.refresh() }
         }
@@ -125,23 +104,6 @@ struct BatchListView: View {
             Text(scanError ?? "")
         }
     }
-
-    /// Fetches the stock-item count for `batch` the first time
-    /// its row scrolls into view. Idempotent — re-entering the row
-    /// won't kick off a second request.
-    @MainActor
-    private func loadCountIfNeeded(for batch: Batch) async {
-        guard counts[batch.id] == nil else { return }
-        counts[batch.id] = .loading
-        let service = StockService(environment: settings.currentEnvironment)
-        do {
-            let (refs, pagination) = try await service.page(batchID: batch.id, offset: 0)
-            let count = refs.reduce(0) { $0 + $1.stockItems.count }
-            counts[batch.id] = .loaded(count: count, partial: pagination.hasMore)
-        } catch {
-            counts[batch.id] = .failed
-        }
-    }
 }
 
 // MARK: - Row
@@ -149,16 +111,11 @@ struct BatchListView: View {
 private struct BatchRow: View {
     let batch: Batch
     let catalog: CatalogCache
-    let countState: BatchListView.BatchCountState?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Text(batch.displayName)
-                    .font(.headline)
-                Spacer()
-                countBadge
-            }
+            Text(batch.displayName)
+                .font(.headline)
             HStack(spacing: 8) {
                 if let type = batch.type, !type.isEmpty {
                     Text(type)
@@ -180,28 +137,5 @@ private struct BatchRow: View {
             }
         }
         .padding(.vertical, 4)
-    }
-
-    /// Small badge on the trailing edge showing the loaded stock-
-    /// item count. Loading state shows a spinner, failure stays
-    /// silent (we don't want a red icon every time a batch fetch
-    /// hiccups). `partial == true` appends a `+` since only the
-    /// first 100 references were summed.
-    @ViewBuilder
-    private var countBadge: some View {
-        switch countState {
-        case .loading:
-            ProgressView().controlSize(.mini)
-        case .loaded(let count, let partial):
-            Label(
-                "\(count)\(partial ? "+" : "") items",
-                systemImage: "shippingbox"
-            )
-            .font(.caption.weight(.medium))
-            .labelStyle(.titleAndIcon)
-            .foregroundStyle(.secondary)
-        case .failed, .none:
-            EmptyView()
-        }
     }
 }
