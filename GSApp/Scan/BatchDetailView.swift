@@ -1,4 +1,5 @@
 import SwiftUI
+import GSScanner
 import GSAPIClient
 import GSCore
 
@@ -19,10 +20,22 @@ struct BatchDetailView: View {
     /// view leaves this list stale otherwise.
     @State private var didFirstAppear = false
 
+    // MARK: Filters
+    /// Status ids the user wants to see. Initialised to the full
+    /// set of enabled statuses → equivalent to "no filter" since
+    /// only enabled statuses can be assigned to stock items anyway.
+    @State private var selectedStatuses: Set<Int>
+    @State private var refQuery: String = ""
+    @State private var refDebounced: String = ""
+    @State private var eanQuery: String = ""
+    @State private var eanDebounced: String = ""
+    @State private var showEANScanner = false
+
     init(batch: Batch, settings: DevSettings) {
         self.initialBatch = batch
         self.settings = settings
         _currentBatch = State(initialValue: batch)
+        _selectedStatuses = State(initialValue: settings.enabledStockItemStatuses)
         let service = StockService(environment: settings.currentEnvironment)
         _loader = State(initialValue: PaginatedLoader { offset in
             let (items, page) = try await service.page(batchID: batch.id, offset: offset)
@@ -33,6 +46,7 @@ struct BatchDetailView: View {
     var body: some View {
         List {
             metadataSection
+            filtersSection
             contentsSection
         }
         .navigationTitle("")
@@ -55,18 +69,83 @@ struct BatchDetailView: View {
                 // Returning from a pushed detail (e.g. after a
                 // batch move): refetch the contents so a removed
                 // stock item disappears.
-                Task { await loader.refresh() }
+                Task { await rebuildLoader() }
             } else {
                 didFirstAppear = true
             }
         }
-        .refreshable { await loader.refresh() }
+        .refreshable { await rebuildLoader() }
         .sheet(isPresented: $showEdit) {
             BatchEditView(batch: currentBatch, settings: settings) { updated in
                 currentBatch = updated
                 showEdit = false
             }
         }
+        .sheet(isPresented: $showEANScanner) {
+            BatchContentsEANScanner { scanned in
+                eanQuery = scanned
+                showEANScanner = false
+            }
+        }
+        // Debounce text inputs: copy to *Debounced after 300 ms of
+        // no further typing. The loader observes the debounced
+        // values so we don't fire a request on every keystroke.
+        .onChange(of: refQuery) { _, new in
+            Task {
+                try? await Task.sleep(for: .milliseconds(300))
+                if refQuery == new { refDebounced = new }
+            }
+        }
+        .onChange(of: eanQuery) { _, new in
+            Task {
+                try? await Task.sleep(for: .milliseconds(300))
+                if eanQuery == new { eanDebounced = new }
+            }
+        }
+        .onChange(of: refDebounced) { Task { await rebuildLoader() } }
+        .onChange(of: eanDebounced) { Task { await rebuildLoader() } }
+        .onChange(of: selectedStatuses) { Task { await rebuildLoader() } }
+    }
+
+    /// Replaces the loader with a fresh one bound to the current
+    /// filter values, then kicks off a refresh. Keeping the
+    /// fetcher closure capture clean (filters are read at the
+    /// call site) makes server-side filtering straightforward.
+    @MainActor
+    private func rebuildLoader() async {
+        let service = StockService(environment: settings.currentEnvironment)
+        let batchID = currentBatch.id
+        let ref = refDebounced.trimmingCharacters(in: .whitespacesAndNewlines)
+        let ean = eanDebounced.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Pass the status filter only when it's a proper subset of
+        // the enabled statuses; otherwise omit so we don't blow
+        // out the API with `in:` over the full set.
+        let statusFilter: Set<Int>? = statusFilterPayload
+        let newLoader = PaginatedLoader<ReferenceStockRow> { offset in
+            let (items, page) = try await service.page(
+                batchID: batchID,
+                offset: offset,
+                ref: ref.isEmpty ? nil : ref,
+                ean: ean.isEmpty ? nil : ean,
+                statuses: statusFilter
+            )
+            return (items: items.map { ReferenceStockRow(rs: $0) }, pagination: page)
+        }
+        loader = newLoader
+        await newLoader.refresh()
+    }
+
+    /// Nil when the user has selected every enabled status (no
+    /// filter applied). A non-empty set when they've narrowed
+    /// down. An empty set after they unchecked everything — in
+    /// that case we still send nothing and let the empty UI render
+    /// because filtering by zero statuses returns nothing useful.
+    private var statusFilterPayload: Set<Int>? {
+        let enabled = settings.enabledStockItemStatuses
+        let effective = selectedStatuses.intersection(enabled)
+        if effective.isEmpty { return nil }            // user unchecked all → show all
+        if effective == enabled { return nil }         // covering set = no filter
+        return effective
     }
 
     @ViewBuilder
@@ -84,6 +163,82 @@ struct BatchDetailView: View {
         } header: {
             Text("Batch info")
         }
+    }
+
+    @ViewBuilder
+    private var filtersSection: some View {
+        Section {
+            // ref search — substring match, no scanner (scanner is
+            // for EAN below).
+            TextField("Ref", text: $refQuery)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+            // EAN search — exact match. Scanner button fills the
+            // text field with the scanned payload.
+            HStack(spacing: 8) {
+                TextField("EAN", text: $eanQuery)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                    .keyboardType(.numbersAndPunctuation)
+                Button {
+                    showEANScanner = true
+                } label: {
+                    Image(systemName: "barcode.viewfinder")
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("Scan EAN")
+            }
+            statusFilterMenu
+        } header: {
+            Text("Filters")
+        }
+    }
+
+    /// Status multi-select dropdown. Each enabled status appears
+    /// as a Toggle inside a Menu; the menu label summarises the
+    /// current selection ("All", "None", or "N selected").
+    @ViewBuilder
+    private var statusFilterMenu: some View {
+        Menu {
+            let enabled = settings.enabledStockItemStatuses
+            ForEach(StockItemStatus.orderedCases, id: \.rawValue) { status in
+                if enabled.contains(status.rawValue) {
+                    Button {
+                        if selectedStatuses.contains(status.rawValue) {
+                            selectedStatuses.remove(status.rawValue)
+                        } else {
+                            selectedStatuses.insert(status.rawValue)
+                        }
+                    } label: {
+                        HStack {
+                            Text(status.displayName)
+                            Spacer()
+                            if selectedStatuses.contains(status.rawValue) {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                }
+            }
+        } label: {
+            HStack {
+                Label("Statuses", systemImage: "line.3.horizontal.decrease.circle")
+                Spacer()
+                Text(statusFilterSummary)
+                    .foregroundStyle(.secondary)
+                    .font(.subheadline)
+            }
+        }
+    }
+
+    /// Short string used as the menu's trailing label. "All" /
+    /// "None" / "N selected" — keeps the row visually compact.
+    private var statusFilterSummary: String {
+        let enabled = settings.enabledStockItemStatuses
+        let effective = selectedStatuses.intersection(enabled)
+        if effective.isEmpty { return String(localized: "None") }
+        if effective == enabled { return String(localized: "All") }
+        return String(localized: "\(effective.count) selected")
     }
 
     private var contentsSection: some View {
@@ -118,6 +273,45 @@ struct BatchDetailView: View {
                     Text("\(total)")
                         .font(.caption.monospacedDigit())
                         .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+}
+
+/// Modal barcode reader used by `BatchDetailView` to fill the
+/// EAN filter field. Same pattern as `BatchCreateView`'s scanner
+/// — single-shot, dismisses on first hit, parent decides what to
+/// do with the payload.
+private struct BatchContentsEANScanner: View {
+    let onScanned: @MainActor (String) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var lastScanned: String?
+
+    var body: some View {
+        NavigationStack {
+            ZStack(alignment: .bottom) {
+                LiveBarcodeScannerView(resetDelaySeconds: 0.6) { code in
+                    guard lastScanned != code.payload else { return }
+                    lastScanned = code.payload
+                    onScanned(code.payload)
+                }
+                .ignoresSafeArea()
+
+                Text("Aim at a barcode")
+                    .font(.headline)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(.black.opacity(0.6), in: Capsule())
+                    .padding(.bottom, 40)
+            }
+            .navigationTitle("Scan EAN")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Cancel") { dismiss() }
                 }
             }
         }

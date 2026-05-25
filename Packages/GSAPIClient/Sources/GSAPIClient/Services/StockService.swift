@@ -39,11 +39,38 @@ public struct StockService: Sendable {
         return try await http.get("/stock", query: [key: scannedValue], as: [ReferenceStock].self)
     }
 
-    /// One page of stock items within a batch.
-    public func page(batchID: Int, offset: Int = 0) async throws -> (items: [ReferenceStock], pagination: PaginationInfo) {
-        try await http.getPage(
+    /// One page of stock items within a batch, with optional
+    /// filters. `statuses` is encoded as either `stock_item_status=N`
+    /// when a single value is supplied, or `in:csv` when multiple
+    /// — passing nil or the empty set means "no status filter".
+    /// `ref` is wrapped in `*…*` wildcards so it matches as a
+    /// substring (consistent with `ReferenceSearch`); `ean` is
+    /// sent verbatim for exact-match scan behaviour.
+    public func page(
+        batchID: Int,
+        offset: Int = 0,
+        ref: String? = nil,
+        ean: String? = nil,
+        statuses: Set<Int>? = nil
+    ) async throws -> (items: [ReferenceStock], pagination: PaginationInfo) {
+        var query: [String: String] = ["batch_id": String(batchID)]
+        if let trimmed = ref?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty {
+            query["ref"] = "*\(trimmed)*"
+        }
+        if let trimmed = ean?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty {
+            query["ean"] = trimmed
+        }
+        if let statuses, !statuses.isEmpty {
+            if statuses.count == 1, let only = statuses.first {
+                query["stock_item_status"] = String(only)
+            } else {
+                let csv = statuses.sorted().map(String.init).joined(separator: ",")
+                query["stock_item_status"] = "in:\(csv)"
+            }
+        }
+        return try await http.getPage(
             "/stock",
-            query: ["batch_id": String(batchID)],
+            query: query,
             offset: offset,
             as: ReferenceStock.self
         )
