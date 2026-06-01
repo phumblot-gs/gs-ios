@@ -43,6 +43,9 @@ let package = Package(
         .testTarget(
             name: "GSAPIClientTests",
             dependencies: ["GSAPIClient"],
+            resources: [
+                .process("Resources")
+            ],
             swiftSettings: [
                 .swiftLanguageMode(.v6)
             ]

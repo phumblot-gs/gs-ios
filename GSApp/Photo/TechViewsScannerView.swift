@@ -18,7 +18,7 @@ struct TechViewsScannerView: View {
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            LiveBarcodeScannerView(resetDelaySeconds: 1.0) { code in
+            LiveBarcodeScannerView(resetDelaySeconds: 1.0, minScanInterval: settings.scannerCooldownSeconds) { code in
                 Task { await resolve(value: code.payload) }
             }
             .ignoresSafeArea()

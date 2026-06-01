@@ -37,6 +37,15 @@ public final class LiveBarcodeScannerController: UIViewController {
     /// camera is held steady on a single item.
     public var resetDelaySeconds: TimeInterval = 0.5
 
+    /// Minimum interval enforced between two fires of `onScan`, whatever
+    /// the payload — including before the very first fire (the scanner
+    /// "warms up" for `minScanInterval` after `viewWillAppear`). A
+    /// device-wide preference, used as a small breath / safety against
+    /// accidental triggers across all scanner surfaces. `0` = disabled.
+    public var minScanInterval: TimeInterval = 0
+
+    private var nextAllowedFireTime: Date = .distantPast
+
     public override init(nibName: String?, bundle: Bundle?) {
         super.init(nibName: nibName, bundle: bundle)
         startResetTimer()
@@ -90,6 +99,9 @@ public final class LiveBarcodeScannerController: UIViewController {
 
     public override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
+        // Arm the cooldown so the first fire only happens after the
+        // initial wait once the scanner becomes visible.
+        nextAllowedFireTime = Date().addingTimeInterval(minScanInterval)
         Task.detached { [session] in
             if !session.isRunning {
                 session.startRunning()
@@ -287,6 +299,13 @@ private extension LiveBarcodeScannerController {
         // The reset timer will set `lastAcceptedPayload` back to nil after
         // `resetDelaySeconds` of nothing being detected.
         guard payload != lastAcceptedPayload else { return }
+
+        // Global cooldown: enforce a minimum interval between any two
+        // fires (including before the first one after the scanner
+        // appears).
+        guard now >= nextAllowedFireTime else { return }
+        nextAllowedFireTime = now.addingTimeInterval(minScanInterval)
+
         lastAcceptedPayload = payload
 
         let symbology = ScannedSymbology(transformed.type)

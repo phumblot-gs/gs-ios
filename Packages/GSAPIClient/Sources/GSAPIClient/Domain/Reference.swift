@@ -23,6 +23,8 @@ public struct Reference: Sendable, Hashable, Identifiable, Codable {
     public let online: String?
     public let productRef: String?
     public let productSmalltext: String?
+    /// URL of the reception photo captured at registration time.
+    public let photo: String?
     public let extra: ReferenceExtra?
 
     public init(
@@ -46,6 +48,7 @@ public struct Reference: Sendable, Hashable, Identifiable, Codable {
         online: String? = nil,
         productRef: String? = nil,
         productSmalltext: String? = nil,
+        photo: String? = nil,
         extra: ReferenceExtra? = nil
     ) {
         self.id = id
@@ -68,6 +71,7 @@ public struct Reference: Sendable, Hashable, Identifiable, Codable {
         self.online = online
         self.productRef = productRef
         self.productSmalltext = productSmalltext
+        self.photo = photo
         self.extra = extra
     }
 
@@ -92,6 +96,7 @@ public struct Reference: Sendable, Hashable, Identifiable, Codable {
         case online
         case productRef = "product_ref"
         case productSmalltext = "product_smalltext"
+        case photo
         case extra
     }
 

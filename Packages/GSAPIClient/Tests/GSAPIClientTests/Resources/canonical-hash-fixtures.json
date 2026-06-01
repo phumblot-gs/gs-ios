@@ -1,0 +1,44 @@
+{
+  "_comment": "Vendored from gs-mobile-backend/docs/canonical-hash-fixtures.json. The CI test (CanonicalHashTest) bails if any case diverges. When the backend updates the file, re-vendor here and re-run the test.",
+  "cases": [
+    {
+      "name": "sorted-keys",
+      "input": { "b": 1, "a": [2, 1] },
+      "canonical": "{\"a\":[2,1],\"b\":1}",
+      "sha256_hex": "96cdeb5c78442219cb2cce1e0c5803b330d6a126f5e3eb79b1c9f3eb7e00e911"
+    },
+    {
+      "name": "empty-object",
+      "input": {},
+      "canonical": "{}",
+      "sha256_hex": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+    },
+    {
+      "name": "boolean-and-string",
+      "input": { "name": "Paul", "flag": true },
+      "canonical": "{\"flag\":true,\"name\":\"Paul\"}",
+      "sha256_hex": "f701b1550d2eae639eb496a18eca21522f9bd8da1df1d7da2a8a1f35ce850dfb"
+    },
+    {
+      "name": "nested-objects",
+      "input": { "nested": { "deep": { "value": 42 } } },
+      "canonical": "{\"nested\":{\"deep\":{\"value\":42}}}",
+      "sha256_hex": "265dd6ab9bcf566896349dec0df16690d4243abef7d854999a3640738af4cbac"
+    },
+    {
+      "name": "control-char-escapes",
+      "input": { "escapes": "line1\nline2\ttab\"" },
+      "canonical": "{\"escapes\":\"line1\\nline2\\ttab\\\"\"}",
+      "sha256_hex": "91cd9d0819cf766e044c85f629a646384aa603088c5ae97e4712620503193e88"
+    },
+    {
+      "name": "migration-ping-pong-guard",
+      "description": "V1 reads V2 blob (incl. key unknown to V1), modifies known key, pushes union (incl. unknown key)",
+      "v2_blob_pulled": { "lang": "en", "photoQuality": "high", "new_key_unknown_to_v1": "value" },
+      "v1_local_after_modif": { "lang": "fr" },
+      "v1_expected_push_blob": { "lang": "fr", "new_key_unknown_to_v1": "value", "photoQuality": "high" },
+      "v1_expected_push_canonical": "{\"lang\":\"fr\",\"new_key_unknown_to_v1\":\"value\",\"photoQuality\":\"high\"}",
+      "v1_expected_push_hash": "ca40ac19412aa3d43b16bc561e8a28c0a05d1e470e26f554aaf08862fcaceac0"
+    }
+  ]
+}

@@ -25,6 +25,15 @@ public struct OAuthSignInService: Sendable {
         /// Numeric GS account the user belongs to. Used as the
         /// fallback staff signal when `email` isn't populated.
         public let accountID: Int?
+        /// Stable per-user identifier (GS user UID). Optional;
+        /// see `ExchangeResponse.user_uid`.
+        public let userUID: Int?
+        /// Display name (`firstname`).
+        public let userName: String?
+        /// Pre-hydration of the accounts list — lets the client
+        /// fill the account selector before the first round-trip
+        /// to `/account/me`.
+        public let accounts: [OAuthBackendService.ExchangeResponse.AccountSummary]?
     }
 
     public enum SignInError: Error, Sendable {
@@ -77,7 +86,10 @@ public struct OAuthSignInService: Sendable {
         return SignInResult(
             token: token,
             email: response.email,
-            accountID: response.account_id
+            accountID: response.account_id,
+            userUID: response.user_uid,
+            userName: response.user_name,
+            accounts: response.accounts
         )
     }
 

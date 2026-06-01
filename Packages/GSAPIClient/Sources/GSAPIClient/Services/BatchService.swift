@@ -13,9 +13,10 @@ public struct BatchService: Sendable {
 
     /// One page of batches starting at `offset`. Page size is decided by
     /// the server; `PaginationInfo` exposes what's left.
-    public func page(offset: Int = 0, code: String? = nil) async throws -> (items: [Batch], pagination: PaginationInfo) {
+    public func page(offset: Int = 0, code: String? = nil, smalltext: String? = nil) async throws -> (items: [Batch], pagination: PaginationInfo) {
         var query: [String: String] = [:]
         if let code, !code.isEmpty { query["code"] = code }
+        if let smalltext, !smalltext.isEmpty { query["smalltext"] = smalltext }
         return try await http.getPage("/stock/batch", query: query, offset: offset, as: Batch.self)
     }
 

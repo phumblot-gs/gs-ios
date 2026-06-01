@@ -27,6 +27,23 @@ public struct OAuthBackendService: Sendable {
         /// `account_id == 16` is the Grand-Shooting internal
         /// account and lights up the staff-only UI.
         public let account_id: Int?
+        /// Stable per-user identifier (GS user UID). Used as the
+        /// audit / rate-limit key by the settings-sync backend.
+        /// Optional — GS doesn't expose `user_uid` today; the
+        /// backend falls back on `account_id`.
+        public let user_uid: Int?
+        /// Display name (`firstname`) for snapshotting authors on
+        /// settings-sync history entries.
+        public let user_name: String?
+        /// Full accounts list. Mirrors `/v3/account/me.accounts`
+        /// so the client can pre-hydrate the account selector
+        /// before its own `/account/me` round-trip.
+        public let accounts: [AccountSummary]?
+
+        public struct AccountSummary: Sendable, Codable, Equatable {
+            public let account_id: Int
+            public let company: String?
+        }
     }
 
     public enum OAuthError: Error, Sendable {

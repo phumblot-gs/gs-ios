@@ -42,7 +42,9 @@ struct BatchDetailView: View {
         self.initialBatch = batch
         self.settings = settings
         _currentBatch = State(initialValue: batch)
-        _selectedStatuses = State(initialValue: settings.enabledStockItemStatuses)
+        // Seed from the persisted filter so the choice carries across
+        // batches; fall back to "all enabled" (no filter) the first time.
+        _selectedStatuses = State(initialValue: settings.batchStatusFilter ?? settings.enabledStockItemStatuses)
         let service = StockService(environment: settings.currentEnvironment)
         _loader = State(initialValue: PaginatedLoader { offset in
             let (items, page) = try await service.page(batchID: batch.id, offset: offset)
@@ -53,7 +55,6 @@ struct BatchDetailView: View {
     var body: some View {
         List {
             metadataSection
-            bulkActionsSection
             filtersSection
             contentsSection
         }
@@ -61,12 +62,21 @@ struct BatchDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    showEdit = true
+                Menu {
+                    Button {
+                        showEdit = true
+                    } label: {
+                        Label("Edit batch", systemImage: "pencil")
+                    }
+                    Button {
+                        showBulkStatusPicker = true
+                    } label: {
+                        Label("Change status", systemImage: "arrow.triangle.2.circlepath")
+                    }
                 } label: {
-                    Image(systemName: "pencil")
+                    Image(systemName: "ellipsis.circle")
                 }
-                .accessibilityLabel("Edit batch")
+                .accessibilityLabel("Batch actions")
             }
         }
         .task {
@@ -90,7 +100,7 @@ struct BatchDetailView: View {
             }
         }
         .sheet(isPresented: $showEANScanner) {
-            BatchContentsEANScanner { scanned in
+            BatchContentsEANScanner(settings: settings) { scanned in
                 eanQuery = scanned
                 showEANScanner = false
             }
@@ -125,7 +135,10 @@ struct BatchDetailView: View {
         }
         .onChange(of: refDebounced) { Task { await rebuildLoader() } }
         .onChange(of: eanDebounced) { Task { await rebuildLoader() } }
-        .onChange(of: selectedStatuses) { Task { await rebuildLoader() } }
+        .onChange(of: selectedStatuses) { _, new in
+            settings.batchStatusFilter = new
+            Task { await rebuildLoader() }
+        }
     }
 
     /// Replaces the loader with a fresh one bound to the current
@@ -183,25 +196,6 @@ struct BatchDetailView: View {
             }
         } header: {
             Text("Batch info")
-        }
-    }
-
-    /// Standalone primary action above the filter zone — opens
-    /// the two-step bulk status-change flow (pick target →
-    /// scanner).
-    @ViewBuilder
-    private var bulkActionsSection: some View {
-        Section {
-            Button {
-                showBulkStatusPicker = true
-            } label: {
-                Text("Change status")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.regular)
-            .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
-            .listRowBackground(Color.clear)
         }
     }
 
@@ -344,6 +338,7 @@ struct BatchDetailView: View {
 /// — single-shot, dismisses on first hit, parent decides what to
 /// do with the payload.
 private struct BatchContentsEANScanner: View {
+    let settings: DevSettings
     let onScanned: @MainActor (String) -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -353,7 +348,7 @@ private struct BatchContentsEANScanner: View {
     var body: some View {
         NavigationStack {
             ZStack(alignment: .bottom) {
-                LiveBarcodeScannerView(resetDelaySeconds: 0.6) { code in
+                LiveBarcodeScannerView(resetDelaySeconds: 0.6, minScanInterval: settings.scannerCooldownSeconds) { code in
                     guard lastScanned != code.payload else { return }
                     lastScanned = code.payload
                     // Fill-the-text-field scanner: every readable

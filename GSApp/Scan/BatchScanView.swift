@@ -17,7 +17,7 @@ struct BatchScanView: View {
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            LiveBarcodeScannerView(resetDelaySeconds: 0.6) { code in
+            LiveBarcodeScannerView(resetDelaySeconds: 0.6, minScanInterval: settings.scannerCooldownSeconds) { code in
                 Task { await handle(code) }
             }
             .ignoresSafeArea()

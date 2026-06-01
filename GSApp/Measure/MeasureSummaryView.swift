@@ -231,6 +231,7 @@ struct MeasureSummaryView: View {
             let env = settings.currentEnvironment
             let methodID = settings.techViewsShootingMethodID
             let methodName = settings.techViewsShootingMethodName
+            let templateID = settings.techViewsTemplateID
             let pattern = settings.photoFilenameMeasurePattern
             let measureUnit = settings.measurementUnit
             let frame = referenceFrame
@@ -243,6 +244,7 @@ struct MeasureSummaryView: View {
                     environment: env,
                     shootingMethodID: methodID,
                     shootingMethodName: methodName,
+                    templateID: templateID,
                     filenamePattern: pattern,
                     unit: measureUnit,
                     frame: frame,
@@ -274,6 +276,7 @@ struct MeasureSummaryView: View {
         environment: GSEnvironment,
         shootingMethodID: Int?,
         shootingMethodName: String?,
+        templateID: Int?,
         filenamePattern: String,
         unit: DevSettings.MeasurementUnit,
         frame: CapturedFrame,
@@ -282,9 +285,11 @@ struct MeasureSummaryView: View {
         reference: Reference,
         onIllustrationReady: @MainActor (LocalCapturePreview) -> Void
     ) async {
-        guard let shootingMethodID else {
-            // No shooting method configured — silently skip the
-            // upload. The measures themselves are already saved.
+        guard let shootingMethodID, templateID != nil else {
+            // Needs both a shooting method AND a template to land on a
+            // valid upload bench — silently skip the illustration
+            // upload otherwise. The measures themselves are saved
+            // regardless (they don't go through a production).
             return
         }
         let cutout = MeasureSubjectCutout.make(
@@ -336,7 +341,10 @@ struct MeasureSummaryView: View {
 
         do {
             let productionService = ProductionService(environment: environment)
-            let production = try await productionService.findOrCreateToday(shootingMethodID: shootingMethodID)
+            let production = try await productionService.findOrCreateToday(
+                shootingMethodID: shootingMethodID,
+                templateID: templateID
+            )
             let uploadService = ProductionUploadService(environment: environment)
             try await uploadService.upload(
                 jpegData: jpegData,
@@ -440,7 +448,7 @@ private struct ReferenceScanForMeasures: View {
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            LiveBarcodeScannerView(resetDelaySeconds: 0.5) { code in
+            LiveBarcodeScannerView(resetDelaySeconds: 0.5, minScanInterval: settings.scannerCooldownSeconds) { code in
                 Task { await resolve(value: code.payload) }
             }
             .ignoresSafeArea()

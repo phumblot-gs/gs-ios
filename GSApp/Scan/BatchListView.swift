@@ -9,6 +9,8 @@ struct BatchListView: View {
     let settings: DevSettings
 
     @State private var loader: PaginatedLoader<Batch>
+    @State private var query: String = ""
+    @State private var debouncedQuery: String = ""
     @State private var showScanner = false
     @State private var showCreate = false
     @State private var presentedBatch: Batch?
@@ -25,11 +27,15 @@ struct BatchListView: View {
     var body: some View {
         List {
             if loader.items.isEmpty && !loader.isLoading {
-                ContentUnavailableView(
-                    "No batches yet",
-                    systemImage: "shippingbox",
-                    description: Text("Tap + to create your first batch, or scan one to open it.")
-                )
+                if debouncedQuery.trimmingCharacters(in: .whitespaces).isEmpty {
+                    ContentUnavailableView(
+                        "No batches yet",
+                        systemImage: "shippingbox",
+                        description: Text("Tap + to create your first batch, or scan one to open it.")
+                    )
+                } else {
+                    ContentUnavailableView.search(text: debouncedQuery)
+                }
             } else {
                 ForEach(loader.items) { batch in
                     NavigationLink {
@@ -68,9 +74,17 @@ struct BatchListView: View {
                 .accessibilityLabel("Create batch")
             }
         }
+        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search by name")
         .refreshable { await loader.refresh() }
-        .task {
-            if loader.items.isEmpty { await loader.refresh() }
+        .task(id: debouncedQuery) {
+            await refreshForCurrentQuery()
+        }
+        .onChange(of: query) { _, new in
+            // Naive 300 ms debounce, mirroring the reference search.
+            Task {
+                try? await Task.sleep(for: .milliseconds(300))
+                if query == new { debouncedQuery = new }
+            }
         }
         .sheet(isPresented: $showScanner) {
             BatchScanView(
@@ -103,6 +117,19 @@ struct BatchListView: View {
         } message: {
             Text(scanError ?? "")
         }
+    }
+
+    private func refreshForCurrentQuery() async {
+        let trimmed = debouncedQuery.trimmingCharacters(in: .whitespaces)
+        let service = BatchService(environment: settings.currentEnvironment)
+        // Wildcard the value so GS does a substring match on the batch
+        // name (`smalltext`) instead of expecting an exact value.
+        let smalltext = trimmed.isEmpty ? nil : "*\(trimmed)*"
+        let newLoader = PaginatedLoader<Batch> { offset in
+            try await service.page(offset: offset, smalltext: smalltext)
+        }
+        loader = newLoader
+        await newLoader.refresh()
     }
 }
 

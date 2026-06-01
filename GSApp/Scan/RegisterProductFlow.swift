@@ -32,6 +32,11 @@ struct RegisterProductFlow: View {
     /// Last scanned EAN that didn't resolve to any catalog reference.
     /// Surfaced as an alert so the user gets a clear "not found".
     @State private var notFoundPayload: String?
+    @State private var showManualEntry = false
+    @State private var manualValue = ""
+    /// Reference whose reception photo we're about to capture — set
+    /// after a successful `create(...)`, drives the fullScreenCover.
+    @State private var pendingReceptionPhoto: Reference?
 
     var body: some View {
         Group {
@@ -44,18 +49,20 @@ struct RegisterProductFlow: View {
         .navigationTitle("Register products")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            if let batch = activeBatch {
+            if activeBatch != nil {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
-                        showBatchPicker = true
+                        showManualEntry = true
                     } label: {
-                        HStack(spacing: 4) {
-                            Text(batch.displayName).lineLimit(1)
-                            Image(systemName: "chevron.up.chevron.down")
-                                .font(.footnote)
-                        }
+                        Image(systemName: "keyboard")
                     }
+                    .accessibilityLabel("Enter ref or EAN")
                 }
+            }
+        }
+        .manualLookupAlert(isPresented: $showManualEntry, value: $manualValue) { typed in
+            if let batch = activeBatch {
+                Task { await handle(payload: typed, attributes: manualAttributes, batch: batch) }
             }
         }
         .sheet(isPresented: $showBatchPicker) {
@@ -84,6 +91,13 @@ struct RegisterProductFlow: View {
             Button("OK") { notFoundPayload = nil }
         } message: {
             Text(notFoundPayload.map { "No reference matches \($0)." } ?? "")
+        }
+        .fullScreenCover(item: $pendingReceptionPhoto) { reference in
+            ReceptionPhotoCaptureView(
+                settings: settings,
+                reference: reference,
+                onDone: { pendingReceptionPhoto = nil }
+            )
         }
     }
 
@@ -120,13 +134,18 @@ struct RegisterProductFlow: View {
     @ViewBuilder
     private func scannerView(for batch: Batch) -> some View {
         ZStack(alignment: .bottom) {
-            LiveBarcodeScannerView(resetDelaySeconds: 0.6) { code in
-                Task { await handle(code, batch: batch) }
+            LiveBarcodeScannerView(resetDelaySeconds: 0.6, minScanInterval: settings.scannerCooldownSeconds) { code in
+                Task { await handle(payload: code.payload, attributes: [settings.searchAttribute], batch: batch) }
             }
             .ignoresSafeArea(edges: [.top, .leading, .trailing])
 
             VStack(spacing: 12) {
-                if !batch.displayName.isEmpty {
+                // Batch chip — now also the batch switcher (the
+                // dedicated toolbar button became the manual-lookup
+                // keyboard).
+                Button {
+                    showBatchPicker = true
+                } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "shippingbox.fill")
                         Text("Registering to \(batch.displayName)")
@@ -134,12 +153,15 @@ struct RegisterProductFlow: View {
                             Text("· \(zone)")
                                 .foregroundStyle(.secondary)
                         }
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.caption2)
                     }
                     .font(.caption.weight(.medium))
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
                     .background(.thinMaterial, in: Capsule())
                 }
+                .buttonStyle(.plain)
                 banner(for: batch)
             }
             .padding(.horizontal)
@@ -235,22 +257,40 @@ struct RegisterProductFlow: View {
     /// existing stock items in the active batch. Result drives the
     /// state into either `.matched(...)` (showing the card) or one
     /// of the error states / alerts.
+    /// Lookup order for manual entry: the configured attribute first,
+    /// then the other one — so a typed ref resolves even when the app
+    /// is set to scan EANs (and vice-versa).
+    private var manualAttributes: [StockService.SearchAttribute] {
+        var attrs = [settings.searchAttribute]
+        for attr in [StockService.SearchAttribute.ean, .ref] where !attrs.contains(attr) {
+            attrs.append(attr)
+        }
+        return attrs
+    }
+
     @MainActor
-    private func handle(_ code: ScannedCode, batch: Batch) async {
+    private func handle(payload: String, attributes: [StockService.SearchAttribute], batch: Batch) async {
+        let payload = payload.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !payload.isEmpty else { return }
         feedback.didDetectCode()
         inflight = true
         defer { inflight = false }
-        lastScan = .lookingUp(code.payload)
+        lastScan = .lookingUp(payload)
 
         let refLookup = ReferenceLookupService(environment: settings.currentEnvironment)
         let stockService = StockService(environment: settings.currentEnvironment)
 
-        let references: [Reference]
+        var references: [Reference] = []
+        var matchedAttribute = attributes.first ?? settings.searchAttribute
         do {
-            references = try await refLookup.lookup(
-                scannedValue: code.payload,
-                by: settings.searchAttribute
-            )
+            for attribute in attributes {
+                let found = try await refLookup.lookup(scannedValue: payload, by: attribute)
+                if !found.isEmpty {
+                    references = found
+                    matchedAttribute = attribute
+                    break
+                }
+            }
         } catch {
             feedback.didFailLookup(reason: .transport)
             lastScan = .transportError(error.localizedDescription)
@@ -260,7 +300,7 @@ struct RegisterProductFlow: View {
         guard let reference = references.first else {
             feedback.didFailLookup(reason: .notFound)
             lastScan = .idle
-            notFoundPayload = code.payload
+            notFoundPayload = payload
             return
         }
 
@@ -269,8 +309,8 @@ struct RegisterProductFlow: View {
         let existingCount: Int
         do {
             let matches = try await stockService.search(
-                scannedValue: code.payload,
-                by: settings.searchAttribute
+                scannedValue: payload,
+                by: matchedAttribute
             )
             existingCount = matches.flatMap(\.stockItems).filter { $0.batchID == batch.id }.count
         } catch {
@@ -280,7 +320,8 @@ struct RegisterProductFlow: View {
         feedback.didFindReference()
         lastScan = .matched(MatchedForRegister(
             reference: reference,
-            payload: code.payload,
+            payload: payload,
+            matchedAttribute: matchedAttribute,
             existingCount: existingCount
         ))
     }
@@ -290,7 +331,7 @@ struct RegisterProductFlow: View {
     /// confirmation alert; otherwise create directly.
     @MainActor
     private func confirmRegistration(of match: MatchedForRegister, batch: Batch) async {
-        let ean = settings.searchAttribute == .ean ? match.payload : match.reference.ean
+        let ean = match.matchedAttribute == .ean ? match.payload : match.reference.ean
         if match.existingCount > 0 {
             existingPrompt = ExistingPrompt(
                 reference: match.reference,
@@ -342,6 +383,19 @@ struct RegisterProductFlow: View {
                 ean: ean
             )
             lastScan = .created(reference: reference, item: createdItem)
+            // Stamp the reference `online = today` for every successful
+            // registration, INCLUDING duplicates — a re-register is a
+            // fresh signal that the product is being processed today.
+            // Fire-and-forget on a detached task so a fast Back / Next
+            // doesn't cancel it; the stock-item create has already
+            // succeeded so the user-visible flow doesn't wait.
+            stampOnline(ref: reference.ref)
+            // Hand off to the reception-photo step — the stock_item is
+            // already saved, so this is non-blocking (the user can skip
+            // via the × button).
+            if reference.id != nil {
+                pendingReceptionPhoto = reference
+            }
         } catch let err as GSHTTPClient.HTTPError {
             feedback.didFailLookup(reason: .other)
             lastScan = .transportError(err.userMessage)
@@ -350,6 +404,38 @@ struct RegisterProductFlow: View {
             lastScan = .transportError(error.localizedDescription)
         }
     }
+
+    /// Fire-and-forget: stamp `reference.online` with today's date
+    /// (local-time `yyyy-MM-dd`). Snapshots `currentEnvironment` now
+    /// so a mid-flight account switch can't reroute the upsert to
+    /// the wrong shard. Failures are silent on the UI — stock-item
+    /// creation has already succeeded and the user is moving on; a
+    /// stale `online` shows up on the GS dashboard for a backend
+    /// audit to fix if needed.
+    private func stampOnline(ref: String) {
+        let environment = settings.currentEnvironment
+        let isoDate = Self.todayISODate.string(from: Date())
+        Task.detached(priority: .utility) {
+            let logger = GSLogger(category: "RegisterProduct")
+            do {
+                let service = ReferenceUpsertService(environment: environment)
+                try await service.markOnline(ref: ref, isoDate: isoDate)
+                logger.info("online stamped ref=\(ref) date=\(isoDate)")
+            } catch let err as GSHTTPClient.HTTPError {
+                logger.error("online stamp failed ref=\(ref): \(err.userMessage)")
+            } catch {
+                logger.error("online stamp failed ref=\(ref): \(error.localizedDescription)")
+            }
+        }
+    }
+
+    private static let todayISODate: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyy-MM-dd"
+        f.timeZone = .current
+        return f
+    }()
 }
 
 // MARK: - Supporting types
@@ -372,6 +458,7 @@ private enum RegisterScanState {
 private struct MatchedForRegister: Hashable {
     let reference: Reference
     let payload: String
+    let matchedAttribute: StockService.SearchAttribute
     let existingCount: Int
 }
 

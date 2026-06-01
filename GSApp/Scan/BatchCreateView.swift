@@ -99,7 +99,7 @@ struct BatchCreateView: View {
                 }
             }
             .sheet(isPresented: $showCodeScanner) {
-                BatchCodeScannerSheet { scanned in
+                BatchCodeScannerSheet(settings: settings) { scanned in
                     code = scanned
                     showCodeScanner = false
                 }
@@ -137,6 +137,7 @@ struct BatchCreateView: View {
 /// it doesn't try to resolve the code against an existing batch
 /// — we're creating a new one, the code is just text to store.
 private struct BatchCodeScannerSheet: View {
+    let settings: DevSettings
     let onScanned: @MainActor (String) -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -146,7 +147,7 @@ private struct BatchCodeScannerSheet: View {
     var body: some View {
         NavigationStack {
             ZStack(alignment: .bottom) {
-                LiveBarcodeScannerView(resetDelaySeconds: 0.6) { code in
+                LiveBarcodeScannerView(resetDelaySeconds: 0.6, minScanInterval: settings.scannerCooldownSeconds) { code in
                     guard lastScanned != code.payload else { return }
                     lastScanned = code.payload
                     // Fill-the-text-field scanners: every readable

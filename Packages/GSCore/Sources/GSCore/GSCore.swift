@@ -119,10 +119,32 @@ public struct GSLogger: Sendable {
 public struct GSEnvironment: Sendable, Hashable, Codable {
     public let apiBaseURL: URL
     public let mobileBackendBaseURL: URL
+    /// Base URL for endpoints that always run on the user's **principal
+    /// (home) shard**, regardless of which account the selector points
+    /// at — currently `/stock*` (the stock physically lives on the home
+    /// account) and `/account*` (user-level endpoints). Nil → fall back
+    /// to `apiBaseURL` (single-account / legacy behaviour).
+    public let principalAPIBaseURL: URL?
+    /// GS account id sent as the `account_id` request header on every
+    /// call **except** `/stock*` and `/account*`. Nil → no header.
+    public let accountIDHeader: Int?
+    /// GS account id of the home/principal account. Used to inject the
+    /// stock-delegation query params (`account_id` / `target_account_id`)
+    /// on `/stock*` calls when it differs from `accountIDHeader`.
+    public let principalAccountID: Int?
 
-    public init(apiBaseURL: URL, mobileBackendBaseURL: URL) {
+    public init(
+        apiBaseURL: URL,
+        mobileBackendBaseURL: URL,
+        principalAPIBaseURL: URL? = nil,
+        accountIDHeader: Int? = nil,
+        principalAccountID: Int? = nil
+    ) {
         self.apiBaseURL = apiBaseURL
         self.mobileBackendBaseURL = mobileBackendBaseURL
+        self.principalAPIBaseURL = principalAPIBaseURL
+        self.accountIDHeader = accountIDHeader
+        self.principalAccountID = principalAccountID
     }
 
     /// Convenience: the OAuth entry endpoint on our backend.

@@ -8,6 +8,15 @@ struct GSApp: App {
     @State private var authState = AuthState()
     @State private var settings = DevSettings.shared
     @State private var catalog = CatalogCache.shared
+    @State private var accountStore = AccountStore()
+    @State private var appNavigation = AppNavigation()
+    @State private var syncRepository: SettingsSyncRepository = {
+        let settings = DevSettings.shared
+        return SettingsSyncRepository(
+            service: AccountSettingsService(environment: settings.currentEnvironment),
+            settings: settings
+        )
+    }()
     private let logger = GSLogger(category: "App")
 
     init() {
@@ -18,10 +27,18 @@ struct GSApp: App {
         WindowGroup {
             Group {
                 if authState.isSignedIn {
-                    RootView(authState: authState, settings: settings, catalog: catalog)
+                    RootView(authState: authState, settings: settings, catalog: catalog, accountStore: accountStore, appNavigation: appNavigation, syncRepository: syncRepository)
                 } else {
                     LoginView(authState: authState, settings: settings)
                 }
+            }
+            // Re-bind the sync service when the user flips between
+            // staging and production from the easter egg, so pushes
+            // hit the right mobile backend.
+            .task(id: settings.backendEnvironment) {
+                syncRepository.updateService(
+                    AccountSettingsService(environment: settings.currentEnvironment)
+                )
             }
             // Refresh the catalog (zones, categories, batch types) any time
             // we become signed in (cold launch with a persisted session, or
@@ -41,7 +58,19 @@ struct GSApp: App {
                        settings.backendEnvironment != .production {
                         settings.backendEnvironment = .production
                     }
+                    // Resolve the user's accounts + apply the active
+                    // one (shard + account_id header + per-account
+                    // settings) BEFORE the catalog refresh, so the
+                    // refresh targets the right account.
+                    await accountStore.load(settings: settings)
                     await catalog.refresh(environment: settings.currentEnvironment)
+                    // Auto-pull central settings once per 24h, admin-only.
+                    // Skipped silently for non-admins to avoid hitting
+                    // the backend 403 on every sign-in.
+                    if accountStore.me?.isAdmin == true, syncRepository.shouldAutoPull() {
+                        await syncRepository.pull()
+                        syncRepository.markAutoPulled()
+                    }
                 }
             }
             .onOpenURL { url in
@@ -65,23 +94,34 @@ struct RootView: View {
     let authState: AuthState
     @Bindable var settings: DevSettings
     @Bindable var catalog: CatalogCache
+    @Bindable var accountStore: AccountStore
+    @Bindable var appNavigation: AppNavigation
+    @Bindable var syncRepository: SettingsSyncRepository
 
     @Environment(\.modelContext) private var modelContext
     @State private var orphanReport: OrphanReport?
 
     var body: some View {
-        TabView {
+        TabView(selection: $appNavigation.selectedTab) {
             ScanTab(settings: settings)
                 .tabItem { Label("Scan", systemImage: "barcode.viewfinder") }
+                .tag(AppNavigation.AppTab.scan)
             PhotoTab(settings: settings)
                 .tabItem { Label("Photo", systemImage: "camera") }
-            MeasureTab(settings: settings)
-                .tabItem { Label("Measures", systemImage: "ruler") }
+                .tag(AppNavigation.AppTab.photo)
+            if settings.isMeasureEnabled {
+                MeasureTab(settings: settings)
+                    .tabItem { Label("Measures", systemImage: "ruler") }
+                    .tag(AppNavigation.AppTab.measure)
+            }
             HistoryTab(settings: settings)
                 .tabItem { Label("History", systemImage: "clock") }
-            SettingsTab(authState: authState, settings: settings, catalog: catalog)
+                .tag(AppNavigation.AppTab.history)
+            SettingsTab(authState: authState, settings: settings, catalog: catalog, accountStore: accountStore, syncRepository: syncRepository)
                 .tabItem { Label("Settings", systemImage: "gearshape") }
+                .tag(AppNavigation.AppTab.settings)
         }
+        .environment(appNavigation)
         .overlay(alignment: .top) {
             BackendStatusBanner(
                 environment: settings.currentEnvironment,

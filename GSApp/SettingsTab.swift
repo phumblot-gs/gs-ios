@@ -11,10 +11,18 @@ struct SettingsTab: View {
     @Bindable var authState: AuthState
     @Bindable var settings: DevSettings
     @Bindable var catalog: CatalogCache
+    @Bindable var accountStore: AccountStore
+    @Bindable var syncRepository: SettingsSyncRepository
 
     var body: some View {
         NavigationStack {
             List {
+                if settings.activeAccountID != nil {
+                    ActiveAccountBar(settings: settings)
+                        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 12, trailing: 16))
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                }
                 NavigationLink {
                     SettingsScannerView(settings: settings, catalog: catalog)
                 } label: {
@@ -26,12 +34,26 @@ struct SettingsTab: View {
                     menuRow(title: "Photo", systemImage: "camera")
                 }
                 NavigationLink {
+                    SettingsReferencesView(settings: settings)
+                } label: {
+                    menuRow(title: "References", systemImage: "tag")
+                }
+                NavigationLink {
                     SettingsGrandShootingView(authState: authState, settings: settings, catalog: catalog)
                 } label: {
                     menuRow(title: "Grand Shooting", systemImage: "building.2")
                 }
                 NavigationLink {
-                    SettingsProfileView(authState: authState, settings: settings)
+                    SettingsSyncView(
+                        settings: settings,
+                        accountStore: accountStore,
+                        repository: syncRepository
+                    )
+                } label: {
+                    menuRow(title: "Sync", systemImage: "icloud")
+                }
+                NavigationLink {
+                    SettingsProfileView(authState: authState, settings: settings, catalog: catalog, accountStore: accountStore)
                 } label: {
                     menuRow(title: "Profile", systemImage: "person.crop.circle")
                 }

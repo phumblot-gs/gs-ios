@@ -10,25 +10,30 @@ public struct LiveBarcodeScannerView: UIViewControllerRepresentable {
     public typealias UIViewControllerType = LiveBarcodeScannerController
 
     private let resetDelaySeconds: TimeInterval
+    private let minScanInterval: TimeInterval
     private let onScan: @MainActor (ScannedCode) -> Void
 
     public init(
         resetDelaySeconds: TimeInterval = 0.5,
+        minScanInterval: TimeInterval = 0,
         onScan: @escaping @MainActor (ScannedCode) -> Void
     ) {
         self.resetDelaySeconds = resetDelaySeconds
+        self.minScanInterval = minScanInterval
         self.onScan = onScan
     }
 
     public func makeUIViewController(context: Context) -> LiveBarcodeScannerController {
         let controller = LiveBarcodeScannerController()
         controller.resetDelaySeconds = resetDelaySeconds
+        controller.minScanInterval = minScanInterval
         controller.onScan = onScan
         return controller
     }
 
     public func updateUIViewController(_ uiViewController: LiveBarcodeScannerController, context: Context) {
         uiViewController.resetDelaySeconds = resetDelaySeconds
+        uiViewController.minScanInterval = minScanInterval
         uiViewController.onScan = onScan
     }
 }

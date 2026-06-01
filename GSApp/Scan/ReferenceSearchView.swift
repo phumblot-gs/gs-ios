@@ -76,14 +76,50 @@ struct ReferenceSearchView: View {
     private func refreshForCurrentQuery() async {
         let trimmed = debouncedQuery.trimmingCharacters(in: .whitespaces)
         let service = ReferenceLookupService(environment: settings.currentEnvironment)
+
+        // Empty query → recent references, no extra fan-out.
+        guard !trimmed.isEmpty else {
+            let newLoader = PaginatedLoader<Reference> { offset in
+                try await service.searchPage(query: [:], offset: offset)
+            }
+            loader = newLoader
+            await newLoader.refresh()
+            return
+        }
+
         // Wrap the value with `*` wildcards so the GS API performs a
         // substring match instead of expecting an exact value — the
-        // user shouldn't have to type the full smalltext.
-        let queryDict: [String: String] = trimmed.isEmpty ? [:] : [
-            "smalltext": "*\(trimmed)*"
-        ]
+        // user shouldn't have to type the full attribute.
+        let wildcarded = "*\(trimmed)*"
         let newLoader = PaginatedLoader<Reference> { offset in
-            try await service.searchPage(query: queryDict, offset: offset)
+            // On the first page, fire all three queries in parallel
+            // and merge in ref → ean → smalltext order so direct
+            // (possibly partial) code hits surface before label
+            // hits. Ref and EAN are best-effort: errors are
+            // swallowed so a hiccup on those endpoints doesn't
+            // hide the label results. Smalltext is mandatory — it
+            // also drives the pagination cursor for subsequent
+            // pages, where only smalltext is queried.
+            async let smalltextSearch = service.searchPage(
+                query: ["smalltext": wildcarded],
+                offset: offset
+            )
+            guard offset == 0 else {
+                return try await smalltextSearch
+            }
+            async let refSearch = service.searchPage(
+                query: ["ref": wildcarded],
+                offset: 0
+            )
+            async let eanSearch = service.searchPage(
+                query: ["ean": wildcarded],
+                offset: 0
+            )
+            let refs = (try? await refSearch)?.items ?? []
+            let eans = (try? await eanSearch)?.items ?? []
+            let smalltextPage = try await smalltextSearch
+            let merged = refs + eans + smalltextPage.items
+            return (items: merged, pagination: smalltextPage.pagination)
         }
         loader = newLoader
         await newLoader.refresh()

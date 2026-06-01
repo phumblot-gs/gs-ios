@@ -55,13 +55,23 @@ where Item.ID: Hashable {
         defer { isLoading = false }
         do {
             let result = try await fetcher(nextOffset)
+            var addedCount = 0
             for item in result.items where !seenIDs.contains(item.id) {
                 items.append(item)
                 seenIDs.insert(item.id)
+                addedCount += 1
             }
             total = result.pagination.total ?? total
             nextOffset = result.pagination.nextOffset
-            hasMore = result.pagination.hasMore
+            // Safety: if the server returned items but every one of
+            // them is a duplicate (e.g. it ignored the `offset` header
+            // and gave us the first page again), stop here — otherwise
+            // we'd loop forever on endpoints that don't honour offset.
+            if !result.items.isEmpty && addedCount == 0 {
+                hasMore = false
+            } else {
+                hasMore = result.pagination.hasMore
+            }
             error = nil
         } catch {
             self.error = error

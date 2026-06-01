@@ -17,10 +17,14 @@ struct SettingsGrandShootingView: View {
     @State private var shootingMethods: [ShootingMethod] = []
     @State private var isLoadingShootingMethods = false
     @State private var shootingMethodsError: String?
+    @State private var templates: [ProductionTemplate] = []
+    @State private var isLoadingTemplates = false
+    @State private var templatesError: String?
 
     var body: some View {
         Form {
             techViewsSection
+            templatesSection
             // Show the picker for confirmed staff AND for
             // `.unknown` (i.e. backend hasn't shipped account_id
             // / email yet). Only hide it from confirmed non-staff
@@ -93,10 +97,55 @@ struct SettingsGrandShootingView: View {
         } footer: {
             Text("Picks the Grand Shooting shooting method the technical-view uploads are scoped to. The Photo tab is disabled until a method is selected.")
         }
-        .task(id: settings.apiKeyRevision) {
-            if shootingMethods.isEmpty {
-                await loadShootingMethods()
+        .task(id: accountScopedReloadID) {
+            await loadShootingMethods()
+        }
+    }
+
+    /// Reload key: changes when the API key rotates OR the active GS
+    /// account switches, so the lists refetch for the new account.
+    private var accountScopedReloadID: String {
+        "\(settings.apiKeyRevision)#\(settings.activeAccountID ?? 0)"
+    }
+
+    // MARK: - Templates
+
+    private var templatesSection: some View {
+        Section {
+            if isLoadingTemplates && templates.isEmpty {
+                HStack { ProgressView().controlSize(.small); Text("Loading templates…") }
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            } else if let err = templatesError, templates.isEmpty {
+                Label(err, systemImage: "exclamationmark.triangle")
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+                Button("Retry") { Task { await loadTemplates() } }
+            } else {
+                Picker("Template", selection: templateBinding) {
+                    Text("None").tag(Int?.none)
+                    ForEach(templates) { template in
+                        Text(template.name).tag(Int?.some(template.id))
+                    }
+                }
+                Button {
+                    Task { await loadTemplates() }
+                } label: {
+                    HStack {
+                        Label("Refresh list", systemImage: "arrow.clockwise")
+                        Spacer()
+                        if isLoadingTemplates { ProgressView().controlSize(.small) }
+                    }
+                }
+                .disabled(isLoadingTemplates)
             }
+        } header: {
+            Text("Templates")
+        } footer: {
+            Text("Optional Grand Shooting template applied to the productions created for technical-view uploads. Leave on None to create productions without a template.")
+        }
+        .task(id: accountScopedReloadID) {
+            await loadTemplates()
         }
     }
 
@@ -175,6 +224,21 @@ struct SettingsGrandShootingView: View {
         )
     }
 
+    private var templateBinding: Binding<Int?> {
+        Binding(
+            get: { settings.techViewsTemplateID },
+            set: { newValue in
+                settings.techViewsTemplateID = newValue
+                if let id = newValue,
+                   let match = templates.first(where: { $0.id == id }) {
+                    settings.techViewsTemplateName = match.name
+                } else {
+                    settings.techViewsTemplateName = nil
+                }
+            }
+        )
+    }
+
     private func loadShootingMethods() async {
         isLoadingShootingMethods = true
         shootingMethodsError = nil
@@ -183,14 +247,46 @@ struct SettingsGrandShootingView: View {
         do {
             let methods = try await service.list()
             shootingMethods = methods.sorted(by: { $0.name < $1.name })
-            if let id = settings.techViewsShootingMethodID,
-               let match = methods.first(where: { $0.id == id }) {
-                settings.techViewsShootingMethodName = match.name
+            // Reconcile the persisted selection with the fresh list:
+            // refresh the cached name, or drop the selection entirely
+            // when the method has been deleted on GS.
+            if let id = settings.techViewsShootingMethodID {
+                if let match = methods.first(where: { $0.id == id }) {
+                    settings.techViewsShootingMethodName = match.name
+                } else {
+                    settings.techViewsShootingMethodID = nil
+                    settings.techViewsShootingMethodName = nil
+                }
             }
         } catch let err as GSHTTPClient.HTTPError {
             shootingMethodsError = err.userMessage
         } catch {
             shootingMethodsError = error.localizedDescription
+        }
+    }
+
+    private func loadTemplates() async {
+        isLoadingTemplates = true
+        templatesError = nil
+        defer { isLoadingTemplates = false }
+        let service = ProductionTemplateService(environment: settings.currentEnvironment)
+        do {
+            let fetched = try await service.list()
+            templates = fetched.sorted(by: { $0.name < $1.name })
+            // Same reconciliation as shooting methods: drop a stale
+            // selection when the template no longer exists on GS.
+            if let id = settings.techViewsTemplateID {
+                if let match = fetched.first(where: { $0.id == id }) {
+                    settings.techViewsTemplateName = match.name
+                } else {
+                    settings.techViewsTemplateID = nil
+                    settings.techViewsTemplateName = nil
+                }
+            }
+        } catch let err as GSHTTPClient.HTTPError {
+            templatesError = err.userMessage
+        } catch {
+            templatesError = error.localizedDescription
         }
     }
 

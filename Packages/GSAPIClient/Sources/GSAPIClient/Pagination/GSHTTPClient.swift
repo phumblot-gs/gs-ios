@@ -137,6 +137,7 @@ public struct GSHTTPClient: Sendable {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        applyAccountHeader(to: &request, path: path)
         request.httpBody = body
 
         let (data, _) = try await perform(request)
@@ -170,12 +171,14 @@ public struct GSHTTPClient: Sendable {
         offset: Int?,
         body: Body?
     ) throws -> URLRequest {
-        guard let url = buildURL(path: path, query: query) else {
+        let effective = effectiveQuery(path: path, method: method, query: query)
+        guard let url = buildURL(path: path, query: effective) else {
             throw HTTPError.invalidURL
         }
         var request = URLRequest(url: url)
         request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        applyAccountHeader(to: &request, path: path)
         if let offset {
             request.setValue(String(offset), forHTTPHeaderField: "offset")
         }
@@ -194,12 +197,14 @@ public struct GSHTTPClient: Sendable {
         body: Data?
     ) throws -> URLRequest {
         // Overload that skips the encoder when there's no typed body.
-        guard let url = buildURL(path: path, query: query) else {
+        let effective = effectiveQuery(path: path, method: method, query: query)
+        guard let url = buildURL(path: path, query: effective) else {
             throw HTTPError.invalidURL
         }
         var request = URLRequest(url: url)
         request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        applyAccountHeader(to: &request, path: path)
         if let offset {
             request.setValue(String(offset), forHTTPHeaderField: "offset")
         }
@@ -210,11 +215,86 @@ public struct GSHTTPClient: Sendable {
         return request
     }
 
-    /// Concatenate `path` onto `environment.apiBaseURL` *appending* to the
+    /// `/stock*` and `/account*` always run on the user's **principal
+    /// (home) shard** and carry no `account_id` header — they're
+    /// scoped to the home account regardless of the selector. Every
+    /// other path targets the selected account's shard and carries
+    /// the header so GS scopes the response to that account.
+    private func routesToPrincipalShard(_ path: String) -> Bool {
+        let normalized = path.hasPrefix("/") ? path : "/" + path
+        return normalized.hasPrefix("/stock") || normalized.hasPrefix("/account")
+    }
+
+    private func isStockPath(_ path: String) -> Bool {
+        let normalized = path.hasPrefix("/") ? path : "/" + path
+        return normalized.hasPrefix("/stock")
+    }
+
+    private func isStockBatchOrZonePath(_ path: String) -> Bool {
+        let normalized = path.hasPrefix("/") ? path : "/" + path
+        return normalized.hasPrefix("/stock/batch") || normalized.hasPrefix("/stock/zone")
+    }
+
+    private func applyAccountHeader(to request: inout URLRequest, path: String) {
+        guard !routesToPrincipalShard(path), let accountID = environment.accountIDHeader else { return }
+        request.setValue(String(accountID), forHTTPHeaderField: "account_id")
+    }
+
+    /// Merges the caller's query with the stock-delegation params GS
+    /// requires when active != principal. The exact pair depends on
+    /// the endpoint:
+    ///
+    /// - `GET /stock`, `GET /stock?batch_id=…` (search + batch contents):
+    ///   the stock items live on the principal, but the embedded
+    ///   reference catalog must come from the active account →
+    ///   `account_id = principal`, `target_account_id = active`.
+    /// - `GET /stock/batch*`, `GET /stock/zone*`: standard delegation,
+    ///   `account_id = active`, `target_account_id = principal`.
+    /// - `POST /stock`, `PATCH /stock/{id}`: only `account_id = active`
+    ///   (so GS resolves `reference_id` from the active catalog). No
+    ///   `target_account_id`.
+    /// - `POST /stock/batch*`: no delegation query (the batch is
+    ///   created on the principal via shard routing + token).
+    ///
+    /// Caller-provided query keys win on collision (defensive — should
+    /// not normally happen since services don't inject these names).
+    private func effectiveQuery(path: String, method: String, query: [String: String]) -> [String: String] {
+        guard isStockPath(path),
+              let active = environment.accountIDHeader,
+              let principal = environment.principalAccountID
+        else { return query }
+
+        var injected: [String: String] = [:]
+        switch method.uppercased() {
+        case "GET":
+            if isStockBatchOrZonePath(path) {
+                injected["account_id"] = String(active)
+                injected["target_account_id"] = String(principal)
+            } else {
+                injected["account_id"] = String(principal)
+                injected["target_account_id"] = String(active)
+            }
+        case "POST", "PATCH":
+            if !isStockBatchOrZonePath(path) {
+                injected["account_id"] = String(active)
+            }
+        default:
+            break
+        }
+        return injected.merging(query) { _, callerValue in callerValue }
+    }
+
+    /// Concatenate `path` onto the relevant base URL *appending* to the
     /// base's existing path (e.g. `/v3`), rather than replacing it the way
     /// `URLComponents.url(relativeTo:)` does for absolute paths.
+    /// `/stock*` and `/account*` route to `principalAPIBaseURL` (the
+    /// user's home shard); everything else routes to `apiBaseURL`
+    /// (the selected account's shard).
     private func buildURL(path: String, query: [String: String]) -> URL? {
-        guard var components = URLComponents(url: environment.apiBaseURL, resolvingAgainstBaseURL: false) else {
+        let base = routesToPrincipalShard(path)
+            ? (environment.principalAPIBaseURL ?? environment.apiBaseURL)
+            : environment.apiBaseURL
+        guard var components = URLComponents(url: base, resolvingAgainstBaseURL: false) else {
             return nil
         }
         let basePath = components.path

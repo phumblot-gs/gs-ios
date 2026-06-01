@@ -5,11 +5,20 @@ import GSAPIClient
 /// an entry pushes the corresponding flow onto the navigation stack.
 struct ScanTab: View {
     let settings: DevSettings
+    @Environment(AppNavigation.self) private var appNavigation
 
     var body: some View {
-        NavigationStack {
+        @Bindable var nav = appNavigation
+        NavigationStack(path: $nav.scanPath) {
             ScanMenuView(settings: settings)
                 .navigationTitle("Scan")
+                // Programmatic destination used by `navigateToScanProducts()`
+                // — e.g. the "next product" button on the tech-views capture.
+                // The menu card keeps pushing the same flow via its own
+                // NavigationLink for the regular tap path.
+                .navigationDestination(for: AppNavigation.ScanProductsRoute.self) { _ in
+                    ScanProductFlow(settings: settings)
+                }
         }
     }
 }
@@ -20,6 +29,10 @@ struct ScanMenuView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
+                if settings.activeAccountID != nil {
+                    ActiveAccountBar(settings: settings)
+                }
+
                 ScanMenuCard(
                     title: "Scan products",
                     subtitle: "Look up a reference and update its stock item status.",

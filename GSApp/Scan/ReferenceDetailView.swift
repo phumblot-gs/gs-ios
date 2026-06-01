@@ -8,6 +8,7 @@ import GSCore
 /// upcoming batch / register flows.
 struct ReferenceDetailView: View {
     let settings: DevSettings
+    @Environment(AppNavigation.self) private var appNavigation
 
     enum Source: Hashable {
         /// Result of a barcode scan — one or more `ReferenceStock` rows.
@@ -134,7 +135,9 @@ struct ReferenceDetailView: View {
                 if !stockItems.isEmpty {
                     stockItemSection
                 }
-                measuresSection
+                if settings.isMeasureEnabled {
+                    measuresSection
+                }
                 metadataSection
                 techViewsSection
                 shotListSection
@@ -248,6 +251,7 @@ struct ReferenceDetailView: View {
                 TechViewsCaptureView(
                     settings: settings,
                     reference: reference,
+                    stockItems: stockItems,
                     onExit: { previews in
                         showTechViewsCapture = false
                         // Keep just-uploaded JPEGs in memory keyed
@@ -267,6 +271,9 @@ struct ReferenceDetailView: View {
                             await refreshReferenceAfterMeasures()
                             await loadTechViews(triggeredByUser: true)
                         }
+                    },
+                    onAdvanceAndScan: { picked in
+                        Task { await advanceAndScan(picked) }
                     }
                 )
             }
@@ -288,20 +295,64 @@ struct ReferenceDetailView: View {
     // MARK: - Reference identity
 
     private var referenceCard: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            if let display = currentReferenceStock?.reference.displayName {
-                Text(display).font(.title3.bold())
-            }
-            HStack(spacing: 8) {
-                Label(currentReferenceStock?.reference.ref ?? "—", systemImage: "barcode")
-                    .font(.subheadline.monospaced())
-                if let ean = currentReferenceStock?.reference.ean {
-                    Text("· EAN \(ean)")
-                        .font(.subheadline.monospaced())
-                        .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 12) {
+            // Header: the reference code (always shown).
+            Label(currentReferenceStock?.reference.ref ?? "—", systemImage: "barcode")
+                .font(.subheadline.monospaced())
+
+            // Reception photo captured at registration time (when GS
+            // returned one). Tap → full-screen zoom carousel (single
+            // item) with pinch + pan; the matched-transition source
+            // gives the same pop-in as the other thumbnails.
+            if let reference = currentReferenceStock?.reference,
+               let photo = reference.photo, !photo.isEmpty {
+                let urls = Self.resolvedPhotoURLs(for: photo, shard: settings.gsAPIShard)
+                if urls.primary != nil || urls.fallback != nil {
+                    ReferencePhotoThumbnail(
+                        sourceID: "ref-photo-\(reference.id.map(String.init) ?? reference.ref)",
+                        namespace: pictureZoomNamespace,
+                        primaryURL: urls.primary,
+                        fallbackURL: urls.fallback,
+                        onTap: { resolved in
+                            zoomPresentation = ZoomPresentation(
+                                items: [
+                                    ZoomableItem(
+                                        id: "ref-photo-\(reference.id.map(String.init) ?? reference.ref)",
+                                        filename: nil,
+                                        imageURL: resolved,
+                                        localData: nil
+                                    )
+                                ],
+                                startIndex: 0
+                            )
+                        }
+                    )
                 }
             }
-            categoryBreadcrumb
+
+            // Configurable attribute table (label left / value right).
+            // Order + visibility come from Settings → References.
+            if let reference = currentReferenceStock?.reference {
+                let rows = referenceAttributeRows(for: reference)
+                if !rows.isEmpty {
+                    VStack(spacing: 0) {
+                        ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
+                            if index > 0 { Divider() }
+                            HStack(alignment: .firstTextBaseline) {
+                                Text(verbatim: row.label)
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                                Spacer(minLength: 16)
+                                Text(verbatim: row.value)
+                                    .font(.subheadline)
+                                    .multilineTextAlignment(.trailing)
+                            }
+                            .padding(.vertical, 6)
+                        }
+                    }
+                }
+            }
+
             HStack(spacing: 12) {
                 if let count = picturesLatest.count as Int?, count > 0 {
                     Label("\(count) pictures", systemImage: "photo.stack")
@@ -320,17 +371,38 @@ struct ReferenceDetailView: View {
         .background(.background, in: RoundedRectangle(cornerRadius: 12))
     }
 
-    @ViewBuilder
-    private var categoryBreadcrumb: some View {
-        let parts = [
-            currentReferenceStock?.reference.univers,
-            currentReferenceStock?.reference.gamme,
-            currentReferenceStock?.reference.family
-        ].compactMap { $0 }
-        if !parts.isEmpty {
-            Text(parts.joined(separator: " · "))
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+    /// Resolves the `reference.photo` value (absolute URL or relative
+    /// `/dynimage/...` path) to a (primary, fallback) URL pair.
+    /// Relative paths build `https://app-XX.grand-shooting.com<path>`
+    /// from the active account's shard (`api-XX` → `app-XX`), with a
+    /// fallback on `https://app.grand-shooting.com<path>` when the
+    /// shard-specific host doesn't resolve. Absolute URLs are used
+    /// as-is, no fallback.
+    fileprivate static func resolvedPhotoURLs(for raw: String, shard: String) -> (primary: URL?, fallback: URL?) {
+        let lower = raw.lowercased()
+        if lower.hasPrefix("http://") || lower.hasPrefix("https://") {
+            return (URL(string: raw), nil)
+        }
+        let path = raw.hasPrefix("/") ? raw : "/" + raw
+        let shardHost: String? = shard.hasPrefix("api")
+            ? "app" + shard.dropFirst("api".count)
+            : nil
+        let primary = shardHost.flatMap { URL(string: "https://\($0).grand-shooting.com\(path)") }
+        let fallback = URL(string: "https://app.grand-shooting.com\(path)")
+        return (primary, fallback)
+    }
+
+    /// Visible attribute rows (label + non-empty value) for the info
+    /// table, honouring the user's order + visibility configuration.
+    private func referenceAttributeRows(for reference: Reference) -> [(id: String, label: String, value: String)] {
+        let available = ReferenceAttributeCatalog.available(extraColumns: settings.activeCatalogExtraColumns)
+        let reconciled = ReferenceAttributeCatalog.reconciled(
+            available: available,
+            storedJSON: settings.referenceAttributeConfigJSON
+        )
+        return reconciled.compactMap { item in
+            guard item.visible, let value = item.attribute.value(reference) else { return nil }
+            return (id: item.attribute.id, label: item.attribute.label, value: value)
         }
     }
 
@@ -692,8 +764,8 @@ struct ReferenceDetailView: View {
         }
     }
 
-    private var hasShootingMethod: Bool {
-        settings.techViewsShootingMethodID != nil
+    private var canUploadPhotosToGS: Bool {
+        settings.canUploadPhotosToGS
     }
 
     private var metadataSection: some View {
@@ -833,9 +905,9 @@ struct ReferenceDetailView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.regular)
-                .disabled(!hasShootingMethod)
-                if !hasShootingMethod {
-                    Text("Configure a shooting method in Settings → Grand Shooting before capturing tech views.")
+                .disabled(!canUploadPhotosToGS)
+                if !canUploadPhotosToGS {
+                    Text("Configure a shooting method and a template in Settings → Grand Shooting before capturing tech views.")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                 }
@@ -1524,6 +1596,40 @@ struct ReferenceDetailView: View {
         }
     }
 
+    /// Driven by the "next product" button on the tech-views capture.
+    /// Sets the picked stock_item to the configured "default status
+    /// after tech views" (Settings → Scanner), dismisses the capture
+    /// cover, and rebases the Scan tab on the product scanner. No-op on
+    /// the PATCH when the item is already on the target status, when no
+    /// item was picked, or when the configured status is invalid.
+    /// Failures surface in the existing "Status update failed" alert
+    /// and abort the navigation.
+    @MainActor
+    private func advanceAndScan(_ picked: StockItem?) async {
+        if let item = picked,
+           let targetStatus = StockItemStatus(rawValue: settings.defaultStockItemStatusAfterTechViews),
+           item.status != targetStatus {
+            do {
+                let service = StockService(environment: settings.currentEnvironment)
+                let updated = try await service.update(
+                    id: item.id,
+                    payload: .init(status: targetStatus)
+                )
+                spliceUpdatedStockItem(updated)
+            } catch let err as GSHTTPClient.HTTPError {
+                showTechViewsCapture = false
+                actionErrorMessage = err.userMessage
+                return
+            } catch {
+                showTechViewsCapture = false
+                actionErrorMessage = error.localizedDescription
+                return
+            }
+        }
+        showTechViewsCapture = false
+        appNavigation.navigateToScanProducts()
+    }
+
     // MARK: - Retry banners
 
     private var stockLookupBanner: some View {
@@ -1720,6 +1826,83 @@ private struct ShotListRow: View {
                     Image(systemName: "photo")
                         .foregroundStyle(.secondary)
                 }
+        }
+    }
+}
+
+// MARK: - Reference reception-photo thumbnail (with shard fallback)
+
+/// AsyncImage-backed thumbnail for `reference.photo`. Tries the
+/// shard-specific `app-XX.grand-shooting.com` URL first; on failure
+/// (DNS / 404) swaps to the generic `app.grand-shooting.com` fallback
+/// and re-renders. Passes the URL that actually loaded back to the
+/// caller so the zoom view doesn't have to re-do the fallback dance.
+private struct ReferencePhotoThumbnail: View {
+    let sourceID: String
+    let namespace: Namespace.ID
+    let primaryURL: URL?
+    let fallbackURL: URL?
+    let onTap: (URL) -> Void
+
+    @State private var currentURL: URL?
+    @State private var triedFallback = false
+    @State private var loadedURL: URL?
+
+    var body: some View {
+        Button {
+            if let url = loadedURL ?? currentURL ?? primaryURL ?? fallbackURL {
+                onTap(url)
+            }
+        } label: {
+            AsyncImage(url: currentURL) { phase in
+                switch phase {
+                case .empty:
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color.secondary.opacity(0.12))
+                        .overlay(ProgressView())
+                case .success(let image):
+                    image.resizable().scaledToFill()
+                        .onAppear { loadedURL = currentURL }
+                case .failure:
+                    if !triedFallback, let fb = fallbackURL, currentURL != fb {
+                        // Swap to fallback once and let SwiftUI re-fetch.
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(Color.secondary.opacity(0.12))
+                            .overlay(ProgressView())
+                            .onAppear {
+                                triedFallback = true
+                                currentURL = fb
+                            }
+                    } else {
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(Color.secondary.opacity(0.12))
+                            .overlay(
+                                Image(systemName: "photo")
+                                    .foregroundStyle(.secondary)
+                            )
+                    }
+                @unknown default:
+                    EmptyView()
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 220)
+            .clipped()
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .matchedTransitionSource(id: sourceID, in: namespace)
+        .onAppear {
+            // Pick the best initial URL: primary if available, else
+            // fallback (and mark fallback as already tried).
+            if currentURL == nil {
+                if let p = primaryURL {
+                    currentURL = p
+                } else if let fb = fallbackURL {
+                    currentURL = fb
+                    triedFallback = true
+                }
+            }
         }
     }
 }

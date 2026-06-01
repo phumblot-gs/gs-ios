@@ -30,11 +30,25 @@ struct TechViewsCaptureView: View {
     /// pattern). Currently used for the photo-only fallback of
     /// the Measures section on non-LiDAR devices.
     var lockedMode: CaptureMode? = nil
+    /// Stock items attached to this reference (the ones the user is
+    /// currently working with — filtered by batch when entered from a
+    /// batch detail). Drives the "next product" button: 1 item → moved
+    /// directly; >1 → user picks which one to advance.
+    var stockItems: [StockItem] = []
     /// Called when the capture flow is dismissed. Receives the list
     /// of successful uploads (filename + JPEG data) so the parent
     /// can paint them locally while GS finishes generating CDN
     /// thumbnail URLs.
     let onExit: @MainActor ([LocalCapturePreview]) -> Void
+    /// Tapped via the "next product" button: the user is done with
+    /// tech views and wants to move on. The caller PATCHes the chosen
+    /// stock_item (if any) to its next enabled status and re-routes
+    /// the UI to Scanner → Scan products. `nil` when the reference
+    /// has no stock items — caller still re-routes, without a status
+    /// change. Only meaningful for the tech-views capture (i.e. when
+    /// `lockedMode == nil`); the measure-locked call site can leave
+    /// it as the no-op default.
+    var onAdvanceAndScan: @MainActor (StockItem?) -> Void = { _ in }
 
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \LearnedPictogram.createdAt, order: .reverse) private var learnedPictograms: [LearnedPictogram]
@@ -58,6 +72,15 @@ struct TechViewsCaptureView: View {
     @State private var filenameCounter = TechViewsFilenameCounter()
     @State private var isSeedingCounter = true
     @State private var uploads: [UploadStatus] = []
+    /// Presented when the user taps "next product" and the reference
+    /// has more than one stock_item: they pick which one to advance.
+    @State private var showStockItemPicker = false
+    /// "Armed" state for the next-product button — a confirmation
+    /// banner appears above the shutter; tapping it commits, tapping
+    /// the Next button again cancels, and a timer auto-cancels after
+    /// a few seconds.
+    @State private var nextConfirmPending = false
+    @State private var nextConfirmTask: Task<Void, Never>?
     /// Successful uploads collected to hand back on exit so the
     /// reference detail can render them locally until GS exposes
     /// CDN thumbnail URLs for them.
@@ -324,6 +347,10 @@ struct TechViewsCaptureView: View {
                     .padding(.vertical, 8)
                     .background(.red.opacity(0.85), in: Capsule())
             }
+            if nextConfirmPending {
+                nextConfirmBanner
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
             ZStack {
                 // The shutter sits at the geometric centre of the
                 // screen. The mode toggle (when visible) floats to
@@ -345,10 +372,110 @@ struct TechViewsCaptureView: View {
                     //       = 38 + 24 + 28 = 90 pt to the left.
                     modeToggleButton
                         .offset(x: -90)
+                    nextProductButton
+                        .offset(x: 90)
                 }
             }
             .padding(.bottom, 32)
         }
+        .sheet(isPresented: $showStockItemPicker) {
+            NextProductStockItemPicker(stockItems: stockItems) { picked in
+                showStockItemPicker = false
+                onAdvanceAndScan(picked)
+            }
+        }
+    }
+
+    /// Mirror of `modeToggleButton`, sitting to the right of the
+    /// shutter. Tapping signals "I'm done with this product" — the
+    /// stock_item gets advanced to its next enabled status and the
+    /// screen rebases on Scanner → Scan products for the next one.
+    private var nextProductButton: some View {
+        Button {
+            handleNextProductTap()
+        } label: {
+            VStack(spacing: 2) {
+                Image(systemName: "arrow.forward.to.line")
+                    .font(.title3.weight(.semibold))
+                Text("Next")
+                    .font(.caption2.weight(.semibold))
+            }
+            .foregroundStyle(.white)
+            .frame(width: 56, height: 56)
+            .background(Color.green.opacity(0.85), in: Circle())
+        }
+        .disabled(shutter.isCapturing)
+        .accessibilityLabel("Next product")
+    }
+
+    /// Confirmation banner shown above the shutter after a first tap
+    /// on the Next button — mirrors the "tap to add" pattern of
+    /// `RegisterProductFlow`: the second tap (on this banner)
+    /// commits, the Next button toggles off, or it auto-cancels.
+    private var nextConfirmBanner: some View {
+        Button {
+            commitNextProductTap()
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "checkmark.circle.fill")
+                Text("Tap to confirm · next product")
+            }
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(Color.green.opacity(0.9), in: Capsule())
+            .shadow(color: .black.opacity(0.2), radius: 6, y: 2)
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// First tap arms the Next action (shows the banner); second tap
+    /// on Next cancels. Committing is done from the banner itself.
+    private func handleNextProductTap() {
+        withAnimation(.spring(duration: 0.2)) {
+            nextConfirmPending.toggle()
+        }
+        if nextConfirmPending {
+            scheduleNextConfirmAutoDismiss()
+        } else {
+            cancelNextConfirmAutoDismiss()
+        }
+    }
+
+    /// Second tap (on the banner) — executes the original flow:
+    /// no stock → callback nil; one stock → callback that item; many
+    /// → present the picker. The caller handles the PATCH + navigation.
+    private func commitNextProductTap() {
+        cancelNextConfirmAutoDismiss()
+        withAnimation(.spring(duration: 0.2)) {
+            nextConfirmPending = false
+        }
+        if stockItems.isEmpty {
+            onAdvanceAndScan(nil)
+            return
+        }
+        if stockItems.count == 1 {
+            onAdvanceAndScan(stockItems[0])
+            return
+        }
+        showStockItemPicker = true
+    }
+
+    private func scheduleNextConfirmAutoDismiss() {
+        nextConfirmTask?.cancel()
+        nextConfirmTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(5))
+            if Task.isCancelled { return }
+            withAnimation(.easeOut(duration: 0.2)) {
+                nextConfirmPending = false
+            }
+        }
+    }
+
+    private func cancelNextConfirmAutoDismiss() {
+        nextConfirmTask?.cancel()
+        nextConfirmTask = nil
     }
 
     private var modeToggleButton: some View {
@@ -394,7 +521,21 @@ struct TechViewsCaptureView: View {
         candidates = []
         pictoAnnotations = [:]
         pendingMode = shutter.mode
-        pending = PendingShot(image: image, jpegData: photo.imageData)
+        let shot = PendingShot(image: image, jpegData: photo.imageData)
+
+        // OCR mode with OCR globally disabled has nothing to
+        // validate — behave like a standard capture and upload
+        // straight through, no Retake/Save shell.
+        if pendingMode == .ocr && !settings.isOCREnabled {
+            isRunningOCR = false
+            isDetectingPictos = false
+            analysisTask?.cancel()
+            analysisTask = nil
+            save(pending: shot)
+            return
+        }
+
+        pending = shot
 
         // Vision OCR + picto detection only runs when the user is
         // actively in OCR mode, OCR is enabled globally, AND the
@@ -491,6 +632,29 @@ struct TechViewsCaptureView: View {
         isDetectingPictos = false
     }
 
+    /// Snapshot of the per-account knobs the upload needs. Captured
+    /// at save() time so a mid-flight account switch can't reroute the
+    /// photo: by the time the upload Task actually executes,
+    /// `settings.currentEnvironment` may already point at a different
+    /// shard with a different account_id header. Without this snapshot
+    /// the photo (whose filename embeds ref A's EAN from account X's
+    /// catalog) would land in account Y's production.
+    private struct UploadContext: Sendable {
+        let environment: GSEnvironment
+        let shootingMethodID: Int?
+        let templateID: Int?
+        let activeAccountID: Int?
+    }
+
+    private func currentUploadContext() -> UploadContext {
+        UploadContext(
+            environment: settings.currentEnvironment,
+            shootingMethodID: settings.techViewsShootingMethodID,
+            templateID: settings.techViewsTemplateID,
+            activeAccountID: settings.activeAccountID
+        )
+    }
+
     private func save(pending: PendingShot) {
         // Pick the pattern that matches the mode this shot was
         // taken in (NOT the current mode — the user may have
@@ -570,9 +734,30 @@ struct TechViewsCaptureView: View {
         isRunningOCR = false
         isDetectingPictos = false
 
-        Task { await runUpload(data: uploadData, filename: filename, statusID: statusID) }
+        // Snapshot env + IDs RIGHT NOW. The detached upload Task will
+        // read these instead of dereferencing `settings.*` at upload
+        // time — that read could otherwise land on a different account
+        // if the user switches between save() and the actual upload.
+        let context = currentUploadContext()
+        let updateStatus = self.updateStatus // capture by value
+        Task.detached(priority: .userInitiated) {
+            await Self.runUpload(
+                context: context,
+                data: uploadData,
+                filename: filename,
+                statusID: statusID,
+                updateStatus: updateStatus
+            )
+        }
         if !mergedFields.isEmpty, let referenceID {
-            Task { await pushTechViews(referenceID: referenceID, fields: mergedFields) }
+            let env = context.environment
+            Task.detached(priority: .userInitiated) {
+                await Self.pushTechViews(
+                    environment: env,
+                    referenceID: referenceID,
+                    fields: mergedFields
+                )
+            }
         }
     }
 
@@ -606,45 +791,71 @@ struct TechViewsCaptureView: View {
         modelContext.insert(pictogram)
     }
 
-    @MainActor
-    private func runUpload(data: Data, filename: String, statusID: UUID) async {
+    /// Background upload — detached from the view's lifecycle so the
+    /// in-flight network call survives the user navigating away from
+    /// the capture screen. All inputs are captured by value (`context`,
+    /// `data`, `filename`, `statusID`, `updateStatus`); reading
+    /// anything off `settings` after the user has switched accounts
+    /// would land the photo in the wrong production.
+    private static func runUpload(
+        context: UploadContext,
+        data: Data,
+        filename: String,
+        statusID: UUID,
+        updateStatus: @escaping @MainActor @Sendable (UUID, UploadStatus.State) -> Void
+    ) async {
+        let logger = GSLogger(category: "TechViewsCapture")
         do {
-            let production = try await findOrCreateProduction()
-            let upload = ProductionUploadService(environment: settings.currentEnvironment)
+            let production = try await findOrCreateProduction(context: context)
+            let upload = ProductionUploadService(environment: context.environment)
             try await upload.upload(
                 jpegData: data,
                 filename: filename,
                 productionRootID: production.rootID
             )
-            updateStatus(id: statusID, to: .succeeded)
+            await MainActor.run { updateStatus(statusID, .succeeded) }
         } catch let err as GSHTTPClient.HTTPError {
-            updateStatus(id: statusID, to: .failed(err.userMessage))
+            logger.error("upload \(filename) failed: \(err.userMessage)")
+            await MainActor.run { updateStatus(statusID, .failed(err.userMessage)) }
         } catch {
-            updateStatus(id: statusID, to: .failed(error.localizedDescription))
+            logger.error("upload \(filename) failed: \(error.localizedDescription)")
+            await MainActor.run {
+                updateStatus(statusID, .failed(error.localizedDescription))
+            }
         }
     }
 
-    @MainActor
-    private func pushTechViews(referenceID: Int, fields: [String: String]) async {
+    private static func pushTechViews(
+        environment: GSEnvironment,
+        referenceID: Int,
+        fields: [String: String]
+    ) async {
         do {
-            let service = ReferenceExtraService(environment: settings.currentEnvironment)
+            let service = ReferenceExtraService(environment: environment)
             try await service.updateTechViews(referenceID: referenceID, fields: fields)
         } catch {
             let message = (error as? GSHTTPClient.HTTPError)?.userMessage ?? error.localizedDescription
-            print("[TechViews] updateTechViews failed: \(message)")
+            GSLogger(category: "TechViewsCapture").error("updateTechViews failed: \(message)")
         }
     }
 
-    @MainActor
-    private func findOrCreateProduction() async throws -> Production {
-        guard let shootingMethodID = settings.techViewsShootingMethodID else {
-            throw GSHTTPClient.HTTPError.http(status: 400, body: "No shooting method configured.")
+    private static func findOrCreateProduction(context: UploadContext) async throws -> Production {
+        // Both are required: a production created without a template
+        // exposes only the validation bench, which rejects uploads.
+        // The capture entry points are gated on `canUploadPhotosToGS`,
+        // so this is defensive.
+        guard let shootingMethodID = context.shootingMethodID,
+              let templateID = context.templateID else {
+            throw GSHTTPClient.HTTPError.http(status: 400, body: "Configure a shooting method and a template before uploading.")
         }
-        let service = ProductionService(environment: settings.currentEnvironment)
-        return try await service.findOrCreateToday(shootingMethodID: shootingMethodID)
+        let service = ProductionService(environment: context.environment)
+        return try await service.findOrCreateToday(
+            shootingMethodID: shootingMethodID,
+            templateID: templateID
+        )
     }
 
-    private func updateStatus(id: UUID, to state: UploadStatus.State) {
+    private func updateStatus(_ id: UUID, _ state: UploadStatus.State) {
         guard let idx = uploads.firstIndex(where: { $0.id == id }) else { return }
         uploads[idx].state = state
     }
@@ -723,4 +934,43 @@ private func encodeJPEGPreservingMetadata(
     CGImageDestinationAddImage(destination, cgImage, properties as CFDictionary)
     guard CGImageDestinationFinalize(destination) else { return nil }
     return outData as Data
+}
+
+// MARK: - Stock-item picker for "next product"
+
+/// Small sheet presented when the reference has more than one
+/// stock_item — the user picks which one should advance to its next
+/// enabled status before the screen rebases on the scanner.
+private struct NextProductStockItemPicker: View {
+    let stockItems: [StockItem]
+    let onPick: (StockItem) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List {
+                ForEach(stockItems, id: \.id) { item in
+                    Button {
+                        onPick(item)
+                    } label: {
+                        HStack {
+                            Text("#\(item.id)")
+                                .font(.subheadline.monospacedDigit())
+                            Spacer()
+                            Text(item.status.displayName)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .tint(.primary)
+                }
+            }
+            .navigationTitle("Pick a stock item")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+            }
+        }
+    }
 }

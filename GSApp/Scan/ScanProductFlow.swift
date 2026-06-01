@@ -12,12 +12,14 @@ struct ScanProductFlow: View {
     @State private var inflight = false
     @State private var feedback = ScannerFeedback()
     @State private var navigation = NavigationPath()
+    @State private var showManualEntry = false
+    @State private var manualValue = ""
 
     var body: some View {
         NavigationStack(path: $navigation) {
             ZStack(alignment: .bottom) {
-                LiveBarcodeScannerView(resetDelaySeconds: 0.5) { code in
-                    Task { await handle(code) }
+                LiveBarcodeScannerView(resetDelaySeconds: 0.5, minScanInterval: settings.scannerCooldownSeconds) { code in
+                    Task { await handle(payload: code.payload, attributes: [settings.searchAttribute]) }
                 }
                 .ignoresSafeArea(edges: [.top, .leading, .trailing])
 
@@ -28,10 +30,34 @@ struct ScanProductFlow: View {
             }
             .navigationTitle("Scan products")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showManualEntry = true
+                    } label: {
+                        Image(systemName: "keyboard")
+                    }
+                    .accessibilityLabel("Enter ref or EAN")
+                }
+            }
+            .manualLookupAlert(isPresented: $showManualEntry, value: $manualValue) { typed in
+                Task { await handle(payload: typed, attributes: manualAttributes) }
+            }
             .navigationDestination(for: ScanState.MatchedReference.self) { match in
                 ReferenceDetailView(settings: settings, source: .scan(match))
             }
         }
+    }
+
+    /// Lookup order for manual entry: the configured attribute first,
+    /// then the other one — so a typed ref resolves even when the app
+    /// is set to scan EANs (and vice-versa).
+    private var manualAttributes: [StockService.SearchAttribute] {
+        var attrs = [settings.searchAttribute]
+        for attr in [StockService.SearchAttribute.ean, .ref] where !attrs.contains(attr) {
+            attrs.append(attr)
+        }
+        return attrs
     }
 
     @ViewBuilder
@@ -97,10 +123,12 @@ struct ScanProductFlow: View {
     // MARK: - Scan handling
 
     @MainActor
-    private func handle(_ code: ScannedCode) async {
+    private func handle(payload: String, attributes: [StockService.SearchAttribute]) async {
+        let payload = payload.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !payload.isEmpty else { return }
         feedback.didDetectCode()
         inflight = true
-        lastScan = .lookingUp(code.payload)
+        lastScan = .lookingUp(payload)
 
         let environment = settings.currentEnvironment
         let referenceService = ReferenceLookupService(environment: environment)
@@ -108,15 +136,22 @@ struct ScanProductFlow: View {
 
         do {
             // Primary: catalog lookup — the GS endpoint that always returns
-            // the reference if it exists, even without stock items.
-            let references = try await referenceService.lookup(
-                scannedValue: code.payload,
-                by: settings.searchAttribute
-            )
+            // the reference if it exists, even without stock items. Try
+            // each requested attribute in order, keeping the one that hits.
+            var references: [Reference] = []
+            var matchedAttribute = attributes.first ?? settings.searchAttribute
+            for attribute in attributes {
+                let found = try await referenceService.lookup(scannedValue: payload, by: attribute)
+                if !found.isEmpty {
+                    references = found
+                    matchedAttribute = attribute
+                    break
+                }
+            }
             inflight = false
             guard !references.isEmpty else {
                 feedback.didFailLookup(reason: .notFound)
-                lastScan = .noMatch(code.payload)
+                lastScan = .noMatch(payload)
                 return
             }
 
@@ -130,8 +165,8 @@ struct ScanProductFlow: View {
             var stockLookupFailed = false
             do {
                 stockMatches = try await stockService.search(
-                    scannedValue: code.payload,
-                    by: settings.searchAttribute
+                    scannedValue: payload,
+                    by: matchedAttribute
                 )
             } catch {
                 stockLookupFailed = true
@@ -149,15 +184,15 @@ struct ScanProductFlow: View {
             }
             feedback.didFindReference()
             lastScan = .matched(ScanState.MatchedReference(
-                payload: code.payload,
-                searchAttribute: settings.searchAttribute,
+                payload: payload,
+                searchAttribute: matchedAttribute,
                 references: combined,
                 stockLookupFailed: stockLookupFailed
             ))
         } catch GSHTTPClient.HTTPError.notAuthenticated {
             inflight = false
             feedback.didFailLookup(reason: .other)
-            lastScan = .notAuthenticated(code.payload)
+            lastScan = .notAuthenticated(payload)
         } catch GSHTTPClient.HTTPError.transport(let underlying) {
             inflight = false
             feedback.didFailLookup(reason: .transport)

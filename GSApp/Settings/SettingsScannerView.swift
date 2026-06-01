@@ -14,14 +14,35 @@ struct SettingsScannerView: View {
 
     var body: some View {
         Form {
+            scanningSection
             statusesSection
             workflowSection
             batchTypesSection
             searchAttributeSection
-            measurementSection
             zoneSection
         }
         .navigationTitle("Scanner")
+    }
+
+    // MARK: - Scanning (cooldown)
+
+    private var scanningSection: some View {
+        Section {
+            Stepper(
+                value: $settings.scannerCooldownSeconds,
+                in: 0...10,
+                step: 0.5
+            ) {
+                LabeledContent("Cooldown between scans") {
+                    Text(String(format: "%.1f s", settings.scannerCooldownSeconds))
+                        .monospacedDigit()
+                }
+            }
+        } header: {
+            Text("Scanning")
+        } footer: {
+            Text("Minimum delay enforced between two barcode scans — including before the first scan when the scanner opens. Use 0 to disable.")
+        }
     }
 
     // MARK: - Enabled statuses
@@ -65,6 +86,11 @@ struct SettingsScannerView: View {
                     Text(status.displayName).tag(status.rawValue)
                 }
             }
+            Picker("Default status after tech views", selection: $settings.defaultStockItemStatusAfterTechViews) {
+                ForEach(StockItemStatus.orderedCases, id: \.rawValue) { status in
+                    Text(status.displayName).tag(status.rawValue)
+                }
+            }
             Button {
                 Task { await refreshCatalog() }
             } label: {
@@ -83,7 +109,7 @@ struct SettingsScannerView: View {
         } header: {
             Text("Workflow")
         } footer: {
-            Text("Default status applied to newly-registered stock items. Refresh pulls fresh zones, categories, and batch types from Grand Shooting.")
+            Text("Default status applied to newly-registered stock items, and the status applied when you tap Next on the tech-views capture. Refresh pulls fresh zones, categories, and batch types from Grand Shooting.")
         }
     }
 
@@ -125,22 +151,6 @@ struct SettingsScannerView: View {
             Text("Scan lookup")
         } footer: {
             Text("Which catalog attribute the scanned value is looked up against. Use `ean` unless your products are barcoded by their `ref` instead.")
-        }
-    }
-
-    // MARK: - Measurements
-
-    private var measurementSection: some View {
-        Section {
-            Picker("Unit", selection: $settings.measurementUnit) {
-                ForEach(DevSettings.MeasurementUnit.allCases, id: \.rawValue) { unit in
-                    Text(unit.displayName).tag(unit)
-                }
-            }
-        } header: {
-            Text("Measurements")
-        } footer: {
-            Text("Unit used when capturing dimensions in the Measures tab and storing them on the reference.")
         }
     }
 
