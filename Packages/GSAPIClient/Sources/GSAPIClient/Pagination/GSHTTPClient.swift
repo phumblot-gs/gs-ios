@@ -216,10 +216,14 @@ public struct GSHTTPClient: Sendable {
     }
 
     /// `/stock*` and `/account*` always run on the user's **principal
-    /// (home) shard** and carry no `account_id` header — they're
-    /// scoped to the home account regardless of the selector. Every
-    /// other path targets the selected account's shard and carries
-    /// the header so GS scopes the response to that account.
+    /// (home) shard**, regardless of the selector. The `account_id`
+    /// header they carry depends on the path: bare `/stock` (+
+    /// `/stock/{id}`) sends the **principal** account — the account the
+    /// authenticated user belongs to — while the **active** account
+    /// travels in the query (GET) or payload (POST/PATCH); `/stock/batch*`,
+    /// `/stock/zone*` and `/account*` carry no header. Every other path
+    /// targets the selected account's shard and carries the active
+    /// account in the header so GS scopes the response to that account.
     private func routesToPrincipalShard(_ path: String) -> Bool {
         let normalized = path.hasPrefix("/") ? path : "/" + path
         return normalized.hasPrefix("/stock") || normalized.hasPrefix("/account")
@@ -235,7 +239,23 @@ public struct GSHTTPClient: Sendable {
         return normalized.hasPrefix("/stock/batch") || normalized.hasPrefix("/stock/zone")
     }
 
+    /// Bare `/stock` (search, list, create) and `/stock/{id}` (update) —
+    /// everything under `/stock` except the `/stock/batch*` and
+    /// `/stock/zone*` sub-resources, which keep their own delegation scheme.
+    private func isBareStockPath(_ path: String) -> Bool {
+        isStockPath(path) && !isStockBatchOrZonePath(path)
+    }
+
     private func applyAccountHeader(to request: inout URLRequest, path: String) {
+        if isBareStockPath(path) {
+            // Bare /stock (+ /stock/{id}) carries the *principal* account in
+            // the header — the account the authenticated user belongs to.
+            // The active account travels in the query (GET) or payload
+            // (POST/PATCH) instead.
+            guard let principal = environment.principalAccountID ?? environment.accountIDHeader else { return }
+            request.setValue(String(principal), forHTTPHeaderField: "account_id")
+            return
+        }
         guard !routesToPrincipalShard(path), let accountID = environment.accountIDHeader else { return }
         request.setValue(String(accountID), forHTTPHeaderField: "account_id")
     }
@@ -245,14 +265,12 @@ public struct GSHTTPClient: Sendable {
     /// the endpoint:
     ///
     /// - `GET /stock`, `GET /stock?batch_id=…` (search + batch contents):
-    ///   the stock items live on the principal, but the embedded
-    ///   reference catalog must come from the active account →
-    ///   `account_id = principal`, `target_account_id = active`.
+    ///   the active account is sent as `account_id` in the query; the
+    ///   principal account is carried in the header.
     /// - `GET /stock/batch*`, `GET /stock/zone*`: standard delegation,
     ///   `account_id = active`, `target_account_id = principal`.
-    /// - `POST /stock`, `PATCH /stock/{id}`: only `account_id = active`
-    ///   (so GS resolves `reference_id` from the active catalog). No
-    ///   `target_account_id`.
+    /// - `POST /stock`, `PATCH /stock/{id}`: the active `account_id` goes
+    ///   in the *payload* (see `StockService`), not the query.
     /// - `POST /stock/batch*`: no delegation query (the batch is
     ///   created on the principal via shard routing + token).
     ///
@@ -271,13 +289,14 @@ public struct GSHTTPClient: Sendable {
                 injected["account_id"] = String(active)
                 injected["target_account_id"] = String(principal)
             } else {
-                injected["account_id"] = String(principal)
-                injected["target_account_id"] = String(active)
-            }
-        case "POST", "PATCH":
-            if !isStockBatchOrZonePath(path) {
+                // Bare GET /stock: active account in the query; the
+                // principal account is carried in the header.
                 injected["account_id"] = String(active)
             }
+        case "POST", "PATCH":
+            // Bare POST /stock + PATCH /stock/{id} carry account_id in the
+            // payload (see StockService); batch/zone writes need no query.
+            break
         default:
             break
         }

@@ -20,9 +20,15 @@ public struct StockService: Sendable {
     }
 
     private let http: GSHTTPClient
+    /// The currently-selected (active) account. Injected into the
+    /// POST/PATCH payload so GS resolves the write against that account,
+    /// while the principal account travels in the `account_id` header.
+    /// Nil in single-account / legacy mode → omitted from the wire.
+    private let activeAccountID: Int?
 
     public init(environment: GSEnvironment) {
         self.http = GSHTTPClient(environment: environment)
+        self.activeAccountID = environment.accountIDHeader
     }
 
     // MARK: - Lookup
@@ -88,6 +94,9 @@ public struct StockService: Sendable {
         public let batch_id: Int?
         public let ean: String?
         public let smalltext: String?
+        /// Active account, injected by `create(_:)`. Omitted from the
+        /// wire when nil (single-account / legacy).
+        var account_id: Int?
 
         public init(
             referenceID: Int,
@@ -101,6 +110,7 @@ public struct StockService: Sendable {
             self.batch_id = batchID
             self.ean = ean
             self.smalltext = smalltext
+            self.account_id = nil
         }
     }
 
@@ -109,7 +119,9 @@ public struct StockService: Sendable {
     /// `GET /stock` rows), NOT a single `stock_item` row. We decode it as
     /// our `ReferenceStock` to match.
     public func create(_ payload: CreatePayload) async throws -> ReferenceStock {
-        try await http.post("/stock", body: payload, as: ReferenceStock.self)
+        var payload = payload
+        payload.account_id = activeAccountID
+        return try await http.post("/stock", body: payload, as: ReferenceStock.self)
     }
 
     // MARK: - Update
@@ -120,6 +132,9 @@ public struct StockService: Sendable {
         public let smalltext: String?
         public let ean: String?
         public let star: Bool?
+        /// Active account, injected by `update(id:payload:)`. Omitted from
+        /// the wire when nil (single-account / legacy).
+        var account_id: Int?
 
         public init(
             status: StockItemStatus? = nil,
@@ -133,10 +148,13 @@ public struct StockService: Sendable {
             self.smalltext = smalltext
             self.ean = ean
             self.star = star
+            self.account_id = nil
         }
     }
 
     public func update(id: Int, payload: UpdatePayload) async throws -> StockItem {
-        try await http.patch("/stock/\(id)", body: payload, as: StockItem.self)
+        var payload = payload
+        payload.account_id = activeAccountID
+        return try await http.patch("/stock/\(id)", body: payload, as: StockItem.self)
     }
 }
